@@ -1,0 +1,5 @@
+# Ignore venv
+superagers/
+
+# Ignore .ds_store
+.DS_Store
