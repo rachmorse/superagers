@@ -3,6 +3,7 @@ import pandas as pd
 from typing import Optional, Union
 import numpy as np
 from datetime import datetime
+from nilearn import datasets
 from compute_functional_connectivity import (
     compute_functional_connectivity,
     compute_one_to_all_connectivity,
@@ -20,12 +21,10 @@ def process_subject_functional(args):
             subject_id (str): Subject ID.
             output_dir (Path): Path to the directory where output data is saved.
             root_directory (Path): Root directory for the timeseries data.
-            selected_rois_csv (Path): Path to the selected ROIs CSV.
-            roi_column_name (str): Name of the column containing ROI names.
             subjects (list): List of all subjects to be processed.
             error_log_path (Path): Path to the error log file.
-            one_timeseries_index (Optional[Union[int, str]]): Index or name of the ROI to focus on (optional).
             roi_names (list): List of all ROI names.
+            network_mappings (dict): Dict mapping network names to ROI indices.
 
     Raises:
         FileNotFoundError: If the timeseries file is not found.
@@ -35,12 +34,10 @@ def process_subject_functional(args):
         subject_id,
         output_dir,
         root_directory,
-        selected_rois_csv,
-        roi_column_name,
-        subjects,
         error_log_path,
-        one_timeseries_index,
+        subjects,
         roi_names,
+        network_mappings,
     ) = args
 
     timeseries_file = root_directory / f"{subject_id}_timeseries.csv"
@@ -71,22 +68,10 @@ def process_subject_functional(args):
         subject_id=subject_id,
         timeseries=timeseries,
         output_dir=output_dir,
-        selected_rois_csv=selected_rois_csv,
-        roi_column_name=roi_column_name,
+        roi_names=roi_names,
+        network_mappings=network_mappings,
         subjects=subjects,
     )
-
-    # Conditionally compute one-to-all connectivity
-    if one_timeseries_index is not None:
-        compute_one_to_all_connectivity(
-            subject_id=subject_id,
-            connectivity_matrix=connectivity_matrix,
-            fisher_z_matrix=fisher_z_matrix,
-            output_dir=output_dir,
-            one_timeseries_index=one_timeseries_index,
-            roi_names=roi_names,
-            subjects=subjects,
-        )
 
     # Visualize data if you would like by uncommenting the line below
     # visualize_fc_data(subject_id, connectivity_matrix)
@@ -98,9 +83,6 @@ def main(
     todo_path: Union[str, Path],
     output_dir: Union[str, Path],
     root_directory: Union[str, Path],
-    selected_rois_csv: Path,
-    roi_column_name: str,
-    one_timeseries_index: Optional[Union[int, str]] = None,
 ):
     """
     Main function to run the script.
@@ -138,39 +120,18 @@ def main(
 
     print(f"Number of subjects to process: {len(todo)}")
 
-    # Read and define roi_names
-    try:
-        selected_rois_df = pd.read_csv(selected_rois_csv, index_col=0)
-        roi_names = selected_rois_df[roi_column_name].values.tolist()
-    except FileNotFoundError:
-        print(f"Selected ROIs file not found at: {selected_rois_csv}")
-        return
-    except KeyError:
-        print(
-            f"'{roi_column_name}' column not found in the selected ROIs file: {selected_rois_csv}"
-        )
-        return
-
-    # Map ROI names to the corresponding index
-    if isinstance(one_timeseries_index, str):
-        if one_timeseries_index in roi_names:
-            one_timeseries_index = roi_names.index(one_timeseries_index)
-        else:
-            print(f"ROI name '{one_timeseries_index}' not found in ROI names list.")
-            return
+    # Load the Schaefer atlas
+    schaefer_atlas = datasets.fetch_atlas_schaefer_2018(n_rois=200, yeo_networks=7, resolution_mm=2)
 
     subjects = todo  # Assign subjects list
+
     args = [
         (
             subject,
             output_dir,
             root_directory,
-            selected_rois_csv,
-            roi_column_name,
             subjects,
             error_log_path,
-            one_timeseries_index,
-            roi_names,
         )
         for subject in todo
     ]
@@ -181,19 +142,13 @@ def main(
 
 if __name__ == "__main__":
     todo_file = Path("/home/rachel/Desktop/fMRI Analysis/todo.csv")
-    root_directory = Path("/home/rachel/Desktop/fMRI Analysis/DK76/timeseries")
+    root_directory = Path("/home/rachel/Desktop/fMRI Analysis/Schaeffer_200/timeseries")
     output_directory = Path(
-        "/home/rachel/Desktop/fMRI Analysis/DK76/connectivity_matrices"
+        "/home/rachel/Desktop/fMRI Analysis/Schaeffer_200/connectivity_matrices"
     )
-    selected_rois_csv = Path("/home/rachel/Desktop/fMRI Analysis/selected_rois.csv")
-    roi_column_name = "LabelName"
 
     main(
         todo_path=todo_file,
         output_dir=output_directory,
         root_directory=root_directory,
-        selected_rois_csv=selected_rois_csv,
-        roi_column_name=roi_column_name,
-        # one_timeseries_index=None,  # Unomment this line and comment the line below to not compute one-to-all connectivity
-        one_timeseries_index="Right-Hippocampus",  # Specify the name or index of the ROI you want to focus on
     )

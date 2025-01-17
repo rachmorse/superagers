@@ -290,24 +290,24 @@ def main(
 
 if __name__ == "__main__":
     # Change to your paths and settings
-    ses = "01"
+    ses = "02"
     threshold = 0.5
-    root = "/home/rachel/Desktop/fMRI Analysis/subjects/processed data"
-    output_data = "/home/rachel/Desktop/fMRI Analysis/Scrubbed data"
-    output_files = "/home/rachel/Desktop/fMRI Analysis"
+    root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
+    output_data = "/home/rachel/Desktop/schaeffer_analysis/Scrubbed data"
+    output_files = "/home/rachel/Desktop/schaeffer_analysis"
 
     # Define file patterns
     bold_pattern = os.path.join(
         root,
         "{subject}",
-        "native_T1",
-        "{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz",
+        "MNI_2mm",
+        "{subject}_ses-{ses}_run-01_rest_bold_ap_MNI-space.nii.gz",
     )
     scrubbed_pattern = os.path.join(
         "{output_data}",
         "{subject}",
         "native_T1",
-        "{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold}.nii.gz",
+        "{subject}_ses-{ses}_run-01_rest_bold_ap_MNI-space_scrubbed_{threshold}.nii.gz",
     )
 
     main(

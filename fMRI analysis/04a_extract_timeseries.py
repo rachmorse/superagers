@@ -38,34 +38,13 @@ def extract_timeseries(
         # Load the atlas file
         atlas_img = nib.load(atlas_file)
 
-        if mask_type == "3D":
-            masker = NiftiLabelsMasker(labels_img=atlas_img, standardize=False)
-            print("Extracting timeseries...")
-            timeseries = masker.fit_transform(fmri_file)
-
-        elif mask_type == "4D":
-            print("Extracting timeseries...")
-            timeseries_list = []
-            for i in range(atlas_img.shape[-1]):  # Iterate over the 4th dimension
-                masker = NiftiLabelsMasker(
-                    labels_img=nib.Nifti1Image(
-                        atlas_img.dataobj[..., i], atlas_img.affine
-                    ),
-                    standardize=False,
-                )
-                timeseries = masker.fit_transform(fmri_file)
-                timeseries_list.append(timeseries)
-
-            # Concatenate the timeseries from each mask volume
-            timeseries = np.concatenate(timeseries_list, axis=1)
-
-        else:
-            raise ValueError(
-                f"Unrecognized mask type {mask_type}. Should be '3D' or '4D'."
-            )
+    # Use NiftiLabelsMasker to extract the timeseries
+        masker = NiftiLabelsMasker(labels_img=atlas_img, standardize=False)
+        print("Extracting timeseries...")
+        timeseries = masker.fit_transform(fmri_file)
 
         return timeseries
-
+    
     except Exception as e:
         with open(error_log_path, "a") as f:
             f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")

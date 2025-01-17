@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from multiprocessing import Pool
 from typing import Union, List
+from nilearn import datasets
 from extract_timeseries import extract_timeseries, visualize_timeseries
 
 
@@ -24,21 +25,17 @@ def process_subject_extract(args):
         ses,
         threshold,
         bold_template,
-        mask_template,
-        masks_root_path,
-        roi_indices,
+        atlas_file,
         output_dir,
-        mask_type,
+        roi_indices,
         error_log_path,
     ) = args
 
     bold_path_template = bold_template.format(
         subject=subject_id, ses=ses, threshold=threshold
     )
-    mask_file_template = mask_template.format(subject_id=subject_id)
 
     fmri_file = Path(bold_path_template)
-    atlas_file = masks_root_path / mask_file_template
 
     print(f"--- Processing subject: {subject_id} ---")
 
@@ -64,11 +61,8 @@ def main(
     ses: str,
     threshold: float,
     todo_path: Union[str, Path],
-    masks_root_path: Union[str, Path],
     output_dir: Union[str, Path],
     bold_template: str,
-    mask_template: str,
-    mask_type: str,
     roi_indices: List[int],
     multi: bool = False,
 ):
@@ -93,7 +87,6 @@ def main(
     """
     output_dir = Path(output_dir)
     todo_path = Path(todo_path)
-    masks_root_path = Path(masks_root_path)
     error_log_path = output_dir / "error_log.txt"  # Define error log path
 
     # Ensure output directory exists
@@ -108,17 +101,23 @@ def main(
 
     print(f"Number of subjects to process: {len(todo)}")
 
+    # Get the Schaefer atlas
+    schaefer_atlas = datasets.fetch_atlas_schaefer_2018(
+        n_rois=200,        # Number of regions you downloaded
+        yeo_networks=7,    # Number of Yeo networks used in the parcellation
+        resolution_mm=2
+    )
+    atlas_file = schaefer_atlas['maps']
+
     args = [
         (
             subject,
             ses,
             threshold,
             bold_template,
-            mask_template,
-            masks_root_path,
-            roi_indices,
+            atlas_file,
             output_dir,
-            mask_type,
+            roi_indices,
             error_log_path,
         )
         for subject in todo
@@ -136,8 +135,7 @@ if __name__ == "__main__":
     ses = "01"
     threshold = "0.5"
     todo_file = Path("/home/rachel/Desktop/fMRI Analysis/todo.csv")
-    masks_root_path = Path("/home/rachel/Desktop/fMRI Analysis/DK76")
-    output_directory = Path("/home/rachel/Desktop/fMRI Analysis/DK76/timeseries")
+    output_directory = Path("/home/rachel/Desktop/fMRI Analysis/Schaefer_200/timeseries")
     root_directory = Path("/home/rachel/Desktop/fMRI Analysis/Scrubbed data")
 
     roi_indices = [0]  # ROIs to visualize
@@ -148,22 +146,19 @@ if __name__ == "__main__":
         "native_T1",
         "{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold}.nii.gz",
     )
-    mask_template = "{subject_id}_DK76_BOLD-nativespace_selected_ROIs.nii.gz"
-
-    mask_type = "3D"  # or "4D"
 
     main(
         ses=ses,
         threshold=threshold,
         todo_path=todo_file,
-        masks_root_path=masks_root_path,
         output_dir=output_directory,
         bold_template=bold_template,
-        mask_template=mask_template,
-        mask_type=mask_type,
         roi_indices=roi_indices,
         multi=False,
     )
 
     # Uncomment this line to enable parallel processing
     # main(ses=ses, threshold=threshold, todo_path=todo_file, masks_root_path=masks_root_path, output_dir=output_directory, bold_template=bold_template, mask_template=mask_template, mask_type=mask_type, roi_indices=roi_indices, multi=True)
+
+
+
