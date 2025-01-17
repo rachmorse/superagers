@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 
 def extract_timeseries(
-    atlas_file: str, fmri_file: str, mask_type: str, error_log_path: Path
+    atlas_file: str, fmri_file: str, error_log_path: Path
 ) -> Optional[np.ndarray]:
     """
     Extracts timeseries data from a BOLD image using an atlas mask,
@@ -18,7 +18,6 @@ def extract_timeseries(
     Args:
         atlas_file (str): Path to the atlas file (mask).
         fmri_file (str): Path to the fMRI preprocessed BOLD image file.
-        mask_type (str): Type of the mask ("3D" or "4D").
         error_log_path (Path): Path to the error log file.
 
     Returns:
@@ -33,7 +32,7 @@ def extract_timeseries(
             raise FileNotFoundError(f"fMRI file {fmri_file} not found.")
 
         if not os.path.exists(atlas_file):
-            raise FileNotFoundError(f"DK atlas file {atlas_file} not found.")
+            raise FileNotFoundError(f"Scaeffer atlas file {atlas_file} not found.")
 
         # Load the atlas file
         atlas_img = nib.load(atlas_file)

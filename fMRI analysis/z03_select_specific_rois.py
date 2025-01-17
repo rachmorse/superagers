@@ -1,8 +1,9 @@
-import pandas as pd
-import numpy as np
-import nibabel as nib
-from typing import Union, List
 from pathlib import Path
+from typing import List, Union
+
+import nibabel as nib
+import numpy as np
+import pandas as pd
 
 
 def main(
@@ -10,8 +11,7 @@ def main(
     nifti_paths: List[str],
     output_folder: Union[str, Path] = None,
 ):
-    """
-    Main function to process and save ROI-specific NIfTI images for each subject.
+    """Main function to process and save ROI-specific NIfTI images for each subject.
 
     This function reads a list of selected ROIs from a CSV file, then processes the
     corresponding NIfTI files to zero out ROIs that are not in the list.
@@ -39,9 +39,7 @@ def main(
         selected_rois_df = pd.read_csv(selected_rois_path, index_col=0)
         selected_rois = list(selected_rois_df.index)
     except FileNotFoundError:
-        raise FileNotFoundError(
-            f"Selected ROIs file not found at: {selected_rois_path}"
-        )
+        raise FileNotFoundError(f"Selected ROIs file not found at: {selected_rois_path}")
 
     # Process each subject's NIfTI file
     for nifti_file in nifti_paths:
@@ -74,9 +72,7 @@ def main(
         nib.save(rois_image, str(new_nifti_file_path))
 
         # Output indicating successful processing
-        print(
-            f"Successfully processed and saved {nifti_file} to {new_nifti_file_path}."
-        )
+        print(f"Successfully processed and saved {nifti_file} to {new_nifti_file_path}.")
 
 
 if __name__ == "__main__":
@@ -98,8 +94,7 @@ if __name__ == "__main__":
 
         # Construct full paths to the NIfTI files
         nifti_files = [
-            nifti_file_path / nifti_file_format.format(subject_id=subject_id)
-            for subject_id in subjects_list
+            nifti_file_path / nifti_file_format.format(subject_id=subject_id) for subject_id in subjects_list
         ]
 
         main(

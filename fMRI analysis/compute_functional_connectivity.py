@@ -129,12 +129,14 @@ def save_connectivity_data(subject_id: str, label: str, matrix: np.ndarray, fish
 def visualize_fc_data(
     subject_id: str,
     connectivity_matrix: np.ndarray,
+    output_directory: Path,
 ):
     """Visualize the connectivity matrix.
 
     Args:
         subject_id (str): Subject ID.
         connectivity_matrix (np.ndarray): The connectivity matrix to be visualized.
+        output_directory (Path): Directory where the plot will be saved.
     """
     # Visualize connectivity matrix
     plt.figure(figsize=(10, 8))
@@ -145,3 +147,8 @@ def visualize_fc_data(
     plt.ylabel("Regions")
     plt.grid(False)
     plt.show()
+
+    # Save the plot
+    plot_path = output_directory / f"{subject_id}_connectivity_matrix.png"
+    plt.savefig(plot_path)
+    plt.close()

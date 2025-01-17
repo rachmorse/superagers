@@ -6,7 +6,6 @@ from datetime import datetime
 from nilearn import datasets
 from compute_functional_connectivity import (
     compute_functional_connectivity,
-    compute_one_to_all_connectivity,
     visualize_fc_data,
 )
 
@@ -21,7 +20,6 @@ def process_subject_functional(args):
             subject_id (str): Subject ID.
             output_dir (Path): Path to the directory where output data is saved.
             root_directory (Path): Root directory for the timeseries data.
-            subjects (list): List of all subjects to be processed.
             error_log_path (Path): Path to the error log file.
             roi_names (list): List of all ROI names.
             network_mappings (dict): Dict mapping network names to ROI indices.
@@ -30,15 +28,7 @@ def process_subject_functional(args):
         FileNotFoundError: If the timeseries file is not found.
         Exception: If an error occurs while loading the timeseries data
     """
-    (
-        subject_id,
-        output_dir,
-        root_directory,
-        error_log_path,
-        subjects,
-        roi_names,
-        network_mappings,
-    ) = args
+    subject_id, output_dir, root_directory, error_log_path, schaefer_atlas = args
 
     timeseries_file = root_directory / f"{subject_id}_timeseries.csv"
 
@@ -68,13 +58,11 @@ def process_subject_functional(args):
         subject_id=subject_id,
         timeseries=timeseries,
         output_dir=output_dir,
-        roi_names=roi_names,
-        network_mappings=network_mappings,
-        subjects=subjects,
+        schaefer_atlas=schaefer_atlas,
     )
 
     # Visualize data if you would like by uncommenting the line below
-    # visualize_fc_data(subject_id, connectivity_matrix)
+    visualize_fc_data(subject_id, connectivity_matrix, output_directory)
 
     print(f"Processing completed for subject: {subject_id}")
 
@@ -94,9 +82,6 @@ def main(
         todo_path (Union[str, Path]): Path to the todo file with subject IDs to be processed.
         output_dir (Union[str, Path]): Path where processed data will be output.
         root_directory (Union[str, Path]): Root directory for the timeseries data.
-        selected_rois_csv (Path): Path to the selected ROIs CSV.
-        roi_column_name (str): Name of the column containing ROI names.
-        one_timeseries_index (Optional[Union[int, str]]): Index or name of the ROI to focus on for one-to-all connectivity (optional).
 
     Raises:
         FileNotFoundError: If the selected ROIs file is not found.
@@ -123,17 +108,15 @@ def main(
     # Load the Schaefer atlas
     schaefer_atlas = datasets.fetch_atlas_schaefer_2018(n_rois=200, yeo_networks=7, resolution_mm=2)
 
-    subjects = todo  # Assign subjects list
-
     args = [
         (
-            subject,
+            subject_id,
             output_dir,
             root_directory,
-            subjects,
             error_log_path,
+            schaefer_atlas,
         )
-        for subject in todo
+        for subject_id in todo
     ]
 
     for arg in args:
@@ -141,11 +124,15 @@ def main(
 
 
 if __name__ == "__main__":
-    todo_file = Path("/home/rachel/Desktop/fMRI Analysis/todo.csv")
-    root_directory = Path("/home/rachel/Desktop/fMRI Analysis/Schaeffer_200/timeseries")
+    todo_file = Path("/home/rachel/Desktop/schaefer_analysis/todo.csv")
+    root_directory = Path("/home/rachel/Desktop/schaefer_analysis/schaefer_200/timeseries")
     output_directory = Path(
-        "/home/rachel/Desktop/fMRI Analysis/Schaeffer_200/connectivity_matrices"
+        "/home/rachel/Desktop/schaefer_analysis/schaefer_200/connectivity_matrices"
     )
+    print(f"Output directory: {output_directory}")
+
+    # Create the output directory if it does not exist
+    output_directory.mkdir(parents=True, exist_ok=True) 
 
     main(
         todo_path=todo_file,

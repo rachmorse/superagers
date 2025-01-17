@@ -40,7 +40,7 @@ def process_subject_extract(args):
     print(f"--- Processing subject: {subject_id} ---")
 
     # Process masks and extract timeseries
-    timeseries = extract_timeseries(atlas_file, fmri_file, mask_type, error_log_path)
+    timeseries = extract_timeseries(atlas_file, fmri_file, error_log_path)
 
     if timeseries is None or timeseries.size == 0:
         print(f"No valid timeseries extracted for subject {subject_id}")
@@ -61,6 +61,7 @@ def main(
     ses: str,
     threshold: float,
     todo_path: Union[str, Path],
+    error_log_path: Union[str, Path],
     output_dir: Union[str, Path],
     bold_template: str,
     roi_indices: List[int],
@@ -76,13 +77,10 @@ def main(
         ses (str): Session (timepoint).
         threshold (float): Threshold value for scrubbing.
         todo_path (Union[str, Path]): Path to the todo file with subject IDs to be processed.
-        masks_root_path (Union[str, Path]): Path where DK select-ROI masks are stored.
         error_log_path (Union[str, Path]): Path to log the error file.
         output_dir (Union[str, Path]): Path where processed data will be output.
         bold_template (str): Path / template for the location of BOLD data.
-        mask_template (str): Template for the name of mask files.
         roi_indices (List[int]): ROI indices for timeseries visualization (e.g. add the index for the ROI/s you want to visualize).
-        mask_type (str): Type of the mask ("3D" or "4D").
         multi (bool): If True, enables parallel processing using multiprocessing. Defaults to False.
     """
     output_dir = Path(output_dir)
@@ -103,8 +101,8 @@ def main(
 
     # Get the Schaefer atlas
     schaefer_atlas = datasets.fetch_atlas_schaefer_2018(
-        n_rois=200,        # Number of regions you downloaded
-        yeo_networks=7,    # Number of Yeo networks used in the parcellation
+        n_rois=200,        # Number of regions 
+        yeo_networks=7,    # Number of networks 
         resolution_mm=2
     )
     atlas_file = schaefer_atlas['maps']
@@ -132,25 +130,31 @@ def main(
 
 
 if __name__ == "__main__":
-    ses = "01"
+    ses = "02"
     threshold = "0.5"
-    todo_file = Path("/home/rachel/Desktop/fMRI Analysis/todo.csv")
-    output_directory = Path("/home/rachel/Desktop/fMRI Analysis/Schaefer_200/timeseries")
-    root_directory = Path("/home/rachel/Desktop/fMRI Analysis/Scrubbed data")
+    todo_file = Path("/home/rachel/Desktop/schaefer_analysis/todo.csv")
+    output_directory = Path("/home/rachel/Desktop/schaefer_analysis/schaefer_200/timeseries")
+    root_directory = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
+    error_log_path = output_directory / "error_log.txt"
+
+    # Create the output directory if it does not exist
+    output_directory.mkdir(parents=True, exist_ok=True)
 
     roi_indices = [0]  # ROIs to visualize
 
     bold_template = os.path.join(
         root_directory,
         "{subject}",
-        "native_T1",
-        "{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold}.nii.gz",
+        f"ses-{ses}",
+        "MNI_2mm",
+        "{subject}_ses-{ses}_run-01_rest_bold_ap_MNI-space_scrubbed_{threshold}.nii.gz",
     )
 
     main(
         ses=ses,
         threshold=threshold,
         todo_path=todo_file,
+        error_log_path=error_log_path,
         output_dir=output_directory,
         bold_template=bold_template,
         roi_indices=roi_indices,

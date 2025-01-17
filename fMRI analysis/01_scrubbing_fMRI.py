@@ -1,15 +1,16 @@
 import os
-import pandas as pd
-import numpy as np
-import nibabel as nib
-import scipy.interpolate
-import matplotlib.pyplot as plt
 from multiprocessing import Pool
+
+import matplotlib.pyplot as plt
+import nibabel as nib
+import numpy as np
+import pandas as pd
+import scipy.interpolate
 
 
 def analyze_threshold(data, threshold, total_scans=740, affected_percentage=0.5):
-    """
-    Analyze and visualize subjects with a high amount of movement using a given FWD threshold (e.g. subjects with > X FWD in > Y% of scans).
+    """Analyze and visualize subjects with a high amount of movement using a given FWD threshold (e.g. subjects with > X FWD in > Y% of scans).
+    
     Note - this is to consider what your data look like to help determine the threshold and affected percentage to use for scrubbing.
 
     Args:
@@ -18,9 +19,7 @@ def analyze_threshold(data, threshold, total_scans=740, affected_percentage=0.5)
         total_scans (int, optional): The total number of scans per subject. Default is 740.
         affected_percentage (float, optional): The percentage of affected scans. Default is 50%.
     """
-    moved_subjects_count = (
-        ((data > threshold).sum(1) / total_scans) > affected_percentage
-    ).sum()
+    moved_subjects_count = (((data > threshold).sum(1) / total_scans) > affected_percentage).sum()
     print(
         f"{moved_subjects_count} subjects with more than {affected_percentage * 100}% of scans moved (threshold {threshold})"
     )
@@ -32,8 +31,7 @@ def analyze_threshold(data, threshold, total_scans=740, affected_percentage=0.5)
 
 
 def scrub(bold_file, fwd_file, scrubbed_file, threshold=0.5, method="interpolate"):
-    """
-    Scrub the BOLD fMRI images by either removing or interpolating scans based on FWD threshold.
+    """Scrub the BOLD fMRI images by either removing or interpolating scans based on FWD threshold.
 
     Args:
         bold_file (str): Path to the BOLD image file (NIfTI format).
@@ -45,7 +43,6 @@ def scrub(bold_file, fwd_file, scrubbed_file, threshold=0.5, method="interpolate
     Raises:
         Exception: If an unknown method is specified.
     """
-
     # Load BOLD image data
     print("Loading BOLD image from file:", bold_file)
     bold = nib.load(bold_file)
@@ -78,9 +75,7 @@ def scrub(bold_file, fwd_file, scrubbed_file, threshold=0.5, method="interpolate
         if 1 not in incorrect_tps and bold_data.shape[3] - 1 not in incorrect_tps:
             print(f"Interpolating {len(incorrect_tps)} scans due to excessive motion.")
             # Perform interpolation when neither the first nor last timepoints are incorrect
-            interpolator = scipy.interpolate.interp1d(
-                correct_tps, correct_bold, axis=3, fill_value="extrapolate"
-            )
+            interpolator = scipy.interpolate.interp1d(correct_tps, correct_bold, axis=3, fill_value="extrapolate")
             scrubbed_data[:, :, :, incorrect_tps] = interpolator(incorrect_tps)
             print("No scans require extrapolation.")
         else:
@@ -110,9 +105,7 @@ def scrub(bold_file, fwd_file, scrubbed_file, threshold=0.5, method="interpolate
                 print(
                     f"Extrapolating {len(extrap_idx)} scans in the {', '.join(extrap_text)} direction(s) due to motion."
                 )
-                extrapolator = scipy.interpolate.interp1d(
-                    correct_tps, correct_bold, fill_value="extrapolate", axis=3
-                )
+                extrapolator = scipy.interpolate.interp1d(correct_tps, correct_bold, fill_value="extrapolate", axis=3)
                 scrubbed_data[:, :, :, extrap_idx] = extrapolator(extrap_idx)
 
     else:
@@ -136,8 +129,7 @@ def process_subject(
     bold_pattern,
     scrubbed_pattern,
 ):
-    """
-    Processes a single subject by scrubbing the BOLD fMRI images based on the FWD.
+    """Processes a single subject by scrubbing the BOLD fMRI images based on the FWD.
     Saves the scrubbed BOLD file for the subject and logs errors if any occur.
 
     Args:
@@ -154,11 +146,9 @@ def process_subject(
         Exception: If any error occurs during the processing of the subject.
     """
     try:
-        fwd_file = os.path.join(root, subject, "native_T1", "framewise_displ.txt")
+        fwd_file = os.path.join(root, subject, f"ses-{ses}", "MNI_2mm", "framewise_displ.txt")
         bold_file = bold_pattern.format(subject=subject, ses=ses)
-        scrubbed_file = scrubbed_pattern.format(
-            subject=subject, ses=ses, threshold=threshold, output_data=output_data
-        )
+        scrubbed_file = scrubbed_pattern.format(subject=subject, ses=ses, threshold=threshold, output_data=output_data)
 
         print(f"Processing subject: {subject}")
 
@@ -188,8 +178,7 @@ def main(
     scrubbed_pattern,
     multi=False,
 ):
-    """
-    Main function to run this script. This function performs the following steps:
+    """Main function to run this script. This function performs the following steps:
 
     1. Defines session, threshold, and directories for data input and output.
     2. Iterates over all subjects in the root directory to concatenate their `framewise_displ.txt` files into a single DataFrame.
@@ -221,7 +210,7 @@ def main(
 
     # Iterate over all subjects in the root directory
     for subject in os.listdir(root):
-        subject_dir = os.path.join(root, subject, "native_T1")
+        subject_dir = os.path.join(root, subject, f"ses-{ses}", "MNI_2mm")
         fwd_file = os.path.join(subject_dir, "framewise_displ.txt")
 
         # Check if the framewise_displ.txt file exists for the subject
@@ -230,9 +219,7 @@ def main(
             fwd_data = pd.read_csv(fwd_file)
 
             # Convert each participant's column of data into a list to make it a single row of data instead
-            fwd_series = pd.Series(
-                fwd_data["FramewiseDisplacement"].tolist(), name=subject
-            )
+            fwd_series = pd.Series(fwd_data["FramewiseDisplacement"].tolist(), name=subject)
             fwd_row_df = fwd_series.to_frame().T
 
             # Append the row DataFrame to the main DataFrame
@@ -293,20 +280,25 @@ if __name__ == "__main__":
     ses = "02"
     threshold = 0.5
     root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
-    output_data = "/home/rachel/Desktop/schaeffer_analysis/Scrubbed data"
-    output_files = "/home/rachel/Desktop/schaeffer_analysis"
+    output_data = "/home/rachel/Desktop/schaefer_analysis/scrubbed_data"
+    output_files = "/home/rachel/Desktop/schaefer_analysis"
+
+    # Create the output directory if it does not exist
+    output_data.mkdir(parents=True, exist_ok=True)
 
     # Define file patterns
     bold_pattern = os.path.join(
         root,
         "{subject}",
+        f"ses-{ses}",
         "MNI_2mm",
         "{subject}_ses-{ses}_run-01_rest_bold_ap_MNI-space.nii.gz",
     )
     scrubbed_pattern = os.path.join(
         "{output_data}",
         "{subject}",
-        "native_T1",
+        f"ses-{ses}",
+        "MNI_2mm",
         "{subject}_ses-{ses}_run-01_rest_bold_ap_MNI-space_scrubbed_{threshold}.nii.gz",
     )
 

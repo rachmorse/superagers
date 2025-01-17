@@ -1,7 +1,7 @@
 import os
 import subprocess
-from typing import Union
 from pathlib import Path
+from typing import Union
 
 
 def process_subject(
@@ -14,8 +14,7 @@ def process_subject(
     output_template: str,
     session: str,
 ):
-    """
-    Process an individual subject to create the DK atlas in their BOLD image space.
+    """Process an individual subject to create the DK atlas in their BOLD image space.
 
     Args:
         See args in the `main` function, with the addition of:
@@ -71,8 +70,7 @@ def main(
     todo_file: Union[str, Path],
     session: str,
 ):
-    """
-    Main function to create a DK atlas in the BOLD image space for each subject.
+    """Main function to create a DK atlas in the BOLD image space for each subject.
 
     Args:
         freesurfer_folder (Path): Path to the FreeSurfer recon-all folder.
@@ -88,7 +86,6 @@ def main(
         FileNotFoundError: If the `todo_file` does not exist.
         Exception: If any subprocess command fails or if required files for a subject are missing.
     """
-
     # Read subject IDs from the file
     if not os.path.isfile(todo_file):
         print(f"Todo file {todo_file} does not exist. Exiting.")
@@ -117,9 +114,7 @@ def main(
 if __name__ == "__main__":
     # Define paths and update as needed
     todo_file = Path("/home/rachel/Desktop/fMRI Analysis/todo.csv")
-    freesurfer_path = Path(
-        "/home/rachel/Desktop/fMRI Analysis/subjects/freesurfer-reconall"
-    )
+    freesurfer_path = Path("/home/rachel/Desktop/fMRI Analysis/subjects/freesurfer-reconall")
     fmri_folder = Path("/home/rachel/Desktop/fMRI Analysis/subjects/Preprocessed")
     output_directory = Path("/home/rachel/Desktop/fMRI Analysis/DK76")
     session = "01"
@@ -137,9 +132,7 @@ if __name__ == "__main__":
 
         # Construct full paths to the NIfTI files
         mov_template = freesurfer_path / "{subject_id}" / "mri" / mov_files
-        targ_template = fmri_folder / targ_files.format(
-            subject_id="{subject_id}", session=session
-        )
+        targ_template = fmri_folder / targ_files.format(subject_id="{subject_id}", session=session)
         output_template = output_directory / output_files
 
         main(
