@@ -1,36 +1,35 @@
-from pathlib import Path
-import pandas as pd
-from typing import Optional, Union
-import numpy as np
 from datetime import datetime
-from nilearn import datasets
+from pathlib import Path
+from typing import Union
+
+import numpy as np
+import pandas as pd
 from compute_functional_connectivity import (
     compute_functional_connectivity,
-    visualize_fc_data,
 )
+from nilearn import datasets
 
 
 def process_subject_functional(args):
-    """
-    Processes a single subject: loads pre-extracted timeseries, computes connectivity,
+    """Processes a single subject: loads pre-extracted timeseries, computes connectivity,
     saves the connectivity matrix, and optionally, visualizes the matrix.
 
     Args:
         args (tuple): Contains the following:
             subject_id (str): Subject ID.
+            ses (str): Session or timepoint.
             output_dir (Path): Path to the directory where output data is saved.
             root_directory (Path): Root directory for the timeseries data.
             error_log_path (Path): Path to the error log file.
-            roi_names (list): List of all ROI names.
-            network_mappings (dict): Dict mapping network names to ROI indices.
+            schaefer_atlas:
 
     Raises:
         FileNotFoundError: If the timeseries file is not found.
         Exception: If an error occurs while loading the timeseries data
     """
-    subject_id, output_dir, root_directory, error_log_path, schaefer_atlas = args
+    subject_id, ses, output_dir, root_directory, error_log_path, schaefer_atlas = args
 
-    timeseries_file = root_directory / f"{subject_id}_timeseries.csv"
+    timeseries_file = root_directory / f"{subject_id}_ses-{ses}_schaefer200_timeseries.csv"
 
     # Load extracted timeseries
     print(f"--- Processing subject: {subject_id} ---")
@@ -46,7 +45,7 @@ def process_subject_functional(args):
         with open(error_log_path, "a") as f:
             f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Error loading timeseries for subject {subject_id}:\n")
-            f.write(f"{str(e)}\n\n")
+            f.write(f"{e!s}\n\n")
         return
 
     if timeseries is None or timeseries.size == 0:
@@ -56,24 +55,20 @@ def process_subject_functional(args):
     # Compute functional connectivity
     connectivity_matrix, fisher_z_matrix = compute_functional_connectivity(
         subject_id=subject_id,
+        ses=ses,
         timeseries=timeseries,
         output_dir=output_dir,
         schaefer_atlas=schaefer_atlas,
     )
 
     # Visualize data if you would like by uncommenting the line below
-    visualize_fc_data(subject_id, connectivity_matrix, output_directory)
+    # visualize_fc_data(subject_id, fisher_z_matrix, output_dir, ses)
 
     print(f"Processing completed for subject: {subject_id}")
 
 
-def main(
-    todo_path: Union[str, Path],
-    output_dir: Union[str, Path],
-    root_directory: Union[str, Path],
-):
-    """
-    Main function to run the script.
+def main(todo_path: Union[str, Path], output_dir: Union[str, Path], root_directory: Union[str, Path], ses: str):
+    """Main function to run the script.
 
     This function reads the pre-extracted timeseries data for each subject,
     computes the functional connectivity matrices for all subjects.
@@ -87,7 +82,6 @@ def main(
         FileNotFoundError: If the selected ROIs file is not found.
         KeyError: If the specified column name is not found in the selected ROIs file
     """
-
     output_dir = Path(output_dir)
     root_directory = Path(root_directory)
     todo_path = Path(todo_path)
@@ -111,6 +105,7 @@ def main(
     args = [
         (
             subject_id,
+            ses,
             output_dir,
             root_directory,
             error_log_path,
@@ -124,18 +119,17 @@ def main(
 
 
 if __name__ == "__main__":
+    ses = "02"
     todo_file = Path("/home/rachel/Desktop/schaefer_analysis/todo.csv")
-    root_directory = Path("/home/rachel/Desktop/schaefer_analysis/schaefer_200/timeseries")
-    output_directory = Path(
-        "/home/rachel/Desktop/schaefer_analysis/schaefer_200/connectivity_matrices"
-    )
-    print(f"Output directory: {output_directory}")
+    root_directory = Path(f"/home/rachel/Desktop/schaefer_analysis/timeseries_data/ses-{ses}")
+    output_directory = Path("/home/rachel/Desktop/schaefer_analysis/connectivity_matrices")
 
     # Create the output directory if it does not exist
-    output_directory.mkdir(parents=True, exist_ok=True) 
+    output_directory.mkdir(parents=True, exist_ok=True)
 
     main(
         todo_path=todo_file,
         output_dir=output_directory,
         root_directory=root_directory,
+        ses=ses,
     )

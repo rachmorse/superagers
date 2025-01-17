@@ -1,21 +1,27 @@
 import os
-from pathlib import Path
-import pandas as pd
-import numpy as np
 from multiprocessing import Pool
-from typing import Union, List
+from pathlib import Path
+from typing import List, Union
+
+import numpy as np
+import pandas as pd
+from extract_timeseries import extract_timeseries
 from nilearn import datasets
-from extract_timeseries import extract_timeseries, visualize_timeseries
 
 
 def process_subject_extract(args):
-    """
-    Processes a single subject: extracts timeseries and saves it.
+    """Processes a single subject: extracts timeseries and saves it.
     Optionally, visualizes the timeseries data.
 
     Args:
-        args (tuple): See args in the `main` function, with the addition of:
-        subject_id (str): Subject ID.
+        subject_id (str): Identifier for the subject whose data is processed.
+        ses (str): Session identifier for the specific data collection session.
+        threshold (float): Threshold value used for data processing, e.g., for filtering.
+        bold_template (str): File path template for the BOLD timeseries data.
+        atlas_file (str): File path for the atlas used for extracting timeseries.
+        output_dir (str): Directory where processed data and any outputs are saved.
+        roi_indices (list of int): List of region of interest indices for timeseries extraction.
+        error_log_path (str): File path where error logs should be written.
 
     Raises:
         Exception: If no valid timeseries is extracted for a subject.
@@ -31,9 +37,7 @@ def process_subject_extract(args):
         error_log_path,
     ) = args
 
-    bold_path_template = bold_template.format(
-        subject=subject_id, ses=ses, threshold=threshold
-    )
+    bold_path_template = bold_template.format(subject=subject_id, ses=ses, threshold=threshold)
 
     fmri_file = Path(bold_path_template)
 
@@ -46,8 +50,12 @@ def process_subject_extract(args):
         print(f"No valid timeseries extracted for subject {subject_id}")
         return
 
+    # Ensure the directory exists
+    output_subdir = os.path.join(output_dir, f"ses-{ses}")
+    os.makedirs(output_subdir, exist_ok=True)
+
     # Save the extracted timeseries
-    timeseries_output_path = output_dir / f"{subject_id}_timeseries.csv"
+    timeseries_output_path = output_dir / f"ses-{ses}/{subject_id}_ses-{ses}_schaefer200_timeseries.csv"
     print(f"Saving extracted timeseries to {timeseries_output_path}")
     np.savetxt(timeseries_output_path, timeseries, delimiter=",")
 
@@ -67,8 +75,7 @@ def main(
     roi_indices: List[int],
     multi: bool = False,
 ):
-    """
-    Main function to run the script.
+    """Main function to run the script.
 
     This function defines session timepoints, data directories, and processes subjects' timeseries
     data either sequentially or in parallel based on the multi flag.
@@ -101,11 +108,11 @@ def main(
 
     # Get the Schaefer atlas
     schaefer_atlas = datasets.fetch_atlas_schaefer_2018(
-        n_rois=200,        # Number of regions 
-        yeo_networks=7,    # Number of networks 
-        resolution_mm=2
+        n_rois=200,  # Number of regions
+        yeo_networks=7,  # Number of networks
+        resolution_mm=2,
     )
-    atlas_file = schaefer_atlas['maps']
+    atlas_file = schaefer_atlas["maps"]
 
     args = [
         (
@@ -133,7 +140,7 @@ if __name__ == "__main__":
     ses = "02"
     threshold = "0.5"
     todo_file = Path("/home/rachel/Desktop/schaefer_analysis/todo.csv")
-    output_directory = Path("/home/rachel/Desktop/schaefer_analysis/schaefer_200/timeseries")
+    output_directory = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data")
     root_directory = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
     error_log_path = output_directory / "error_log.txt"
 
@@ -163,6 +170,3 @@ if __name__ == "__main__":
 
     # Uncomment this line to enable parallel processing
     # main(ses=ses, threshold=threshold, todo_path=todo_file, masks_root_path=masks_root_path, output_dir=output_directory, bold_template=bold_template, mask_template=mask_template, mask_type=mask_type, roi_indices=roi_indices, multi=True)
-
-
-

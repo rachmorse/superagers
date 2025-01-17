@@ -1,19 +1,16 @@
 import os
+from datetime import datetime
 from pathlib import Path
+from typing import List, Optional
+
+import matplotlib.pyplot as plt
+import nibabel as nib
 import numpy as np
 from nilearn.input_data import NiftiLabelsMasker
-import nibabel as nib
-from datetime import datetime
-from typing import List, Optional
-import matplotlib.pyplot as plt
 
 
-def extract_timeseries(
-    atlas_file: str, fmri_file: str, error_log_path: Path
-) -> Optional[np.ndarray]:
-    """
-    Extracts timeseries data from a BOLD image using an atlas mask,
-    considers both 3D and 4D atlases, and logs errors to a file.
+def extract_timeseries(atlas_file: str, fmri_file: str, error_log_path: Path) -> Optional[np.ndarray]:
+    """Extracts timeseries data from a BOLD image using an atlas mask.
 
     Args:
         atlas_file (str): Path to the atlas file (mask).
@@ -37,18 +34,18 @@ def extract_timeseries(
         # Load the atlas file
         atlas_img = nib.load(atlas_file)
 
-    # Use NiftiLabelsMasker to extract the timeseries
+        # Use NiftiLabelsMasker to extract the timeseries
         masker = NiftiLabelsMasker(labels_img=atlas_img, standardize=False)
         print("Extracting timeseries...")
         timeseries = masker.fit_transform(fmri_file)
 
         return timeseries
-    
+
     except Exception as e:
         with open(error_log_path, "a") as f:
             f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Error processing atlas {atlas_file} and fMRI {fmri_file}:\n")
-            f.write(f"{str(e)}\n\n")
+            f.write(f"{e!s}\n\n")
         return None
 
 
@@ -57,8 +54,7 @@ def visualize_timeseries(
     timeseries: np.ndarray,
     roi_indices: List[int],
 ):
-    """
-    Visualize the timeseries for specified ROIs.
+    """Visualize the timeseries for specified ROIs.
 
     Args:
         subject_id (str): Subject ID.

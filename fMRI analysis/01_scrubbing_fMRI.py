@@ -1,5 +1,6 @@
 import os
 from multiprocessing import Pool
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import nibabel as nib
@@ -10,7 +11,7 @@ import scipy.interpolate
 
 def analyze_threshold(data, threshold, total_scans=740, affected_percentage=0.5):
     """Analyze and visualize subjects with a high amount of movement using a given FWD threshold (e.g. subjects with > X FWD in > Y% of scans).
-    
+
     Note - this is to consider what your data look like to help determine the threshold and affected percentage to use for scrubbing.
 
     Args:
@@ -202,8 +203,8 @@ def main(
     Raises:
         Exception: If any required file or directory is not found.
     """
-    error_log = os.path.join(output_files, "scrubbing_errors.txt")
-    all_fwd_path = os.path.join(output_files, "all_fwd.csv")
+    error_log = os.path.join(output_files, "scrubbed_data", "scrubbing_errors.txt")
+    all_fwd_path = os.path.join(output_files, "scrubbed_data", "all_fwd.csv")
 
     # Concatenate all framewise_displ.txt files (per subject) into a single DataFrame
     all_fwd_df = pd.DataFrame()
@@ -280,7 +281,7 @@ if __name__ == "__main__":
     ses = "02"
     threshold = 0.5
     root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
-    output_data = "/home/rachel/Desktop/schaefer_analysis/scrubbed_data"
+    output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
     output_files = "/home/rachel/Desktop/schaefer_analysis"
 
     # Create the output directory if it does not exist
