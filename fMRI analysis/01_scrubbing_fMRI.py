@@ -245,7 +245,7 @@ def main(
 
     # Parallel processing
     if multi:
-        with Pool(4) as pool:
+        with Pool(8) as pool:
             pool.starmap(
                 process_subject,
                 [
@@ -308,16 +308,14 @@ if __name__ == "__main__":
         "{subject}_ses-{ses}_run-01_rest_bold_ap_MNI-space_scrubbed_{threshold}.nii.gz",
     )
 
-    # main(
-    #     ses,
-    #     root,
-    #     output_data,
-    #     output_files,
-    #     threshold,
-    #     bold_pattern,
-    #     scrubbed_pattern,
-    #     multi=False,
-    # )
-
-    # Uncomment this line to enable parallel processing
-    main(ses, root, output_data, output_files, threshold, bold_pattern, scrubbed_pattern, multi=True)
+    main(
+        ses,
+        root,
+        output_data,
+        output_files,
+        threshold,
+        bold_pattern,
+        scrubbed_pattern,
+        # multi=False,
+        multi=True, # Uncomment this line to enable parallel processing
+    )

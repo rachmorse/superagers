@@ -129,7 +129,7 @@ def main(
     ]
 
     if multi:
-        with Pool(6) as pool:
+        with Pool(8) as pool:
             pool.map(process_subject_extract, args)
     else:
         for arg in args:
@@ -137,7 +137,7 @@ def main(
 
 
 if __name__ == "__main__":
-    ses = "02"
+    ses = "01"
     threshold = "0.5"
     todo_file = Path("/home/rachel/Desktop/schaefer_analysis/todo.csv")
     output_directory = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data")
@@ -165,8 +165,6 @@ if __name__ == "__main__":
         output_dir=output_directory,
         bold_template=bold_template,
         roi_indices=roi_indices,
-        multi=False,
+        # multi=False,
+        multi=True, # Uncomment this line to enable parallel processing
     )
-
-    # Uncomment this line to enable parallel processing
-    # main(ses=ses, threshold=threshold, todo_path=todo_file, error_log_path=error_log_path, output_dir=output_directory, bold_template=bold_template, roi_indices=roi_indices, multi=True)
