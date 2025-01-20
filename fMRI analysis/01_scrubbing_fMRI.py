@@ -278,7 +278,7 @@ def main(
 
 if __name__ == "__main__":
     # Change to your paths and settings
-    ses = "02"
+    ses = "01"
     threshold = 0.5
     output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
     output_files = "/home/rachel/Desktop/schaefer_analysis"
@@ -308,16 +308,16 @@ if __name__ == "__main__":
         "{subject}_ses-{ses}_run-01_rest_bold_ap_MNI-space_scrubbed_{threshold}.nii.gz",
     )
 
-    main(
-        ses,
-        root,
-        output_data,
-        output_files,
-        threshold,
-        bold_pattern,
-        scrubbed_pattern,
-        multi=False,
-    )
+    # main(
+    #     ses,
+    #     root,
+    #     output_data,
+    #     output_files,
+    #     threshold,
+    #     bold_pattern,
+    #     scrubbed_pattern,
+    #     multi=False,
+    # )
 
     # Uncomment this line to enable parallel processing
-    # main(ses, root, output_data, output_files, threshold, bold_pattern, scrubbed_pattern, multi=True)
+    main(ses, root, output_data, output_files, threshold, bold_pattern, scrubbed_pattern, multi=True)

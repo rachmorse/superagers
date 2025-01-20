@@ -3,3 +3,5 @@ superagers/
 
 # Ignore .ds_store
 .DS_Store
+
+*.pyc

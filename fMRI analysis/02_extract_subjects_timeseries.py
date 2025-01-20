@@ -169,4 +169,4 @@ if __name__ == "__main__":
     )
 
     # Uncomment this line to enable parallel processing
-    # main(ses=ses, threshold=threshold, todo_path=todo_file, masks_root_path=masks_root_path, output_dir=output_directory, bold_template=bold_template, mask_template=mask_template, mask_type=mask_type, roi_indices=roi_indices, multi=True)
+    # main(ses=ses, threshold=threshold, todo_path=todo_file, error_log_path=error_log_path, output_dir=output_directory, bold_template=bold_template, roi_indices=roi_indices, multi=True)
