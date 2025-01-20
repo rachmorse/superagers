@@ -280,9 +280,14 @@ if __name__ == "__main__":
     # Change to your paths and settings
     ses = "02"
     threshold = 0.5
-    root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
     output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
     output_files = "/home/rachel/Desktop/schaefer_analysis"
+
+    # Use this path for Superager tp2 data
+    # root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
+
+    # Use this path for Superager tp1 data 
+    root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed"
 
     # Create the output directory if it does not exist
     output_data.mkdir(parents=True, exist_ok=True)

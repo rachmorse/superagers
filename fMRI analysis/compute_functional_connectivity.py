@@ -23,7 +23,7 @@ def fisher_transform(correlations: np.ndarray) -> np.ndarray:
 def prepare_directories(root_dir: Path, session: str, subdir_types: List[str]):
     """Ensure all necessary directories exist."""
     for subdir in subdir_types:
-        path = root_dir / subdir / f"ses-{session}"
+        path = root_dir / f"ses-{session}" / subdir
         path.mkdir(parents=True, exist_ok=True)
 
 
@@ -57,24 +57,17 @@ def compute_functional_connectivity(
     # Apply Fisher z-transformation
     fisher_z_matrix = fisher_transform(connectivity_matrix)
 
-    # Corrected path definition
-    base_dir = output_dir / "connectivity_matrices"  # Ensure only once
-
     # Define target directories
-    all_to_all_dir = base_dir / "all_to_all_roi_matrices"
-    within_network_dir = base_dir / "within_network_matrices"
+    all_to_all_dir = output_dir / f"ses-{ses}/all_to_all_roi_matrices"
+    within_network_dir = output_dir / f"ses-{ses}/within_network_matrices"
 
     # Ensure directories exist, eliminating redundancy
-    prepare_directories(all_to_all_dir, ses, ["no_fisher_z", "fisher_z"])
-    prepare_directories(within_network_dir, ses, ["no_fisher_z", "fisher_z"])
+    prepare_directories(output_dir, ses, ["all_to_all_roi_matrices"])
+    prepare_directories(output_dir, ses, ["within_network_matrices"])
 
     # Save complete connectivity data
-    save_connectivity_data(
-        subject_id, "all_to_all_roi", connectivity_matrix, None, labels, all_to_all_dir / "no_fisher_z", ses
-    )
-    save_connectivity_data(
-        subject_id, "fisher_z_all_to_all_roi", None, fisher_z_matrix, labels, all_to_all_dir / "fisher_z", ses
-    )
+    save_connectivity_data(subject_id, "all_to_all_roi", connectivity_matrix, None, labels, all_to_all_dir)
+    save_connectivity_data(subject_id, "all_to_all_roi", None, fisher_z_matrix, labels, all_to_all_dir)
 
     # Compute network-specific connectivity matrices
     for network, indices in network_mappings.items():
@@ -92,18 +85,16 @@ def compute_functional_connectivity(
             network_correlation_matrix,
             None,
             network_labels,
-            within_network_dir / "no_fisher_z",
-            ses,
+            within_network_dir,
         )
 
         save_connectivity_data(
             subject_id,
-            f"fisher_z_{network}_within_network",
+            f"{network}_within_network",
             None,
             network_fisher_z_matrix,
             network_labels,
-            within_network_dir / "fisher_z",
-            ses,
+            within_network_dir,
         )
 
     return connectivity_matrix, fisher_z_matrix
@@ -141,7 +132,6 @@ def save_connectivity_data(
     fisher_z_matrix: np.ndarray,
     roi_names: List[str],
     output_dir: Path,
-    ses: str,
 ):
     """Save the connectivity data to CSV files.
 
@@ -152,31 +142,33 @@ def save_connectivity_data(
         fisher_z_matrix (np.ndarray): The Fisher z-transformed connectivity matrix.
         roi_names (List[str]): List of ROI names.
         output_dir (Path): Directory where the connectivity data will be saved.
-        ses (str): Session / timepoint.
     """
+    csv_output_path = output_dir / f"{label}_matrix.csv"
+    fisher_z_csv_output_path = output_dir / f"fisher_z_{label}_matrix.csv"
+
+    def save_csv(dataframe: pd.DataFrame, file_path: Path):
+        if file_path.exists():
+            existing_df = pd.read_csv(file_path, index_col="id")
+            dataframe = dataframe[~dataframe.index.isin(existing_df.index)]
+            # Append without writing header
+            dataframe.to_csv(file_path, mode="a", header=False)
+        else:
+            # Initial write with header
+            dataframe.to_csv(file_path, index_label="id", header=True)
+
     if matrix is not None:
-        # Save connectivity data
         columns = [f"{roi1}-{roi2}" for roi1, roi2 in combinations(roi_names, 2)]
         df_all_fc = pd.DataFrame(index=[subject_id], columns=columns)
         upper_tri_indices = np.triu_indices(matrix.shape[0], k=1)
         df_all_fc.loc[subject_id, :] = matrix[upper_tri_indices]
-
-        # Save connectivity DataFrame for all subjects to CSV
-        csv_output_path = output_dir / f"ses-{ses}/{label}_matrix.csv"
-        df_all_fc.to_csv(csv_output_path, mode="a", header=not csv_output_path.exists(), index_label="SubjectID")
+        save_csv(df_all_fc, csv_output_path)
 
     if fisher_z_matrix is not None:
-        # Prepare connectivity Fisher z DataFrame
         columns = [f"{roi1}-{roi2}" for roi1, roi2 in combinations(roi_names, 2)]
         df_all_fc_fisher_z = pd.DataFrame(index=[subject_id], columns=columns)
         upper_tri_indices = np.triu_indices(fisher_z_matrix.shape[0], k=1)
         df_all_fc_fisher_z.loc[subject_id, :] = fisher_z_matrix[upper_tri_indices]
-
-        # Save Fisher z DataFrame to CSV
-        fisher_z_csv_output_path = output_dir / f"ses-{ses}/fisher_z_{label}_matrix.csv"
-        df_all_fc_fisher_z.to_csv(
-            fisher_z_csv_output_path, mode="a", header=not fisher_z_csv_output_path.exists(), index_label="SubjectID"
-        )
+        save_csv(df_all_fc_fisher_z, fisher_z_csv_output_path)
 
 
 def visualize_fc_data(
@@ -184,6 +176,7 @@ def visualize_fc_data(
     connectivity_matrix: np.ndarray,
     output_directory: Path,
     ses: str,
+    is_fisher_z: bool = False,
 ):
     """Visualize the connectivity matrix.
 
@@ -192,6 +185,7 @@ def visualize_fc_data(
         connectivity_matrix (np.ndarray): The connectivity matrix to be visualized.
         output_directory (Path): Directory where the plot will be saved.
         ses (str): Session / timepoint
+        is_fisher_z (bool): Whether the matrix is Fisher Z-transformed.
     """
     # Visualize connectivity matrix
     plt.figure(figsize=(10, 8))
@@ -203,7 +197,17 @@ def visualize_fc_data(
     plt.grid(False)
     plt.show()
 
+    # Determine plot path based on Fisher Z transformation
+    if is_fisher_z:
+        plot_filename = f"{subject_id}_ses-{ses}_fisher_z_all_to_all_roi_matrix.png"
+    else:
+        plot_filename = f"{subject_id}_ses-{ses}_all_to_all_roi_matrix.png"
+
+    # Create the visualization directory if it doesn't exist
+    visualization_dir = output_directory / f"ses-{ses}/visualization"
+    visualization_dir.mkdir(parents=True, exist_ok=True)
+
     # Save the plot
-    # plot_path = output_directory / f"all_to_all_roi_matrices/ses-{ses}/fisher_z_all_to_all_roi_matrix.png"
+    plot_path = visualization_dir / plot_filename
     plt.savefig(plot_path)
     plt.close()
