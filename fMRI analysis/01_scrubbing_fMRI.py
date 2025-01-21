@@ -209,9 +209,21 @@ def main(
     # Concatenate all framewise_displ.txt files (per subject) into a single DataFrame
     all_fwd_df = pd.DataFrame()
 
+    # Determine subjects list using a csv file for BBHI or a directory for BBHI senior
+    if subject_csv:
+        subjects_df = pd.read_csv(subject_csv)
+
+        if 'id' in subjects_df.columns:
+            subjects = [f"sub-{subject}" for subject in subjects_df['id'].tolist()]
+        else:
+            print("Error: 'id' column not found in CSV file.")
+            subjects = []
+    else:
+        subjects = os.listdir(root)
+
     # Iterate over all subjects in the root directory
-    for subject in os.listdir(root):
-        subject_dir = os.path.join(root, subject, f"ses-{ses}", "MNI_2mm")
+    for subject in subjects:
+        subject_dir = os.path.join(root, subject, subject_dir_pattern)
         fwd_file = os.path.join(subject_dir, "framewise_displ.txt")
 
         # Check if the framewise_displ.txt file exists for the subject
@@ -226,7 +238,9 @@ def main(
             # Append the row DataFrame to the main DataFrame
             all_fwd_df = pd.concat([all_fwd_df, fwd_row_df])
         else:
-            print(f"No framewise_displ.txt found for {subject}")
+            print(f"No framewise_displ.txt found for {subject} at {fwd_file}")
+
+    print(f"Total subjects: {len(subjects)}")
 
     # Save the concatenated DataFrame to all_fwd.csv
     all_fwd_df.to_csv(all_fwd_path, index=True, header=False)
@@ -236,16 +250,9 @@ def main(
     analyze_threshold(all_fwd_df, 0.2)
     analyze_threshold(all_fwd_df, 0.5)
 
-    # Work on scrubbing the BOLD images
-    todo = list(set(list(all_fwd_df.index)).difference(os.listdir(output_data)))
-
-    # Convert the list to a DataFrame and save as a CSV
-    todo_df = pd.DataFrame(todo, columns=["todo"])
-    todo_df.to_csv(os.path.join(output_files, "todo.csv"), index=False)
-
     # Parallel processing
     if multi:
-        with Pool(8) as pool:
+        with Pool(6) as pool:
             pool.starmap(
                 process_subject,
                 [
@@ -278,16 +285,33 @@ def main(
 
 if __name__ == "__main__":
     # Change to your paths and settings
-    ses = "01"
     threshold = 0.5
     output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
     output_files = "/home/rachel/Desktop/schaefer_analysis"
-
-    # Use this path for Superager tp2 data
+    
+    # Use these paths for Superager tp2 data
     # root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
+    # subject_csv = None
+    # subject_dir_pattern = f"ses-{ses}/MNI_2mm"
+    # ses = "02"
 
-    # Use this path for Superager tp1 data
-    root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed"
+    # Use these paths for Superager tp1 data
+    # root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed"
+    # subject_csv = None
+    # subject_dir_pattern = f"ses-{ses}/MNI_2mm"
+    # ses = "01"
+
+    # Use these paths to process BBHI tp1 data
+    # subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
+    # root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed"
+    # subject_dir_pattern = "MNI_2mm" 
+    # ses = "01"
+
+    # Use these paths to process BBHI tp2 data
+    subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
+    root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp2"
+    subject_dir_pattern = "MNI_2mm"
+    ses = "02"
 
     # Create the output directory if it does not exist
     output_data.mkdir(parents=True, exist_ok=True)

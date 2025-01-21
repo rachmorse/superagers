@@ -62,7 +62,7 @@ def process_subject_functional(args):
     )
 
     # Visualize data if you would like by uncommenting the line below
-    visualize_fc_data(subject_id, fisher_z_matrix, output_dir, ses, True)
+    # visualize_fc_data(subject_id, fisher_z_matrix, output_dir, ses, True)
 
     print(f"Processing completed for subject: {subject_id}")
 
@@ -78,7 +78,6 @@ def get_subjects_to_process(root_directory, output_directory, ses):
     subjects_to_process = []
 
     csv_path = output_directory / f"ses-{ses}/all_to_all_roi_matrices/all_to_all_roi_matrix.csv"
-    print(f"Checking for existing CSV file: {csv_path}")
 
     if csv_path.exists():
         df = pd.read_csv(csv_path)
