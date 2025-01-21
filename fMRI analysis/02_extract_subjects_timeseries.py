@@ -99,7 +99,6 @@ def get_subjects_to_process(root_directory, output_directory, ses):
 def main(
     ses: str,
     threshold: float,
-    todo_path: Union[str, Path],
     error_log_path: Union[str, Path],
     output_dir: Union[str, Path],
     bold_template: str,
@@ -114,7 +113,6 @@ def main(
     Args:
         ses (str): Session (timepoint).
         threshold (float): Threshold value for scrubbing.
-        todo_path (Union[str, Path]): Path to the todo file with subject IDs to be processed.
         error_log_path (Union[str, Path]): Path to log the error file.
         output_dir (Union[str, Path]): Path where processed data will be output.
         bold_template (str): Path / template for the location of BOLD data.
@@ -122,7 +120,6 @@ def main(
         multi (bool): If True, enables parallel processing using multiprocessing. Defaults to False.
     """
     output_dir = Path(output_dir)
-    todo_path = Path(todo_path)
     error_log_path = output_dir / "error_log.txt"  # Define error log path
 
     # Ensure output directory exists

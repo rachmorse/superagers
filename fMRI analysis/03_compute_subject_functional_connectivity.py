@@ -2,6 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Union
 
+import os
 import nibabel as nib
 import numpy as np
 import pandas as pd
@@ -65,15 +66,42 @@ def process_subject_functional(args):
 
     print(f"Processing completed for subject: {subject_id}")
 
+def get_subjects_to_process(root_directory, output_directory, ses):
+    """Generate a list of subjects to process based on whether they have
+    timeseries data and connectivity data already generated.
 
-def main(todo_path: Union[str, Path], output_dir: Union[str, Path], root_directory: Union[str, Path], ses: str):
+    Args:
+        root_directory (Path): Path to the root directory containing the timeseries data.
+        output_directory (Path): Path to the output directory where connectivity data is saved.
+        ses (str): Session / timepoint.
+    """
+    subjects_to_process = []
+
+    csv_path = output_directory / f"ses-{ses}/all_to_all_roi_matrices/all_to_all_roi_matrix.csv"
+    print(f"Checking for existing CSV file: {csv_path}")
+
+    if csv_path.exists():
+        df = pd.read_csv(csv_path)
+        processed_subjects = set(df["id"].unique())
+    else:
+        print("CSV file not found. No subjects have been processed.")
+        processed_subjects = set()
+
+    for filename in os.listdir(root_directory):
+        if filename.startswith("sub-") and filename.endswith(f"ses-{ses}_schaefer200_timeseries.csv"):
+            subject_id = filename.split('_')[0]
+            if subject_id not in processed_subjects:
+                subjects_to_process.append(subject_id)
+
+    return subjects_to_process
+
+def main(output_dir: Union[str, Path], root_directory: Union[str, Path], ses: str):
     """Main function to run the script.
 
     This function reads the pre-extracted timeseries data for each subject,
     computes the functional connectivity matrices for all subjects.
 
     Args:
-        todo_path (Union[str, Path]): Path to the todo file with subject IDs to be processed.
         output_dir (Union[str, Path]): Path where processed data will be output.
         root_directory (Union[str, Path]): Root directory for the timeseries data.
 
@@ -83,20 +111,10 @@ def main(todo_path: Union[str, Path], output_dir: Union[str, Path], root_directo
     """
     output_dir = Path(output_dir)
     root_directory = Path(root_directory)
-    todo_path = Path(todo_path)
     error_log_path = output_dir / "error_log.txt"  # Define error log path
 
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    try:
-        todo_df = pd.read_csv(todo_path)
-        todo = todo_df["todo"].tolist()
-    except Exception as e:
-        print(f"Error reading CSV file: {e}")
-        return
-
-    print(f"Number of subjects to process: {len(todo)}")
 
     # Load the Schaefer atlas
     schaefer_atlas = datasets.fetch_atlas_schaefer_2018(n_rois=200, yeo_networks=7, resolution_mm=2)
@@ -115,7 +133,7 @@ def main(todo_path: Union[str, Path], output_dir: Union[str, Path], root_directo
             error_log_path,
             schaefer_atlas,
         )
-        for subject_id in todo
+        for subject_id in subjects
     ]
 
     for arg in args:
@@ -123,16 +141,18 @@ def main(todo_path: Union[str, Path], output_dir: Union[str, Path], root_directo
 
 
 if __name__ == "__main__":
-    ses = "02"
-    todo_file = Path("/home/rachel/Desktop/schaefer_analysis/todo.csv")
+    ses = "01"
     root_directory = Path(f"/home/rachel/Desktop/schaefer_analysis/timeseries_data/ses-{ses}")
     output_directory = Path("/home/rachel/Desktop/schaefer_analysis/connectivity_matrices")
 
     # Create the output directory if it does not exist
     output_directory.mkdir(parents=True, exist_ok=True)
 
+    # Generate a list of subjects to process
+    subjects = get_subjects_to_process(root_directory, output_directory, ses)
+    print(f"Number of subjects to process: {len(subjects)}")
+
     main(
-        todo_path=todo_file,
         output_dir=output_directory,
         root_directory=root_directory,
         ses=ses,
