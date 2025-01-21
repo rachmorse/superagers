@@ -1,14 +1,12 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Union
-from nilearn import datasets
+
 import nibabel as nib
 import numpy as np
 import pandas as pd
-from compute_functional_connectivity import (
-    compute_functional_connectivity,
-    visualize_fc_data
-)
+from compute_functional_connectivity import compute_functional_connectivity, visualize_fc_data
+from nilearn import datasets
 
 
 def process_subject_functional(args):
@@ -102,7 +100,7 @@ def main(todo_path: Union[str, Path], output_dir: Union[str, Path], root_directo
 
     # Load the Schaefer atlas
     schaefer_atlas = datasets.fetch_atlas_schaefer_2018(n_rois=200, yeo_networks=7, resolution_mm=2)
-    
+
     # Save the Schaefer atlas as a Nifti file
     schaefer_nifti_path = Path("/home/rachel/Desktop/schaefer_analysis/schaefer200_atlas.nii")
     nifti_image = nib.load(schaefer_atlas.maps)

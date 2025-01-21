@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import List, Union
 
 import numpy as np
-import pandas as pd
 from extract_timeseries import extract_timeseries
 from nilearn import datasets
 
@@ -65,6 +64,38 @@ def process_subject_extract(args):
     print(f"Processing completed for subject: {subject_id}")
 
 
+def get_subjects_to_process(root_directory, output_directory, ses):
+    """Generate a list of subjects to process based on whether they have
+    scrubbed data and a timeseries file already generated.
+
+    Args:
+        root_directory (Path): Path to the root directory containing the scrubbed data.
+        output_directory (Path): Path to the output directory where timeseries data is saved.
+        ses (str): Session / timepoint.
+    """
+    subjects_to_process = []
+
+    # Iterate over all possible subject directories
+    for subject_dir in os.listdir(root_directory):
+        if not subject_dir.startswith("sub-"):
+            continue
+        subject = subject_dir
+
+        # Check if the session exists
+        scrubbed_data = Path(f"{root_directory}/{subject}/ses-{ses}")
+        output_data = Path(f"{output_directory}/ses-{ses}")
+
+        if scrubbed_data.exists() and any(scrubbed_data.iterdir()):
+            expected_output_filename = f"{subject}_ses-{ses}_schaefer200_timeseries.csv"
+            output_file_path = output_data / expected_output_filename
+
+            if not output_file_path.exists():
+                subjects_to_process.append(subject)
+
+    print(f"Number of subjects to process: {len(subjects_to_process)}")
+    return subjects_to_process
+
+
 def main(
     ses: str,
     threshold: float,
@@ -97,15 +128,6 @@ def main(
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    try:
-        todo_df = pd.read_csv(todo_path)
-        todo = todo_df["todo"].tolist()
-    except Exception as e:
-        print(f"Error reading CSV file: {e}")
-        return
-
-    print(f"Number of subjects to process: {len(todo)}")
-
     # Get the Schaefer atlas
     schaefer_atlas = datasets.fetch_atlas_schaefer_2018(
         n_rois=200,  # Number of regions
@@ -125,11 +147,11 @@ def main(
             roi_indices,
             error_log_path,
         )
-        for subject in todo
+        for subject in subjects
     ]
 
     if multi:
-        with Pool(8) as pool:
+        with Pool(6) as pool:
             pool.map(process_subject_extract, args)
     else:
         for arg in args:
@@ -139,7 +161,6 @@ def main(
 if __name__ == "__main__":
     ses = "01"
     threshold = "0.5"
-    todo_file = Path("/home/rachel/Desktop/schaefer_analysis/todo.csv")
     output_directory = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data")
     root_directory = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
     error_log_path = output_directory / "error_log.txt"
@@ -148,6 +169,9 @@ if __name__ == "__main__":
     output_directory.mkdir(parents=True, exist_ok=True)
 
     roi_indices = [0]  # ROIs to visualize
+
+    # Generate a list of subjects to process
+    subjects = get_subjects_to_process(root_directory, output_directory, ses)
 
     bold_template = os.path.join(
         root_directory,
@@ -160,11 +184,10 @@ if __name__ == "__main__":
     main(
         ses=ses,
         threshold=threshold,
-        todo_path=todo_file,
         error_log_path=error_log_path,
         output_dir=output_directory,
         bold_template=bold_template,
         roi_indices=roi_indices,
-        # multi=False,
-        multi=True, # Uncomment this line to enable parallel processing
+        multi=False,
+        # multi=True, # Uncomment this line to enable parallel processing
     )

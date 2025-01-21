@@ -286,7 +286,7 @@ if __name__ == "__main__":
     # Use this path for Superager tp2 data
     # root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
 
-    # Use this path for Superager tp1 data 
+    # Use this path for Superager tp1 data
     root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed"
 
     # Create the output directory if it does not exist
@@ -317,5 +317,5 @@ if __name__ == "__main__":
         bold_pattern,
         scrubbed_pattern,
         # multi=False,
-        multi=True, # Uncomment this line to enable parallel processing
+        multi=True,  # Uncomment this line to enable parallel processing
     )
