@@ -1,12 +1,12 @@
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Union
 
-import os
 import nibabel as nib
 import numpy as np
 import pandas as pd
-from compute_functional_connectivity import compute_functional_connectivity, visualize_fc_data
+from compute_functional_connectivity import compute_functional_connectivity
 from nilearn import datasets
 
 
@@ -66,6 +66,7 @@ def process_subject_functional(args):
 
     print(f"Processing completed for subject: {subject_id}")
 
+
 def get_subjects_to_process(root_directory, output_directory, ses):
     """Generate a list of subjects to process based on whether they have
     timeseries data and connectivity data already generated.
@@ -88,11 +89,12 @@ def get_subjects_to_process(root_directory, output_directory, ses):
 
     for filename in os.listdir(root_directory):
         if filename.startswith("sub-") and filename.endswith(f"ses-{ses}_schaefer200_timeseries.csv"):
-            subject_id = filename.split('_')[0]
+            subject_id = filename.split("_")[0]
             if subject_id not in processed_subjects:
                 subjects_to_process.append(subject_id)
 
     return subjects_to_process
+
 
 def main(output_dir: Union[str, Path], root_directory: Union[str, Path], ses: str):
     """Main function to run the script.
