@@ -162,7 +162,7 @@ def process_subject(
                 method="interpolate",
             )
         else:
-            print("Already scrubbed!")
+            print(f"{subject} already scrubbed!")
     except Exception as e:
         print(f"Error processing subject {subject}: {e}")
         with open(error_log, "a") as f:
@@ -173,7 +173,6 @@ def main(
     ses,
     root,
     output_data,
-    output_files,
     threshold,
     bold_pattern,
     scrubbed_pattern,
@@ -194,7 +193,6 @@ def main(
         ses (str): Session (timepoint).
         root (str): Root directory path.
         output_data (str): Output data directory path (for MRI data).
-        output_files (str): Output files directory path (for error, todo, and FWD CSVs).
         threshold (float): Threshold value for scrubbing.
         bold_pattern (str): Pattern for the BOLD file names.
         scrubbed_pattern (str): Pattern for the scrubbed file names.
@@ -203,8 +201,8 @@ def main(
     Raises:
         Exception: If any required file or directory is not found.
     """
-    error_log = os.path.join(output_files, "scrubbed_data", "scrubbing_errors.txt")
-    all_fwd_path = os.path.join(output_files, "scrubbed_data", "all_fwd.csv")
+    error_log = os.path.join(output_data, "scrubbing_errors.txt")
+    all_fwd_path = os.path.join(output_data, "all_fwd.csv")
 
     # Concatenate all framewise_displ.txt files (per subject) into a single DataFrame
     all_fwd_df = pd.DataFrame()
@@ -252,7 +250,7 @@ def main(
 
     # Parallel processing
     if multi:
-        with Pool(6) as pool:
+        with Pool(4) as pool:
             pool.starmap(
                 process_subject,
                 [
@@ -287,7 +285,6 @@ if __name__ == "__main__":
     # Change to your paths and settings
     threshold = 0.5
     output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
-    output_files = "/home/rachel/Desktop/schaefer_analysis"
 
     # Use these paths for Superager tp2 data
     # root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
@@ -302,16 +299,16 @@ if __name__ == "__main__":
     # ses = "01"
 
     # Use these paths to process BBHI tp1 data
-    subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
-    root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed"
-    subject_dir_pattern = "MNI_2mm"
-    ses = "01"
+    # subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
+    # root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed"
+    # subject_dir_pattern = "MNI_2mm"
+    # ses = "01"
 
     # Use these paths to process BBHI tp2 data
-    # subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
-    # root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp2"
-    # subject_dir_pattern = "MNI_2mm"
-    # ses = "02"
+    subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
+    root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp2"
+    subject_dir_pattern = "MNI_2mm"
+    ses = "02"
 
     # Create the output directory if it does not exist
     output_data.mkdir(parents=True, exist_ok=True)
@@ -335,7 +332,6 @@ if __name__ == "__main__":
         ses,
         root,
         output_data,
-        output_files,
         threshold,
         bold_pattern,
         scrubbed_pattern,

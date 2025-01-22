@@ -148,7 +148,7 @@ def main(
     ]
 
     if multi:
-        with Pool(6) as pool:
+        with Pool(4) as pool:
             pool.map(process_subject_extract, args)
     else:
         for arg in args:
@@ -185,6 +185,6 @@ if __name__ == "__main__":
         output_dir=output_directory,
         bold_template=bold_template,
         roi_indices=roi_indices,
-        multi=False,
-        # multi=True, # Uncomment this line to enable parallel processing
+        # multi=False,
+        multi=True, # Uncomment this line to enable parallel processing
     )
