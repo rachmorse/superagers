@@ -142,7 +142,7 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], ses: st
 
 
 if __name__ == "__main__":
-    ses = "01"
+    ses = "02"
     root_directory = Path(f"/home/rachel/Desktop/schaefer_analysis/timeseries_data/ses-{ses}")
     output_directory = Path("/home/rachel/Desktop/schaefer_analysis/connectivity_matrices")
 
