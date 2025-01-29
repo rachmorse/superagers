@@ -286,17 +286,17 @@ if __name__ == "__main__":
     threshold = 0.5
     output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
 
-    # Use these paths for Superager tp2 data
-    # root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
-    # subject_csv = None
-    # subject_dir_pattern = f"ses-{ses}/MNI_2mm"
-    # ses = "02"
-
     # Use these paths for Superager tp1 data
     # root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed"
     # subject_csv = None
-    # subject_dir_pattern = f"ses-{ses}/MNI_2mm"
     # ses = "01"
+    # subject_dir_pattern = f"ses-{ses}/MNI_2mm"
+
+    # Use these paths for Superager tp2 data
+    root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
+    subject_csv = None
+    ses = "02"
+    subject_dir_pattern = f"ses-{ses}/MNI_2mm"
 
     # Use these paths to process BBHI tp1 data
     # subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
@@ -305,10 +305,10 @@ if __name__ == "__main__":
     # ses = "01"
 
     # Use these paths to process BBHI tp2 data
-    subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
-    root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp2"
-    subject_dir_pattern = "MNI_2mm"
-    ses = "02"
+    # subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
+    # root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp2"
+    # subject_dir_pattern = "MNI_2mm"
+    # ses = "02"
 
     # Create the output directory if it does not exist
     output_data.mkdir(parents=True, exist_ok=True)
