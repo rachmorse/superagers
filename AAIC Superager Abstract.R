@@ -74,10 +74,20 @@ summary(model)
 ##############################################
 ##### LME model - age, memory, 2 groups ######
 ##############################################
+# SUPERAGERS 
 
 # Model with covariates (the model with the fig has no covariates)
 model_superager <- lmer(memory ~ age * superager + (1 | id) + cohort + sex + YoE, data = long_data)
 summary(model_superager)
+
+##############################################
+##### LME model - age, memory, 2 groups ######
+##############################################
+# MAINTAINERS 
+
+# Model with covariates (the model with the fig has no covariates)
+model_maintainer <- lmer(memory ~ age * maintainer + (1 | id) + cohort + sex + YoE, data = long_data)
+summary(model_maintainer)
 
 #############################################
 ##### Baseline memory four group model ######
@@ -89,7 +99,7 @@ summary(sa_mem_bl)
 
 # Change the reference group to non-superager decliner (compare all groups to them)
 data$superager_maintainer <- as.factor(data$superager_maintainer)
-data$superager_maintainer <- relevel(data$superager_maintainer, ref = "superager decliner")
+data$superager_maintainer <- relevel(data$superager_maintainer, ref = "non-superager maintainer")
 
 ##############################################
 ##### Follow-up memory four group model ######
@@ -122,6 +132,13 @@ summary(maintainer_mem_fu)
 #####################################
 ## Fig 1: Two groups - age, memory ##
 #####################################
+
+long_data <- long_data %>%
+  mutate(superager_factor = case_when(
+    superager == 1 ~ "superager",
+    superager == 0 ~ "non-superager",
+    TRUE ~ "unknown"
+  ))
 
 model_res_lme <- lmer(memory ~ age * superager_factor + (1 | id), data = long_data)
 summary(model_res_lme)
@@ -235,7 +252,7 @@ fig2 <- ggplot() +
 # Combine Fig 1 and Fig 2 and save
 combined_plot <- plot_grid(fig1, fig2, ncol = 2)
 ggsave("SA vs nonSA.jpeg", plot = combined_plot, width = 10, height = 6, dpi = 400, units = "in")
-
+combined_plot
 # Create figure captions 
 
 # Divide the df into the four groups
@@ -263,3 +280,4 @@ summary(superager_decliner_scaled)
 
 non_superager_decliner_scaled <- lmer(scale(memory) ~ scale(age) + (1 | id), data = non_superager_decliner_df)
 summary(non_superager_decliner_scaled)
+
