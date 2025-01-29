@@ -1,4 +1,4 @@
 # Ignore .ds_store
 .DS_Store
-
+*.out
 *.pyc

@@ -31,10 +31,11 @@ def analyze_threshold(data, threshold, total_scans=740, affected_percentage=0.5)
     plt.show()
 
 
-def scrub(bold_file, fwd_file, scrubbed_file, threshold=0.5, method="interpolate"):
+def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="interpolate"):
     """Scrub the BOLD fMRI images by either removing or interpolating scans based on FWD threshold.
 
     Args:
+        subject (str): Subject ID used to process the BOLD and FWD files.
         bold_file (str): Path to the BOLD image file (NIfTI format).
         fwd_file (str): Path to the FWD file (CSV format).
         scrubbed_file (str): Path to save the scrubbed BOLD image file (NIfTI format).
@@ -44,6 +45,8 @@ def scrub(bold_file, fwd_file, scrubbed_file, threshold=0.5, method="interpolate
     Raises:
         Exception: If an unknown method is specified.
     """
+    print(f"Scrubbing BOLD image for subject: {subject}")
+
     # Load BOLD image data
     print("Loading BOLD image from file:", bold_file)
     bold = nib.load(bold_file)
@@ -117,7 +120,7 @@ def scrub(bold_file, fwd_file, scrubbed_file, threshold=0.5, method="interpolate
     os.makedirs(os.path.dirname(scrubbed_file), exist_ok=True)
     nib.save(scrubbed_image, scrubbed_file)
 
-    print(f"Scrubbing complete. Scrubbed image saved to: {scrubbed_file}")
+    print(f"Scrubbing complete for subject: {subject}")
 
 
 def process_subject(
@@ -155,6 +158,7 @@ def process_subject(
 
         if not os.path.exists(scrubbed_file):
             scrub(
+                subject,    
                 bold_file,
                 fwd_file,
                 scrubbed_file,
