@@ -5,11 +5,14 @@ from pathlib import Path
 # This script takes the output of fMRI Schaefer 200 atlas processing and turns it into an excel file to use in making a Gephi network visualization.
 
 # Load the CSV data
-data = pd.read_csv("~/Documents/2023:2024/Data/correlation matrices/ses-01/all_to_all_roi_matrix.csv")
+ses = "02"
+data = pd.read_csv(f"/home/rachel/Desktop/schaefer_analysis/connectivity_matrices/ses-{ses}/all_to_all_roi_matrices/superagers_average.csv")
+# data = pd.read_csv(f"/home/rachel/Desktop/schaefer_analysis/connectivity_matrices/ses-{ses}/all_to_all_roi_matrices/non_superagers_average.csv")
 
 # Extract the subject data
-subject_id = "sub-4036"
-ses = "01"
+subject_id = "superager"
+# subject_id = "non-superager"
+
 subject_data = data.loc[data['id'] == subject_id].iloc[0, 1:].values
 
 # Calculate the number of elements for a full 200 x 200 matrix's lower triangle
@@ -78,7 +81,7 @@ df_output['Label'] = ''
 df_output['Interval'] = ''
 
 # Save to a CSV file
-output_file_path = f"~/Documents/2023:2024/Data/correlation matrices/{subject_id}_ses-{ses}_reshaped_for_Gephi.csv"
+output_file_path = f"/home/rachel/Desktop/schaefer_analysis/gephi/{subject_id}_ses-{ses}_reshaped_for_Gephi.csv"
 df_output.to_csv(output_file_path, index=False)
 
 print(f"Completed processing {subject_id}.")
