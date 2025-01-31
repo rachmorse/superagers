@@ -6,12 +6,16 @@ from pathlib import Path
 
 # Load the CSV data
 ses = "02"
-data = pd.read_csv(f"/home/rachel/Desktop/schaefer_analysis/connectivity_matrices/ses-{ses}/all_to_all_roi_matrices/superagers_average.csv")
+# data = pd.read_csv(f"/home/rachel/Desktop/schaefer_analysis/connectivity_matrices/ses-{ses}/all_to_all_roi_matrices/superagers_average.csv")
 # data = pd.read_csv(f"/home/rachel/Desktop/schaefer_analysis/connectivity_matrices/ses-{ses}/all_to_all_roi_matrices/non_superagers_average.csv")
+# data = pd.read_csv(f"/home/rachel/Desktop/schaefer_analysis/connectivity_matrices/ses-{ses}/all_to_all_roi_matrices/maintainers_average.csv")
+data = pd.read_csv(f"/home/rachel/Desktop/schaefer_analysis/connectivity_matrices/ses-{ses}/all_to_all_roi_matrices/decliners_average.csv")
 
 # Extract the subject data
-subject_id = "superager"
+# subject_id = "superager"
 # subject_id = "non-superager"
+# subject_id = "maintainer"
+subject_id = "decliner"
 
 subject_data = data.loc[data['id'] == subject_id].iloc[0, 1:].values
 
