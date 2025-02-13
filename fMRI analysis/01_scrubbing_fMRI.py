@@ -297,16 +297,16 @@ if __name__ == "__main__":
     # subject_dir_pattern = f"ses-{ses}/MNI_2mm"
 
     # Use these paths for Superager tp2 data
-    # root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
-    # subject_csv = None
-    # ses = "02"
-    # subject_dir_pattern = f"ses-{ses}/MNI_2mm"
+    root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
+    subject_csv = None
+    ses = "02"
+    subject_dir_pattern = f"ses-{ses}/MNI_2mm"
 
     # Use these paths to process BBHI tp1 data
-    subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
-    root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed"
-    subject_dir_pattern = "MNI_2mm"
-    ses = "01"
+    # subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
+    # root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed"
+    # subject_dir_pattern = "MNI_2mm"
+    # ses = "01"
 
     # Use these paths to process BBHI tp2 data
     # subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
