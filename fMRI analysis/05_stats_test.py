@@ -84,7 +84,7 @@ def main(
     # For the CHANGE analysis, we want to drop both raw tp1/tp2 columns
     meta_cols_longitudinal = (
         ['id','w1_age','w2_age','time_diff','superager','maintainer']
-        + list(df_tp1.columns)
+        + [col+'_tp1' for col in df_tp1.columns if col != 'id']
         + [col+'_tp2' for col in df_tp1.columns if col != 'id']
     )
 
@@ -100,7 +100,7 @@ def main(
     # keep everything that ends in _tp2, but drop _tp1 and _change columns.
     meta_cols_tp2 = (
         ['id','w1_age','w2_age','time_diff','superager','maintainer']
-        + list(df_tp1.columns)  # these are the _tp1 columns
+        + [col+'_tp1' for col in df_tp1.columns if col != 'id']
         + [col+'_change' for col in df_tp1.columns if col != 'id']
     )
 
@@ -137,7 +137,7 @@ def main(
             _, pvals[i] = ttest_ind(arr1[:, i], arr2[:, i], nan_policy='omit')
 
         raw_signif = (pvals < 0.05).sum()
-        print(f"[{label}][{out_stem}] {raw_signif} / 19900 ({(raw_signif / 19900) * 100:.2f}%) edges p < 0.05 (uncorrected).")
+        print(f"[{label}][{out_stem}] {raw_signif} / {num_edges} ({(raw_signif / num_edges) * 100:.2f}%) edges p < 0.05 (uncorrected).")
 
         # FDR Correction
         rejected, pvals_corr, _, _ = multipletests(pvals, alpha=0.05, method='fdr_bh')
@@ -183,7 +183,7 @@ def main(
         print("------------------------------------------------")
 
     # Helper function to do cross-sectional tests at TP1 or TP2
-    def run_cross_sectional(df_group1, df_group2, label, tp_suffix):
+    def run_cross_sectional(df_group1, df_group2, label, tp_suffix, meta_cols): 
         """
         For cross-sectional analysis (TP1 or TP2).
         Keeps only columns that end in _tp1 or _tp2 (except 'id').
@@ -193,6 +193,7 @@ def main(
             df_group1, df_group2: DataFrames containing columns to test
             label:      short text label for print statements
             tp_suffix:  suffix to filter columns (e.g. '_tp1' or '_tp2')
+            meta_cols:  list of metadata columns to drop before testing
         """
         # Copy data so can safely drop columns
         df_g1 = df_group1.copy()
@@ -230,8 +231,13 @@ if __name__ == "__main__":
     output_directory = Path("/home/rachel/Desktop/schaefer_analysis/connectivity_matrices")
     superager_file    = "/home/rachel/Desktop/data/maintainer_superager_data.csv"
 
+    # All ROIs
     connectivity_tp1 = output_directory / "ses-01/all_to_all_roi_matrices/fisher_z_all_to_all_roi_matrix.csv"
     connectivity_tp2 = output_directory / "ses-02/all_to_all_roi_matrices/fisher_z_all_to_all_roi_matrix.csv"
+
+    # Network specific ROIs
+    # connectivity_tp1 = output_directory / "ses-01/within_network_matrices/fisher_z_Default_within_network_matrix.csv"
+    # connectivity_tp2 = output_directory / "ses-02/within_network_matrices/fisher_z_Default_within_network_matrix.csv"
 
     out_file = output_directory / "significant_longitudinal.csv"
 
