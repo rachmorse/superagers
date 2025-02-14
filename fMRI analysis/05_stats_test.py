@@ -16,7 +16,7 @@ def main(
     """
     1) Reads two CSVs with connectivity data for two time points (TP1 and TP2).
     2) Reads a CSV with superager status info (id, superager, maintainer, w1_age, w2_age).
-    3) Creates "change" columns: (TP2 - TP1)/time_diff for longitudinal analysis.
+    3) Creates "change" columns: (TP2 - TP1)/mem_time for longitudinal analysis.
     4) For each group comparison, runs:
        a) T-tests on "change" columns (longitudinal).
        b) Cross-sectional T-tests at TP1 only.
@@ -33,21 +33,22 @@ def main(
     
     # Add 'sub-' prefix in superager file so IDs match, keep only needed columns
     df_superager['id'] = df_superager['id'].apply(lambda x: 'sub-' + x)
-    columns_to_keep = ['id', 'w1_age', 'w2_age', 'superager', 'maintainer']
+    columns_to_keep = ['id', 'w1_age', 'w2_age', 'superager', 'maintainer', 'mem_time']
     df_superager = df_superager[columns_to_keep]
 
-    # Convert connectivity values to absolute value
-    df_tp1.iloc[:, 1:] = df_tp1.iloc[:, 1:].abs()
-    df_tp2.iloc[:, 1:] = df_tp2.iloc[:, 1:].abs()
+    # Convert connectivity values to ABSOLUTE value
+    # df_tp1.iloc[:, 1:] = df_tp1.iloc[:, 1:].abs()
+    # df_tp2.iloc[:, 1:] = df_tp2.iloc[:, 1:].abs()
+
+    # Remove NEGATIVE connectivity values 
+    df_tp1.iloc[:, 1:] = df_tp1.iloc[:, 1:].where(df_tp1.iloc[:, 1:] >= 0, np.nan)
+    df_tp2.iloc[:, 1:] = df_tp2.iloc[:, 1:].where(df_tp2.iloc[:, 1:] >= 0, np.nan)
 
     # Merge TP1 and TP2 data, plus superager info
     df_change = pd.merge(df_tp1, df_tp2, on='id', suffixes=('_tp1', '_tp2'))
     df_change = pd.merge(df_change, df_superager, on='id', how='inner')
 
-    # Compute time_diff
-    df_change['time_diff'] = df_change['w2_age'] - df_change['w1_age']
-
-    # Create "change" columns: (TP2 - TP1)/time_diff
+    # Create "change" columns: (TP2 - TP1)/mem_time
     change_data = {}
     for column in df_tp1.columns:
         if column == 'id':
@@ -55,7 +56,7 @@ def main(
         col_change = column + '_change'
         change_data[col_change] = (
             (df_change[column + '_tp2'] - df_change[column + '_tp1'])
-            / df_change['time_diff']
+            / df_change['mem_time'] # mem_time is age at TP2 - age at TP1
         )
     df_change = pd.concat([df_change, pd.DataFrame(change_data)], axis=1)
 
@@ -79,29 +80,35 @@ def main(
         "nonSuperMaint_vs_nonSuperDecl":   (df_non_maint,   df_non_decl),
         "superagerMaint_vs_nonSuperDecl": (df_super_maint, df_non_decl),
         "nonSuperMaint_vs_superagerDecl":   (df_non_maint,   df_decl),
+        "tp1_vs_tp2":                      (df_tp1,         df_tp2)
     }
 
     # For the CHANGE analysis, we want to drop both raw tp1/tp2 columns
     meta_cols_longitudinal = (
-        ['id','w1_age','w2_age','time_diff','superager','maintainer']
+        ['id','w1_age','w2_age','mem_time','superager','maintainer']
         + [col+'_tp1' for col in df_tp1.columns if col != 'id']
         + [col+'_tp2' for col in df_tp1.columns if col != 'id']
     )
 
-    # For the CROSS-SECTIONAL analysis at TP1, we want to drop time_diff, 
+    # For the CROSS-SECTIONAL analysis at TP1, we want to drop mem_time, 
     # plus the TP2 columns and “_change” columns, but KEEP columns ending in _tp1
     meta_cols_tp1 = (
-        ['id','w1_age','w2_age','time_diff','superager','maintainer']
+        ['id','w1_age','w2_age','mem_time','superager','maintainer']
         + [col+'_tp2' for col in df_tp1.columns if col != 'id']
         + [col+'_change' for col in df_tp1.columns if col != 'id']
     )
 
-    # For CROSS-SECTIONAL analysis at TP2, do the mirror image:
+    # For CROSS-SECTIONAL analysis at TP2:
     # keep everything that ends in _tp2, but drop _tp1 and _change columns.
     meta_cols_tp2 = (
-        ['id','w1_age','w2_age','time_diff','superager','maintainer']
+        ['id','w1_age','w2_age','mem_time','superager','maintainer']
         + [col+'_tp1' for col in df_tp1.columns if col != 'id']
         + [col+'_change' for col in df_tp1.columns if col != 'id']
+    )
+
+    # For TP1 vs TP2 ananlysis:
+    meta_cols_tp1_tp2 = (
+        ['id','w1_age','w2_age','mem_time','superager','maintainer']
     )
 
     # Helper function to run T-tests & FDR on a given set of columns
@@ -125,10 +132,12 @@ def main(
             print(f"[{label}][{out_stem}] One group is empty or no valid columns. Skipping.")
             return
 
+        # Convert to numpy arrays for t-test
         arr1 = df_g1.to_numpy()
         arr2 = df_g2.to_numpy()
         edge_labels = df_g1.columns.tolist()
 
+        # Initialize arrays to store p-values
         num_edges = len(edge_labels)
         pvals = np.zeros(num_edges)
 
@@ -136,6 +145,7 @@ def main(
         for i in range(num_edges):
             _, pvals[i] = ttest_ind(arr1[:, i], arr2[:, i], nan_policy='omit')
 
+        # Set significance level to 0.05
         raw_signif = (pvals < 0.05).sum()
         print(f"[{label}][{out_stem}] {raw_signif} / {num_edges} ({(raw_signif / num_edges) * 100:.2f}%) edges p < 0.05 (uncorrected).")
 
@@ -209,11 +219,7 @@ def main(
         # Then call run_ttest_and_fdr using out_stem = "tp1" or "tp2"
         run_ttest_and_fdr(df_g1, df_g2, label, out_stem=tp_suffix)
 
-    # MAIN LOOP:
-    # For each group comparison, run:
-    #   1) Longitudinal (change) columns
-    #   2) Cross-sectional at TP1
-    #   3) Cross-sectional at TP2
+    # MAIN LOOP: Run all comparisons
     for label, (df_grp1, df_grp2) in comparisons.items():
         print(f"\n=== Starting analysis: {label} ===")
 
@@ -225,6 +231,9 @@ def main(
 
         # 3) Cross-sectional at TP2
         run_ttest_and_fdr(df_grp1, df_grp2, label, out_stem="tp2", meta_cols=meta_cols_tp2)
+
+        # 4) TP1 vs TP2 - NOTE that when running this analysis the change, tp1 and tp2 results are all the same 
+        # run_ttest_and_fdr(df_grp1, df_grp2, label, out_stem="", meta_cols=meta_cols_tp1_tp2)
 
 if __name__ == "__main__":
 
