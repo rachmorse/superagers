@@ -97,29 +97,39 @@ def get_unprocessed_subjects(subject_list, output_file):
 ##############################################################################
 def append_csv_files(final_csv: Path, new_csv: Path):
     """
-    Append the contents of the new CSV file to the final CSV file
-    without overwriting existing rows. Skips the header line if
-    the final CSV already exists (to avoid duplication).
-
-    Args:
-        final_csv (Path): Path to the final CSV file
-        new_csv (Path): Path to the new CSV file to append
+    Append the contents of new_csv to final_csv. Skip header if final_csv exists.
+    Ensure missing data is handled by adding blank spaces for missing columns.
     """
-    # If final CSV doesn't exist, just rename the new one
-    if not final_csv.exists():
-        new_csv.rename(final_csv)
-        return
+    # Read the final CSV to get existing columns
+    if final_csv.exists():
+        final_df = pd.read_csv(final_csv)
+    else:
+        final_df = pd.DataFrame()
 
-    # Otherwise, read lines from new_csv and append to final_csv
-    with final_csv.open("a") as main_f, new_csv.open("r") as temp_f:
-        first_line = True
-        for line in temp_f:
-            # If this is the first line of the new CSV and final CSV isn't empty, skip header
-            if first_line and main_f.tell() != 0 and line.strip().startswith("Measure"):
-                first_line = False
-                continue
-            main_f.write(line)
-            first_line = False
+    # Read the new CSV
+    new_df = pd.read_csv(new_csv)
+
+    # Ensure the new dataframe has all columns present in the final dataframe
+    for column in final_df.columns:
+        if column not in new_df.columns:
+            new_df[column] = ""
+
+    # Ensure the final dataframe has all columns present in the new dataframe
+    for column in new_df.columns:
+        if column not in final_df.columns:
+            final_df[column] = ""
+
+    # Reorder columns to match the final dataframe
+    new_df = new_df[final_df.columns]
+
+    # Append the new dataframe to the final dataframe
+    final_df = pd.concat([final_df, new_df], ignore_index=True)
+
+    # Write the combined dataframe back to the final CSV
+    final_df.to_csv(final_csv, index=False)
+
+    # Delete the temporary CSV
+    new_csv.unlink()
 
 ##############################################################################
 # Main
@@ -132,12 +142,12 @@ def main():
     # Switch between Superagers and BBHI by commenting/uncommenting:
 
     # Superagers:
-    subject_csv = None
-    root_path = Path("/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall")
+    # subject_csv = None
+    # root_path = Path("/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall")
 
     # BBHI:
-    # subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
-    # root_path = Path("/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall")
+    subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
+    root_path = Path("/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall")
     # ---------------------------------------------------------------------
 
     # Define session / output directory
