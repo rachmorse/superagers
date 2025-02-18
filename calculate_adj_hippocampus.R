@@ -6,6 +6,10 @@ if (!require("dplyr")) {
   install.packages("dplyr")
   require("dplyr")
 }
+if (!require("tidyr")) {
+  install.packages("tidyr")
+  require("tidyr")
+}
 if (!require("stringr")) {
   install.packages("stringr")
   require("stringr")
@@ -44,8 +48,7 @@ hc_data <- hc_data %>%
   mutate(hc = Left.Hippocampus + Right.Hippocampus)
 
 # Select only need vars
-hc_data <- hc_data %>%
-  select(id, wmh, icv, hc, timepoint)
+hc_data <- hc_data %>% select(id, wmh, icv, hc, timepoint)
 
 # Drop subs with only one timepoint 
 hc_data <- hc_data %>%
@@ -231,7 +234,7 @@ ggplot(long_data, aes(x = age, y = wmh, group = id)) +
 
 # Export data
 hc_data <- hc_data %>% 
-  select(id, paste0("wmh.", 1:2), paste0("hc.", 1:2), 
+  select(id, paste0("wmh.", 1:2), paste0("adj_hc.", 1:2), 
          hc_slopes, wmh_slopes)
 
 write.csv(hc_data, file = "~/Documents/2023:2024/Data/Exported data/hc_wml_wide.csv")
