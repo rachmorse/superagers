@@ -3,3 +3,5 @@
 *.out
 *.pyc
 *.sh
+.Rproj.user
+*.Rproj
