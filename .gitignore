@@ -6,3 +6,5 @@
 .Rproj.user
 *.Rproj
 *.jpeg
+*.RData
+*.Rhistory

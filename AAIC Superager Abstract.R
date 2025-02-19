@@ -71,7 +71,7 @@ names(data) <- sub("^w(\\d)_(.*)", "\\2.\\1", names(data))
 
 long_data <- data %>%
   pivot_longer(
-    cols = matches("^age\\.\\d$|^wmh\\.\\d$|^memory\\.\\d$|^adj_hc\\.\\d$"),
+    cols = matches("^age\\.\\d$|^wmh\\.\\d$|^memory\\.\\d$|^adj_hc\\.\\d$|^gm\\.\\d$"),
     names_to = c(".value", "timepoint"),
     names_pattern = "(.*)(\\d$)"
   )
@@ -81,7 +81,8 @@ long_data <- long_data %>%
     age = "age.",
     memory = "memory.",
     wmh = "wmh.",
-    adj_hc = "adj_hc."
+    adj_hc = "adj_hc.",
+    gm = "gm."
   )
 
 ##############################################
@@ -597,5 +598,318 @@ ggplot() +
   scale_color_manual(values = palette_1) +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
   labs(x = "Age", y = "White Matter Hypointensities", color = "Group", fill = "Group") +
+  theme_minimal() +
+  theme(legend.position = c(0.8, 0.94))
+
+###################################
+## Fig 7: Four groups - age, wmh ##
+###################################
+
+model_res_lme_maint <- lmer(wmh ~ age * superager_maintainer + (1 | id) + cohort  + sex + YoE, data = long_data)
+summary(model_res_lme_maint)
+
+# 6) Similarly, use emmeans for the 4-group model
+em_4group <- emmeans(
+  model_res_lme_maint, 
+  specs = ~ superager_maintainer * age,
+  at    = list(age = age_seq),
+  reff  = 0
+)
+
+predictions_2 <- summary(em_4group) %>%
+  as.data.frame() %>%
+  rename(
+    predicted   = emmean,
+    lower_bound = lower.CL,
+    upper_bound = upper.CL
+  ) %>%
+  mutate(age = as.numeric(age))
+
+# Define colors for each group
+palette <- c(
+  "superager maintainer"     = "#1f77b4",
+  "superager decliner"       = "#ff7f0e",
+  "non-superager maintainer" = "#2ca02c",
+  "non-superager decliner"   = "#d62728"
+)
+
+# 7) Create 4-group plot
+ggplot() +
+  geom_line(
+    data = long_data, 
+    aes(x = age, y = wmh, group = id), 
+    color = "lightgray", alpha = 0.5
+  ) +  # Plot individual trajectories
+  geom_point(
+    data = long_data, 
+    aes(x = age, y = wmh), 
+    color = "gray", size = 1
+  ) +  # Add scatter points
+  geom_ribbon(
+    data = predictions_2, 
+    aes(x = age, ymin = lower_bound, ymax = upper_bound, 
+        fill = superager_maintainer), 
+    alpha = 0.3
+  ) +  # Add CIs
+  geom_line(
+    data = predictions_2, 
+    aes(x = age, y = predicted, color = superager_maintainer), 
+    size = 1.2
+  ) +  # Plot predicted lines
+  scale_color_manual(values = palette) +
+  scale_fill_manual(values = palette) +
+  labs(x = "Age", y = "WMH", color = "Group", fill = "Group") +
+  theme_minimal() +
+  theme(legend.position = c(0.72, 0.895))
+
+##################################
+## Fig 8: Four groups - age, hc ##
+##################################
+
+model_res_lme_maint <- lmer(adj_hc ~ age * superager_maintainer + (1 | id) + cohort  + sex + YoE, data = long_data)
+summary(model_res_lme_maint)
+
+# 6) Similarly, use emmeans for the 4-group model
+em_4group <- emmeans(
+  model_res_lme_maint, 
+  specs = ~ superager_maintainer * age,
+  at    = list(age = age_seq),
+  reff  = 0
+)
+
+predictions_2 <- summary(em_4group) %>%
+  as.data.frame() %>%
+  rename(
+    predicted   = emmean,
+    lower_bound = lower.CL,
+    upper_bound = upper.CL
+  ) %>%
+  mutate(age = as.numeric(age))
+
+# Define colors for each group
+palette <- c(
+  "superager maintainer"     = "#1f77b4",
+  "superager decliner"       = "#ff7f0e",
+  "non-superager maintainer" = "#2ca02c",
+  "non-superager decliner"   = "#d62728"
+)
+
+# 7) Create 4-group plot
+ggplot() +
+  geom_line(
+    data = long_data, 
+    aes(x = age, y = adj_hc, group = id), 
+    color = "lightgray", alpha = 0.5
+  ) +  # Plot individual trajectories
+  geom_point(
+    data = long_data, 
+    aes(x = age, y = adj_hc), 
+    color = "gray", size = 1
+  ) +  # Add scatter points
+  geom_ribbon(
+    data = predictions_2, 
+    aes(x = age, ymin = lower_bound, ymax = upper_bound, 
+        fill = superager_maintainer), 
+    alpha = 0.3
+  ) +  # Add CIs
+  geom_line(
+    data = predictions_2, 
+    aes(x = age, y = predicted, color = superager_maintainer), 
+    size = 1.2
+  ) +  # Plot predicted lines
+  scale_color_manual(values = palette) +
+  scale_fill_manual(values = palette) +
+  labs(x = "Age", y = "Hippocampal Volume", color = "Group", fill = "Group") +
+  theme_minimal() +
+  theme(legend.position = c(0.72, 0.895))
+
+#################################
+## Fig 9: Two groups - age, gm ##
+#################################
+
+# 1) Fit the model
+model_gm_lme <- lmer(gm ~ age * maintainer_factor + (1 | id) + cohort  + sex + YoE, data = long_data)
+summary(model_gm_lme)
+
+# 2) Create a grid of ages for which we want predictions
+age_seq <- seq(
+  from = min(long_data$age, na.rm = TRUE),
+  to   = max(long_data$age, na.rm = TRUE),
+  length.out = 100
+)
+
+# 3) Use emmeans to get marginal predictions for each superager_factor × age
+em_2group <- emmeans(
+  model_gm_lme, 
+  specs = ~ maintainer_factor * age,
+  at    = list(age = age_seq),
+  reff  = 0 # set reff = 0 to ignore random effects (similar to re.form = NA).
+)
+
+# 4) Convert the emmeans results to a data frame and rename columns
+predictions <- summary(em_2group) %>% 
+  as.data.frame() %>% 
+  rename(
+    predicted   = emmean,
+    lower_bound = lower.CL,
+    upper_bound = upper.CL
+  ) %>% 
+  mutate(age = as.numeric(age))  # Convert from factor if needed
+
+# Define colors for each group
+palette_1 <- c("maintainer" = "#A35C7A", "decliner" = "#FFD65A")
+
+# Create the two-group plot
+ggplot() +
+  geom_line(
+    data = long_data, 
+    aes(x = age, y = gm, group = id), 
+    color = "lightgray", alpha = 0.5
+  ) +  # Plot individual trajectories
+  geom_point(
+    data = long_data, 
+    aes(x = age, y = gm), 
+    color = "gray", size = 1
+  ) +  # Add scatter points
+  geom_ribbon(
+    data = predictions, 
+    aes(x = age, ymin = lower_bound, ymax = upper_bound, 
+        fill = maintainer_factor), 
+    alpha = 0.3
+  ) +  # Add CIs
+  geom_line(
+    data = predictions, 
+    aes(x = age, y = predicted, color = maintainer_factor), 
+    size = 1.2
+  ) +  # Plot predicted lines
+  scale_color_manual(values = palette_1) +
+  scale_fill_manual(values = palette_1) +  # Match line & fill colors
+  labs(x = "Age", y = "Total Grey Matter", color = "Group", fill = "Group") +
+  theme_minimal() +
+  theme(legend.position = c(0.8, 0.94))
+
+###################################
+## Fig 10: Four groups - age, gm ##
+###################################
+
+model_res_lme_maint <- lmer(gm ~ age * superager_maintainer + (1 | id) + cohort  + sex + YoE, data = long_data)
+summary(model_res_lme_maint)
+
+# 6) Similarly, use emmeans for the 4-group model
+em_4group <- emmeans(
+  model_res_lme_maint, 
+  specs = ~ superager_maintainer * age,
+  at    = list(age = age_seq),
+  reff  = 0
+)
+
+predictions_2 <- summary(em_4group) %>%
+  as.data.frame() %>%
+  rename(
+    predicted   = emmean,
+    lower_bound = lower.CL,
+    upper_bound = upper.CL
+  ) %>%
+  mutate(age = as.numeric(age))
+
+# Define colors for each group
+palette <- c(
+  "superager maintainer"     = "#1f77b4",
+  "superager decliner"       = "#ff7f0e",
+  "non-superager maintainer" = "#2ca02c",
+  "non-superager decliner"   = "#d62728"
+)
+
+# 7) Create 4-group plot
+ggplot() +
+  geom_line(
+    data = long_data, 
+    aes(x = age, y = gm, group = id), 
+    color = "lightgray", alpha = 0.5
+  ) +  # Plot individual trajectories
+  geom_point(
+    data = long_data, 
+    aes(x = age, y = gm), 
+    color = "gray", size = 1
+  ) +  # Add scatter points
+  geom_ribbon(
+    data = predictions_2, 
+    aes(x = age, ymin = lower_bound, ymax = upper_bound, 
+        fill = superager_maintainer), 
+    alpha = 0.3
+  ) +  # Add CIs
+  geom_line(
+    data = predictions_2, 
+    aes(x = age, y = predicted, color = superager_maintainer), 
+    size = 1.2
+  ) +  # Plot predicted lines
+  scale_color_manual(values = palette) +
+  scale_fill_manual(values = palette) +
+  labs(x = "Age", y = "Total Grey Matter", color = "Group", fill = "Group") +
+  theme_minimal() +
+  theme(legend.position = c(0.72, 0.895))
+
+#################################
+## Fig 11: Two groups - age, gm ##
+#################################
+
+# 1) Fit the model
+model_gm_lme <- lmer(gm ~ age * superager_factor + (1 | id) + cohort  + sex + YoE, data = long_data)
+summary(model_gm_lme)
+
+# 2) Create a grid of ages for which we want predictions
+age_seq <- seq(
+  from = min(long_data$age, na.rm = TRUE),
+  to   = max(long_data$age, na.rm = TRUE),
+  length.out = 100
+)
+
+# 3) Use emmeans to get marginal predictions for each superager_factor × age
+em_2group <- emmeans(
+  model_gm_lme, 
+  specs = ~ superager_factor * age,
+  at    = list(age = age_seq),
+  reff  = 0 # set reff = 0 to ignore random effects (similar to re.form = NA).
+)
+
+# 4) Convert the emmeans results to a data frame and rename columns
+predictions <- summary(em_2group) %>% 
+  as.data.frame() %>% 
+  rename(
+    predicted   = emmean,
+    lower_bound = lower.CL,
+    upper_bound = upper.CL
+  ) %>% 
+  mutate(age = as.numeric(age))  # Convert from factor if needed
+
+# Define colors for each group
+palette_1 <- c("superager" = "#A35C7A", "non-superager" = "#FFD65A")
+
+# Create the two-group plot
+ggplot() +
+  geom_line(
+    data = long_data, 
+    aes(x = age, y = gm, group = id), 
+    color = "lightgray", alpha = 0.5
+  ) +  # Plot individual trajectories
+  geom_point(
+    data = long_data, 
+    aes(x = age, y = gm), 
+    color = "gray", size = 1
+  ) +  # Add scatter points
+  geom_ribbon(
+    data = predictions, 
+    aes(x = age, ymin = lower_bound, ymax = upper_bound, 
+        fill = superager_factor), 
+    alpha = 0.3
+  ) +  # Add CIs
+  geom_line(
+    data = predictions, 
+    aes(x = age, y = predicted, color = superager_factor), 
+    size = 1.2
+  ) +  # Plot predicted lines
+  scale_color_manual(values = palette_1) +
+  scale_fill_manual(values = palette_1) +  # Match line & fill colors
+  labs(x = "Age", y = "Total Grey Matter", color = "Group", fill = "Group") +
   theme_minimal() +
   theme(legend.position = c(0.8, 0.94))
