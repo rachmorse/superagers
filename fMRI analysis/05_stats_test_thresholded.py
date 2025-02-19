@@ -136,8 +136,8 @@ def main(
     # No need to remove negative values because they are removed in the thresholding function
 
     #  Apply group level threshold (e.g., top 10% strongest connections)
-    df_tp1 = group_level_threshold(df_tp1, threshold=0.02, id_col='id', method='mean')  
-    df_tp2 = group_level_threshold(df_tp2, threshold=0.02, id_col='id', method='mean')  
+    df_tp1 = group_level_threshold(df_tp1, threshold=0.1, id_col='id', method='mean')  
+    df_tp2 = group_level_threshold(df_tp2, threshold=0.1, id_col='id', method='mean')  
 
     # Merge TP1, TP2, and superager info
     df_change = pd.merge(df_tp1, df_tp2, on='id', suffixes=('_tp1', '_tp2'))
