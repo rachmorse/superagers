@@ -7,6 +7,8 @@ from typing import Union
 from scipy.stats import ttest_ind, ttest_rel, pearsonr
 from statsmodels.stats.multitest import multipletests
 
+# This thresholds the data by group (e.g. top 15% for superagers, then top 15% for non-superagers)
+# and then merges the columns from both groups
 
 def group_level_threshold(df, threshold, id_col='id', method='mean'):
     """
@@ -105,20 +107,55 @@ def check_memory_correlation(df_change, significant_edges, memory_var='w1_memory
 
     return results
 
+def threshold_by_group_and_merge(df_grp1, df_grp2, threshold, id_col='id', method='mean'):
+    """
+    Applies group-level thresholding to each group separately, takes the union of retained columns,
+    and returns df_grp1, df_grp2 each subset to that union of columns (plus the id_col).
+
+    Args:
+        df_grp1 (pd.DataFrame): DataFrame for group 1.
+        df_grp2 (pd.DataFrame): DataFrame for group 2.
+        threshold (float): Fraction of edges to keep. For example, 0.1 = keep top 10%.
+        id_col (str): Name of the ID column to exclude from thresholding.
+        method (str): 'mean' or 'median' to compute the group-level measure.
+    """
+    # Threshold each group separately
+    df_grp1_thresh = group_level_threshold(df_grp1, threshold, id_col, method)
+    df_grp2_thresh = group_level_threshold(df_grp2, threshold, id_col, method)
+
+    # Columns from each thresholded dataframe (excluding id_col)
+    grp1_cols = set(df_grp1_thresh.columns) - {id_col}
+    grp2_cols = set(df_grp2_thresh.columns) - {id_col}
+
+    # Union of columns
+    merged_cols = [id_col] + sorted(list(grp1_cols.union(grp2_cols)))
+
+    # Subset original data so we keep consistent indexing
+    df_grp1_out = df_grp1.copy()
+    df_grp2_out = df_grp2.copy()
+
+    # Intersect with existing columns in case metadata is present
+    df_grp1_out = df_grp1_out[[c for c in merged_cols if c in df_grp1_out.columns]]
+    df_grp2_out = df_grp2_out[[c for c in merged_cols if c in df_grp2_out.columns]]
+
+    return df_grp1_out, df_grp2_out
+
 def main(
-        connectivity_tp1: Union[str, Path], 
-        connectivity_tp2: Union[str, Path], 
-        superager_file: Union[str, Path], 
-        out_file: Union[str, Path]
+    connectivity_tp1: Union[str, Path],
+    connectivity_tp2: Union[str, Path],
+    superager_file: Union[str, Path],
+    out_file: Union[str, Path],
+    threshold: float = 0.15
        ):
     """
     1) Reads two CSVs with connectivity data for two time points (TP1 and TP2).
     2) Reads a CSV with superager status info (id, superager, maintainer, w1_age, w2_age).
     3) Creates "change" columns: (TP2 - TP1)/mem_time for longitudinal analysis.
     4) For each group comparison, runs:
-       a) T-tests on "change" columns (longitudinal).
-       b) Cross-sectional T-tests at TP1 only.
-       c) Cross-sectional T-tests at TP2 only.
+       a) Threshold each group separately, merge columns from both groups.
+       b) T-tests on "change" columns (longitudinal).
+       c) Cross-sectional T-tests at TP1 only.
+       d) Cross-sectional T-tests at TP2 only.
     5) Applies FDR correction for multiple comparisons, saves CSV of significant edges.
     6) Skips saving if no edges survive FDR.
     """
@@ -132,12 +169,6 @@ def main(
     df_superager['id'] = df_superager['id'].apply(lambda x: 'sub-' + x)
     columns_to_keep = ['id', 'w1_age', 'w2_age', 'superager', 'maintainer', 'mem_time', 'memory_slopes', 'w1_memory', 'w2_memory']
     df_superager = df_superager[columns_to_keep]
-
-    # No need to remove negative values because they are removed in the thresholding function
-
-    #  Apply group level threshold (e.g., top 10% strongest connections)
-    df_tp1 = group_level_threshold(df_tp1, threshold=0.1, id_col='id', method='mean')  
-    df_tp2 = group_level_threshold(df_tp2, threshold=0.1, id_col='id', method='mean')  
 
     # Merge TP1, TP2, and superager info
     df_change = pd.merge(df_tp1, df_tp2, on='id', suffixes=('_tp1', '_tp2'))
@@ -158,6 +189,14 @@ def main(
                 / df_change['mem_time'] # mem_time is age at TP2 - age at TP1
             )
     df_change = pd.concat([df_change, pd.DataFrame(change_data)], axis=1)
+
+    # No need to remove negative values because they are removed in the thresholding function
+
+    #  Apply group level threshold (e.g., top 10% strongest connections)
+    columns_keep = [
+        'w1_age', 'w2_age', 'mem_time', 'superager', 
+        'maintainer', 'memory_slopes', 'w1_memory', 'w2_memory'
+    ]
 
     # Build separate DataFrames for each group
     df_super       = df_change[df_change['superager'] == 1]
@@ -183,36 +222,8 @@ def main(
         # "tp1_vs_tp2":                      (df_tp1,         df_tp2)
     }
 
-    # For the CHANGE analysis, we want to drop both raw tp1/tp2 columns
-    meta_cols_longitudinal = (
-        ['id','w1_age','w2_age','mem_time','superager','maintainer', 'memory_slopes', 'w1_memory', 'w2_memory']
-        + [col+'_tp1' for col in df_tp1.columns if col != 'id']
-        + [col+'_tp2' for col in df_tp1.columns if col != 'id']
-    )
-
-    # For the CROSS-SECTIONAL analysis at TP1, we want to drop mem_time, 
-    # plus the TP2 columns and “_change” columns, but KEEP columns ending in _tp1
-    meta_cols_tp1 = (
-        ['id','w1_age','w2_age','mem_time','superager','maintainer', 'memory_slopes', 'w1_memory', 'w2_memory']
-        + [col+'_tp2' for col in df_tp1.columns if col != 'id']
-        + [col+'_change' for col in df_tp1.columns if col != 'id']
-    )
-
-    # For CROSS-SECTIONAL analysis at TP2:
-    # keep everything that ends in _tp2, but drop _tp1 and _change columns.
-    meta_cols_tp2 = (
-        ['id','w1_age','w2_age','mem_time','superager','maintainer', 'memory_slopes', 'w1_memory', 'w2_memory']
-        + [col+'_tp1' for col in df_tp1.columns if col != 'id']
-        + [col+'_change' for col in df_tp1.columns if col != 'id']
-    )
-
-    # For TP1 vs TP2 ananlysis:
-    meta_cols_tp1_tp2 = (
-        ['id','w1_age','w2_age','mem_time','superager','maintainer', 'memory_slopes', 'w1_memory', 'w2_memory']
-    )
-
     # Helper function to run T-tests & FDR on a given set of columns
-    def run_ttest_and_fdr(df_group1, df_group2, label, out_stem, meta_cols):
+    def run_ttest_and_fdr(df_group1, df_group2, label, out_stem, keep_suffix):
         """
         Runs t-tests on all columns in df_group1, df_group2 after dropping
         metadata. Then applies FDR correction, saves CSV of significant
@@ -224,13 +235,26 @@ def main(
           out_stem:   base filename stem (e.g. 'longitudinal', 'tp1', etc.)
           meta_cols:  list of metadata columns to drop before testing
         """
-        # Drop metadata columns
-        df_g1 = df_group1.drop(columns=meta_cols, errors='ignore')
-        df_g2 = df_group2.drop(columns=meta_cols, errors='ignore')
+        # 1) Subset to the relevant suffix + forced metadata columns
+        df_g1 = df_group1[
+            [c for c in df_group1.columns 
+            if c.endswith(keep_suffix) or c in columns_keep or c == 'id']
+        ]
 
-        # FOR LIMITED ANALYSIS DROP ALL ROWS WITH ONLY 0 BECAUSE THEY CANT BE COMPARED
-        df_g1 = df_g1.loc[(df_g1 != 0).any(axis=1)]
-        df_g2 = df_g2.loc[(df_g2 != 0).any(axis=1)]
+        df_g2 = df_group2[
+            [c for c in df_group2.columns 
+            if c.endswith(keep_suffix) or c in columns_keep or c == 'id']
+        ]
+
+        # 2) Threshold by group
+        df_g1, df_g2 = threshold_by_group_and_merge(
+            df_g1, df_g2, threshold=0.1, id_col='id', method='mean'
+        )
+
+        # 3) Drop forced metadata, leaving only numeric columns
+        columns_to_drop = ['id','w1_age','w2_age','mem_time','superager','maintainer', 'memory_slopes', 'w1_memory', 'w2_memory']  
+        df_g1.drop(columns=columns_to_drop, inplace=True, errors="ignore")  
+        df_g2.drop(columns=columns_to_drop, inplace=True, errors="ignore")  
 
         if df_g1.empty or df_g2.empty:
             print(f"[{label}][{out_stem}] One group is empty or no valid columns. Skipping.")
@@ -275,22 +299,22 @@ def main(
         print(f"[{label}][{out_stem}] {num_sig} edges survive FDR=0.05.")
 
         # Check memory correlation for significant edges
-        results_w1 = check_memory_correlation(df_change, significant_edges[label], memory_var='w1_memory')
-        alpha = 0.05
-        sig_results_w1 = results_w1[results_w1['p_fdr'] < alpha]
-        # If there are significant edges, print them
-        if not sig_results_w1.empty:
-            print(f"TP1: {sig_results_w1}")
+        # results_w1 = check_memory_correlation(df_change, significant_edges[label], memory_var='w1_memory')
+        # alpha = 0.05
+        # sig_results_w1 = results_w1[results_w1['p_fdr'] < alpha]
+        # # If there are significant edges, print them
+        # if not sig_results_w1.empty:
+        #     print(f"TP1: {sig_results_w1}")
 
-        results_w2 = check_memory_correlation(df_change, significant_edges[label], memory_var='w2_memory')
-        sig_results_w2 = results_w2[results_w2['p_fdr'] < alpha]
-        if not sig_results_w2.empty:
-            print(f"TP2: {sig_results_w2}")
+        # results_w2 = check_memory_correlation(df_change, significant_edges[label], memory_var='w2_memory')
+        # sig_results_w2 = results_w2[results_w2['p_fdr'] < alpha]
+        # if not sig_results_w2.empty:
+        #     print(f"TP2: {sig_results_w2}")
 
-        results_change = check_memory_correlation(df_change, significant_edges[label], memory_var='memory_slopes')
-        sig_results_change = results_change[results_change['p_fdr'] < alpha]
-        if not sig_results_change.empty:
-            print(f"Change: {sig_results_change}")
+        # results_change = check_memory_correlation(df_change, significant_edges[label], memory_var='memory_slopes')
+        # sig_results_change = results_change[results_change['p_fdr'] < alpha]
+        # if not sig_results_change.empty:
+        #     print(f"Change: {sig_results_change}")
 
         # If no significant edges, skip saving CSV & plots
         if num_sig == 0:
@@ -330,42 +354,18 @@ def main(
         print(f"[{label}][{out_stem}] Saved {len(df_sig)} significant edges to {csv_name}")
         print("------------------------------------------------")
 
-    # Helper function to do cross-sectional tests at TP1 or TP2
-    def run_cross_sectional(df_group1, df_group2, label, tp_suffix, meta_cols): 
-        """
-        For cross-sectional analysis (TP1 or TP2).
-        Keeps only columns that end in _tp1 or _tp2 (except 'id').
-        Then passes them to run_ttest_and_fdr.
-
-        Args:
-            df_group1, df_group2: DataFrames containing columns to test
-            label:      short text label for print statements
-            tp_suffix:  suffix to filter columns (e.g. '_tp1' or '_tp2')
-            meta_cols:  list of metadata columns to drop before testing
-        """
-        # Copy data so can safely drop columns
-        df_g1 = df_group1.copy()
-        df_g2 = df_group2.copy()
-
-        # Keep only columns that match the timepoint suffix (plus metadata)
-        keep_cols = [c for c in df_g1.columns 
-                     if (c.endswith(tp_suffix) or c in meta_cols)]
-        
-        df_g1 = df_g1[keep_cols]
-        df_g2 = df_g2[keep_cols]
-
     # MAIN LOOP: Run all comparisons
     for label, (df_grp1, df_grp2) in comparisons.items():
         print(f"\n=== Starting analysis: {label} ===")
 
         # 1) Longitudinal: use meta_cols_longitudinal
-        run_ttest_and_fdr(df_grp1, df_grp2, label, out_stem="change", meta_cols=meta_cols_longitudinal)
+        run_ttest_and_fdr(df_grp1, df_grp2, label, out_stem="change", keep_suffix="_change")
 
         # 2) Cross-sectional at TP1
-        run_ttest_and_fdr(df_grp1, df_grp2, label, out_stem="tp1", meta_cols=meta_cols_tp1)
+        run_ttest_and_fdr(df_grp1, df_grp2, label, out_stem="tp1", keep_suffix="_tp1")
 
         # 3) Cross-sectional at TP2
-        run_ttest_and_fdr(df_grp1, df_grp2, label, out_stem="tp2", meta_cols=meta_cols_tp2)
+        run_ttest_and_fdr(df_grp1, df_grp2, label, out_stem="tp2", keep_suffix="_tp2")
 
         # 4) TP1 vs TP2 - NOTE that when running this analysis the change, tp1 and tp2 results are all the same 
         # run_ttest_and_fdr(df_grp1, df_grp2, label, out_stem="", meta_cols=meta_cols_tp1_tp2)

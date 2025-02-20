@@ -4,10 +4,107 @@ import numpy as np
 import seaborn as sns
 from pathlib import Path
 from typing import Union
-from scipy.stats import ttest_ind, ttest_rel
+from scipy.stats import ttest_ind, ttest_rel, pearsonr
 from statsmodels.stats.multitest import multipletests
 
-# Unthresholded analysis 
+## This looks at thresholding the data for all subjects with one threshold
+
+def group_level_threshold(df, threshold, id_col='id', method='mean'):
+    """
+    1) Compute group-level average or median for each edge (column).
+    2) Find the numeric cutoff for top `threshold` fraction.
+    3) Remove all columns that do not meet (>=) the cutoff.
+    4) Return the reduced DataFrame with just the retained columns (plus the id_col).
+
+    Args:   
+        df (pd.DataFrame): DataFrame where rows = participants, columns = edges + metadata.
+        threshold (float): Fraction of edges to keep. For example, 0.1 = keep top 10%.
+        id_col (str): Name of the ID column to exclude from thresholding.
+        method (str): 'mean' or 'median' to compute the group-level measure.
+    """
+    df_out = df.copy(deep=True)
+    numeric_cols = [c for c in df_out.columns if c != id_col]
+    arr = df_out[numeric_cols].to_numpy(dtype=float)  # shape: (N, M)
+
+    # 1) Compute aggregate measure (mean or median)
+    if method == 'mean':
+        agg_vals = arr.mean(axis=0)  # shape (M,)
+    elif method == 'median':
+        agg_vals = np.median(arr, axis=0)  # shape (M,)
+    else:
+        raise ValueError("method must be 'mean' or 'median'")
+
+    # 2) Determine the cutoff
+    sorted_agg = np.sort(agg_vals)
+    cutoff_index = int(len(sorted_agg) * (1 - threshold))
+    cutoff_index = max(0, min(cutoff_index, len(sorted_agg) - 1))
+    cutoff_value = sorted_agg[cutoff_index]
+
+    # 3) Create a mask for edges that meet or exceed that cutoff
+    global_mask = (agg_vals >= cutoff_value)
+
+    # "Retained" columns are those that pass the mask
+    retained_cols = [col for col, keep in zip(numeric_cols, global_mask) if keep]
+
+    # 4) Subset df_out to just the retained columns + the ID column
+    df_out = df_out[[id_col] + retained_cols]
+
+    return df_out
+
+def check_memory_correlation(df_change, significant_edges, memory_var='w1_memory'):
+    """
+    For each edge in significant_edges, compute Pearson correlation with the given memory variable
+    across all participants in df_change.
+
+    Args:
+      df_change (pd.DataFrame): The master dataframe with columns for edges and memory.
+      significant_edges (list): List of edge column names (strings) to test.
+      memory_var (str): Column name of the memory variable, e.g., 'w1_memory' or 'w2_memory'.
+
+    Returns:
+      pd.DataFrame with columns [edge_label, r, p_uncorrected, p_fdr].
+    """
+
+    # Initialize lists to store results
+    edge_labels = []
+    r_vals = []
+    p_vals = []
+
+    # For each edge, compute correlation
+    for edge in significant_edges:
+        if edge not in df_change.columns:
+            # Edge might be "edge_tp1" or something similar, adjust as needed
+            print(f"Warning: {edge} not found in df_change columns.")
+            continue
+        
+        # Extract non-NaN rows
+        valid_idx = df_change[[edge, memory_var]].dropna().index
+        x = df_change.loc[valid_idx, edge].values
+        y = df_change.loc[valid_idx, memory_var].values
+
+        if len(x) < 3:
+            # Not enough data points to correlate
+            continue
+
+        r, p = pearsonr(x, y)
+        edge_labels.append(edge)
+        r_vals.append(r)
+        p_vals.append(p)
+
+    results = pd.DataFrame({
+        'edge_label': edge_labels,
+        'r': r_vals,
+        'p_uncorrected': p_vals
+    })
+
+    # FDR correction across these correlation tests
+    if not results.empty:
+        _, pvals_fdr, _, _ = multipletests(results['p_uncorrected'], alpha=0.05, method='fdr_bh')
+        results['p_fdr'] = pvals_fdr
+    else:
+        results['p_fdr'] = []
+
+    return results
 
 def main(
         connectivity_tp1: Union[str, Path], 
@@ -34,22 +131,21 @@ def main(
     
     # Add 'sub-' prefix in superager file so IDs match, keep only needed columns
     df_superager['id'] = df_superager['id'].apply(lambda x: 'sub-' + x)
-    columns_to_keep = ['id', 'w1_age', 'w2_age', 'superager', 'maintainer', 'mem_time']
+    columns_to_keep = ['id', 'w1_age', 'w2_age', 'superager', 'maintainer', 'mem_time', 'memory_slopes', 'w1_memory', 'w2_memory']
     df_superager = df_superager[columns_to_keep]
 
-    # Convert connectivity values to ABSOLUTE value
-    # df_tp1.iloc[:, 1:] = df_tp1.iloc[:, 1:].abs()
-    # df_tp2.iloc[:, 1:] = df_tp2.iloc[:, 1:].abs()
+    # No need to remove negative values because they are removed in the thresholding function
 
-    # Remove NEGATIVE connectivity values 
-    # df_tp1.iloc[:, 1:] = df_tp1.iloc[:, 1:].where(df_tp1.iloc[:, 1:] >= 0, np.nan)
-    # df_tp2.iloc[:, 1:] = df_tp2.iloc[:, 1:].where(df_tp2.iloc[:, 1:] >= 0, np.nan)
+    #  Apply group level threshold (e.g., top 10% strongest connections)
+    df_tp1 = group_level_threshold(df_tp1, threshold=0.1, id_col='id', method='mean')  
+    df_tp2 = group_level_threshold(df_tp2, threshold=0.1, id_col='id', method='mean')  
 
     # Merge TP1, TP2, and superager info
     df_change = pd.merge(df_tp1, df_tp2, on='id', suffixes=('_tp1', '_tp2'))
     df_change = pd.merge(df_change, df_superager, on='id', how='inner')
 
     # Create "change" columns: (TP2 - TP1)/mem_time
+    # When running 'apply_proportional_threshold', each column is 0 or 1, so “change” will also be restricted in possible values.
     change_data = {}
     for column in df_tp1.columns:
         if column == 'id':
@@ -84,12 +180,13 @@ def main(
         "nonSuperMaint_vs_nonSuperDecl":   (df_non_maint,   df_non_decl),
         "superagerMaint_vs_nonSuperDecl": (df_super_maint, df_non_decl),
         "nonSuperMaint_vs_superagerDecl":   (df_non_maint,   df_decl),
-        "tp1_vs_tp2":                      (df_tp1,         df_tp2)
+        # Run this to compare tp1 to tp2
+        # "tp1_vs_tp2":                      (df_tp1,         df_tp2)
     }
 
     # For the CHANGE analysis, we want to drop both raw tp1/tp2 columns
     meta_cols_longitudinal = (
-        ['id','w1_age','w2_age','mem_time','superager','maintainer']
+        ['id','w1_age','w2_age','mem_time','superager','maintainer', 'memory_slopes', 'w1_memory', 'w2_memory']
         + [col+'_tp1' for col in df_tp1.columns if col != 'id']
         + [col+'_tp2' for col in df_tp1.columns if col != 'id']
     )
@@ -97,7 +194,7 @@ def main(
     # For the CROSS-SECTIONAL analysis at TP1, we want to drop mem_time, 
     # plus the TP2 columns and “_change” columns, but KEEP columns ending in _tp1
     meta_cols_tp1 = (
-        ['id','w1_age','w2_age','mem_time','superager','maintainer']
+        ['id','w1_age','w2_age','mem_time','superager','maintainer', 'memory_slopes', 'w1_memory', 'w2_memory']
         + [col+'_tp2' for col in df_tp1.columns if col != 'id']
         + [col+'_change' for col in df_tp1.columns if col != 'id']
     )
@@ -105,14 +202,14 @@ def main(
     # For CROSS-SECTIONAL analysis at TP2:
     # keep everything that ends in _tp2, but drop _tp1 and _change columns.
     meta_cols_tp2 = (
-        ['id','w1_age','w2_age','mem_time','superager','maintainer']
+        ['id','w1_age','w2_age','mem_time','superager','maintainer', 'memory_slopes', 'w1_memory', 'w2_memory']
         + [col+'_tp1' for col in df_tp1.columns if col != 'id']
         + [col+'_change' for col in df_tp1.columns if col != 'id']
     )
 
     # For TP1 vs TP2 ananlysis:
     meta_cols_tp1_tp2 = (
-        ['id','w1_age','w2_age','mem_time','superager','maintainer']
+        ['id','w1_age','w2_age','mem_time','superager','maintainer', 'memory_slopes', 'w1_memory', 'w2_memory']
     )
 
     # Helper function to run T-tests & FDR on a given set of columns
@@ -161,10 +258,40 @@ def main(
         raw_signif = (pvals < 0.05).sum()
         print(f"[{label}][{out_stem}] {raw_signif} / {num_edges} ({(raw_signif / num_edges) * 100:.2f}%) edges p < 0.05 (uncorrected).")
 
+        # Initialize a dictionary to store significant edge lists
+        significant_edges = {}
+
+        # After computing df_sig_uncorr for a comparison "label," do:
+        df_sig_uncorr = pd.DataFrame({
+            'edge_label': edge_labels,
+            'p_uncorrected': pvals
+        })
+
+        # Now store the list of edge labels in the dictionary
+        significant_edges[label] = df_sig_uncorr['edge_label'].tolist()
+
         # FDR Correction
         rejected, pvals_corr, _, _ = multipletests(pvals, alpha=0.05, method='fdr_bh')
         num_sig = rejected.sum()
         print(f"[{label}][{out_stem}] {num_sig} edges survive FDR=0.05.")
+
+        # Check memory correlation for significant edges
+        results_w1 = check_memory_correlation(df_change, significant_edges[label], memory_var='w1_memory')
+        alpha = 0.05
+        sig_results_w1 = results_w1[results_w1['p_fdr'] < alpha]
+        # If there are significant edges, print them
+        if not sig_results_w1.empty:
+            print(f"TP1: {sig_results_w1}")
+
+        results_w2 = check_memory_correlation(df_change, significant_edges[label], memory_var='w2_memory')
+        sig_results_w2 = results_w2[results_w2['p_fdr'] < alpha]
+        if not sig_results_w2.empty:
+            print(f"TP2: {sig_results_w2}")
+
+        results_change = check_memory_correlation(df_change, significant_edges[label], memory_var='memory_slopes')
+        sig_results_change = results_change[results_change['p_fdr'] < alpha]
+        if not sig_results_change.empty:
+            print(f"Change: {sig_results_change}")
 
         # If no significant edges, skip saving CSV & plots
         if num_sig == 0:
@@ -227,9 +354,6 @@ def main(
         
         df_g1 = df_g1[keep_cols]
         df_g2 = df_g2[keep_cols]
-
-        # Then call run_ttest_and_fdr using out_stem = "tp1" or "tp2"
-        run_ttest_and_fdr(df_g1, df_g2, label, out_stem=tp_suffix)
 
     # MAIN LOOP: Run all comparisons
     for label, (df_grp1, df_grp2) in comparisons.items():
