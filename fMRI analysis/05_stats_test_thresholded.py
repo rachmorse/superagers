@@ -98,13 +98,6 @@ def check_memory_correlation(df_change, significant_edges, memory_var='w1_memory
         'p_uncorrected': p_vals
     })
 
-    # FDR correction across these correlation tests
-    if not results.empty:
-        _, pvals_fdr, _, _ = multipletests(results['p_uncorrected'], alpha=0.05, method='fdr_bh')
-        results['p_fdr'] = pvals_fdr
-    else:
-        results['p_fdr'] = []
-
     return results
 
 def threshold_by_group_and_merge(df_grp1, df_grp2, threshold, id_col='id', method='mean'):
@@ -299,22 +292,22 @@ def main(
         print(f"[{label}][{out_stem}] {num_sig} edges survive FDR=0.05.")
 
         # Check memory correlation for significant edges
-        # results_w1 = check_memory_correlation(df_change, significant_edges[label], memory_var='w1_memory')
-        # alpha = 0.05
-        # sig_results_w1 = results_w1[results_w1['p_fdr'] < alpha]
-        # # If there are significant edges, print them
-        # if not sig_results_w1.empty:
-        #     print(f"TP1: {sig_results_w1}")
+        results_w1 = check_memory_correlation(df_change, significant_edges[label], memory_var='w1_memory')
+        alpha = 0.05
+        sig_results_w1 = results_w1[results_w1['p_uncorrected'] < alpha]
+        # If there are significant edges, print number of significant results
+        if not sig_results_w1.empty:
+            print(f"TP2: {len(sig_results_w1)}")
 
-        # results_w2 = check_memory_correlation(df_change, significant_edges[label], memory_var='w2_memory')
-        # sig_results_w2 = results_w2[results_w2['p_fdr'] < alpha]
-        # if not sig_results_w2.empty:
-        #     print(f"TP2: {sig_results_w2}")
+        results_w2 = check_memory_correlation(df_change, significant_edges[label], memory_var='w2_memory')
+        sig_results_w2 = results_w2[results_w2['p_uncorrected'] < alpha]
+        if not sig_results_w2.empty:
+            print(f"TP2: {len(sig_results_w2)}")
 
-        # results_change = check_memory_correlation(df_change, significant_edges[label], memory_var='memory_slopes')
-        # sig_results_change = results_change[results_change['p_fdr'] < alpha]
-        # if not sig_results_change.empty:
-        #     print(f"Change: {sig_results_change}")
+        results_change = check_memory_correlation(df_change, significant_edges[label], memory_var='memory_slopes')
+        sig_results_change = results_change[results_change['p_uncorrected'] < alpha]
+        if not sig_results_change.empty:
+            print(f"Change: {len(sig_results_change)}")
 
         # If no significant edges, skip saving CSV & plots
         if num_sig == 0:
