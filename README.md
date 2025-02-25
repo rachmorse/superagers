@@ -24,7 +24,6 @@ The folders, listed in their intended order of use, are described below along wi
             - Superagers must:
                 - Score at or above the mean for age 16-29 year olds on the RAVLT long delay free recall based on normative data from [Schmidt (1996)](https://scholar.google.co.uk/scholar?hl=en&as_sdt=0%2C5&q=Schmidt%2C+M.+%281996%29.+Rey+Auditory+and+Verbal+Learning+Test%3A+A+handbook.+Los+Angeles%2C+CA%3A+Western+Psychological+Services&btnG=)
                 - Score above 1 SD below the norm for age and education on the TMT B based on the neuronorma data 
-                - Score above 1.5 SD below the norm for age and education on the TMT A and B, semantic fluency, digit span forward and backward based on the neuronorma data 
         - `maintainer_classification.ipynb`: Classifies participants as maintainers or decliners. 
             - Maintainers must: 
                 - Have memory change that is equal to or greater than 0.
