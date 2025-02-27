@@ -1,4 +1,6 @@
 *.py linguist-language=Python
 *.Rmd linguist-language=R
 *.ipynb linguist-language=Jupyter Notebook
+*.py linguist-detectable=true
+*.Rmd linguist-detectable=true
 *.ipynb linguist-detectable=true
