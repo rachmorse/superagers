@@ -6,7 +6,7 @@ This repository contains the analysis scripts for our study on superagers, which
 
 - [Overview](#overview)
 - [Folders](#folders)
-- [Analysis Scripts] (#scripts)
+- [Analysis_Scripts] (#scripts)
 
 ## Overview
 
@@ -53,7 +53,7 @@ The folders, listed in their intended order of use, are described below along wi
     - **Notes:**
         - The script uses subprocess and a wrapper to run in Python 2 to be compatable with Freesurfer 6.
 
-## Analysis Scripts
+## Analysis_Scripts
 
 1. **`calculate_adj_hippocampus.R`**
     - **Purpose:** Calculates the adjusted hippocampal volume as well as white matter hypointensity and hippocampal slopes.
