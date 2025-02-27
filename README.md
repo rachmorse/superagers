@@ -6,7 +6,10 @@ This repository contains the analysis scripts for our study on superagers, which
 
 - [Overview](#overview)
 - [Folders](#folders)
-- [Analysis_Scripts] (#scripts)
+  - [Classification](#classification)
+  - [fMRI analysis](#fmri-analysis)
+  - [structural_analysis](#structural_analysis)
+- [Analysis Scripts](#analysis-scripts)
 
 ## Overview
 
