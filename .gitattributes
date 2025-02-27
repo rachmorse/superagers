@@ -4,3 +4,4 @@
 *.py linguist-detectable=true
 *.Rmd linguist-detectable=true
 *.ipynb linguist-detectable=true
+*.ipynb linguist-documentation=false
