@@ -17,7 +17,7 @@ def process_subject_extract(args):
         ses (str): Session identifier for the specific data collection session.
         threshold (float): Threshold value used for data processing, e.g., for filtering.
         bold_template (str): File path template for the BOLD timeseries data.
-        atlas_file (str): File path for the atlas used for extracting timeseries.
+        atlas_files (str): File path for the atlases used for extracting timeseries.
         output_dir (str): Directory where processed data and any outputs are saved.
         roi_indices (list of int): List of region of interest indices for timeseries extraction.
         error_log_path (str): File path where error logs should be written.
@@ -30,7 +30,7 @@ def process_subject_extract(args):
         ses,
         threshold,
         bold_template,
-        atlas_file,
+        atlas_files,
         output_dir,
         roi_indices,
         error_log_path,
@@ -43,7 +43,7 @@ def process_subject_extract(args):
     print(f"--- Processing subject: {subject_id} ---")
 
     # Process masks and extract timeseries
-    timeseries = extract_timeseries(atlas_file, fmri_file, error_log_path)
+    timeseries = extract_timeseries(atlas_files, fmri_file, error_log_path)
 
     if timeseries is None or timeseries.size == 0:
         print(f"No valid timeseries extracted for subject {subject_id}")
@@ -131,15 +131,26 @@ def main(
         yeo_networks=7,  # Number of networks
         resolution_mm=2,
     )
-    atlas_file = schaefer_atlas["maps"]
-
+  
+    # Paths to to subcortical region images
+    subcort_right = "/Users/rachelmorse/superagers/fMRI analysis/subcortical_regions/right_subcortical14_fsaverage.nii"
+    subcort_left = "/Users/rachelmorse/superagers/fMRI analysis/subcortical_regions/left_subcortical14_fsaverage.nii"
+    
+    # Combine all atlas files into a list
+    atlas_files = [
+        schaefer_atlas["maps"],
+        subcort_right,
+        subcort_left
+    ]
+    
+    # Pass atlas_files 
     args = [
         (
             subject,
             ses,
             threshold,
             bold_template,
-            atlas_file,
+            atlas_files,
             output_dir,
             roi_indices,
             error_log_path,
