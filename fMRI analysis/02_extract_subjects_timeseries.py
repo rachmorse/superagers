@@ -204,7 +204,7 @@ def main(
     nib.save(combined_atlas_img, str(atlas_file_path))
 
     # Write labels to a CSV:
-    labels_csv_path = output_dir / "combined_labels.csv"
+    labels_csv_path = output_dir / "schaefer_and_subcortical_labels.csv"
     with open(labels_csv_path, "w", encoding="utf-8") as f:
         for label in combined_labels:
             f.write(label + "\n")
