@@ -6,6 +6,9 @@ from typing import List, Union
 import numpy as np
 from extract_timeseries import extract_timeseries
 from nilearn import datasets
+from nilearn.datasets import fetch_atlas_schaefer_2018, fetch_atlas_harvard_oxford
+from nilearn.image import load_img, new_img_like, resample_to_img
+import nibabel as nib
 
 
 def process_subject_extract(args):
@@ -17,7 +20,7 @@ def process_subject_extract(args):
         ses (str): Session identifier for the specific data collection session.
         threshold (float): Threshold value used for data processing, e.g., for filtering.
         bold_template (str): File path template for the BOLD timeseries data.
-        atlas_files (str): File path for the atlases used for extracting timeseries.
+        atlas_file (str): File path for the atlases used for extracting timeseries.
         output_dir (str): Directory where processed data and any outputs are saved.
         roi_indices (list of int): List of region of interest indices for timeseries extraction.
         error_log_path (str): File path where error logs should be written.
@@ -30,7 +33,7 @@ def process_subject_extract(args):
         ses,
         threshold,
         bold_template,
-        atlas_files,
+        atlas_file,
         output_dir,
         roi_indices,
         error_log_path,
@@ -43,7 +46,7 @@ def process_subject_extract(args):
     print(f"--- Processing subject: {subject_id} ---")
 
     # Process masks and extract timeseries
-    timeseries = extract_timeseries(atlas_files, fmri_file, error_log_path)
+    timeseries = extract_timeseries(atlas_file, fmri_file, error_log_path)
 
     if timeseries is None or timeseries.size == 0:
         print(f"No valid timeseries extracted for subject {subject_id}")
@@ -95,6 +98,74 @@ def get_subjects_to_process(root_directory, output_directory, ses):
     print(f"Number of subjects to process: {len(subjects_to_process)}")
     return subjects_to_process
 
+def create_schaefer_plus_subcortical_atlas(n_rois=200, yeo_networks=7, resolution_mm=2):
+    """
+    Combine Schaefer (cortical) and Harvard–Oxford (subcortical) atlases
+    into a single 3D volume atlas, with subcortical labels shifted so
+    that they do not overlap with the Schaefer labels.
+    """
+    # 1) Fetch the Schaefer Atlas (cortical)
+    schaefer_atlas = fetch_atlas_schaefer_2018(
+        n_rois=n_rois, 
+        yeo_networks=yeo_networks, 
+        resolution_mm=resolution_mm
+    )
+    schaefer_atlas_img = load_img(schaefer_atlas["maps"])
+    schaefer_data = schaefer_atlas_img.get_fdata()
+
+    # 2) Fetch the Harvard–Oxford subcortical atlas
+    ho_sub = fetch_atlas_harvard_oxford("sub-maxprob-thr25-2mm")
+    ho_sub_img = load_img(ho_sub["maps"])
+    ho_data = ho_sub_img.get_fdata()
+
+    # 3) Define which Harvard–Oxford labels to keep, and how to re-label them
+    rename_map = {
+        4:  1, 5:  2, 6:  3, 7:  4,
+        9:  5, 10: 6, 11: 7, 15: 8,
+        16: 9, 17:10, 18:11,19:12,
+        20:13, 21:14
+    }
+
+    # 4) Keep only the above subcortical labels → everything else zero
+    filtered_data = np.zeros_like(ho_data, dtype=np.int32)
+    for old_id, new_id in rename_map.items():
+        filtered_data[ho_data == old_id] = new_id
+    filtered_subcortical_img = new_img_like(ho_sub_img, filtered_data)
+
+    # 5) Resample subcortical to match Schaefer’s resolution/affine
+    filtered_subcortical_img = resample_to_img(
+        filtered_subcortical_img,
+        schaefer_atlas_img,
+        interpolation="nearest",
+        force_resample=True,
+        copy_header=True
+    )
+
+    # 6) Shift subcortical labels so they do not overlap Schaefer’s IDs
+    subcort_data = filtered_subcortical_img.get_fdata()
+    max_schaefer_label = int(schaefer_data.max())  # e.g., 200 for 200-ROI atlas
+    subcort_data[subcort_data > 0] += max_schaefer_label
+
+    # 7) Merge cortical + subcortical data into one array
+    combined_data = np.where(subcort_data > 0, subcort_data, schaefer_data).astype(np.int32)
+    combined_atlas_img = new_img_like(schaefer_atlas_img, combined_data)
+
+    # Decode Schaefer labels from bytes to Python strings
+    schaefer_labels = [lbl.decode("utf-8") for lbl in schaefer_atlas["labels"]]
+
+    # Create subcortical label list
+    subcortical_labels = [
+        "Left Thalamus", "Left Caudate", "Left Putamen", "Left Pallidum",
+        "Left Hippocampus", "Left Amygdala", "Left Accumbens",
+        "Right Thalamus", "Right Caudate", "Right Putamen", "Right Pallidum",
+        "Right Hippocampus", "Right Amygdala", "Right Accumbens"
+    ]
+    combined_labels = schaefer_labels + [
+        f"Subcortical {i}: {label}"
+        for i, label in enumerate(subcortical_labels, start=max_schaefer_label + 1)
+    ]
+
+    return combined_atlas_img, combined_labels
 
 def main(
     ses: str,
@@ -125,23 +196,21 @@ def main(
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Get the Schaefer atlas
-    schaefer_atlas = datasets.fetch_atlas_schaefer_2018(
-        n_rois=200,  # Number of regions
-        yeo_networks=7,  # Number of networks
-        resolution_mm=2,
+    # Call combined atlas for use and save the atlas image
+    combined_atlas_img, combined_labels = create_schaefer_plus_subcortical_atlas(
+        n_rois=200, yeo_networks=7, resolution_mm=2
     )
-  
-    # Paths to to subcortical region images
-    subcort_right = "/Users/rachelmorse/superagers/fMRI analysis/subcortical_regions/right_subcortical14_fsaverage.nii"
-    subcort_left = "/Users/rachelmorse/superagers/fMRI analysis/subcortical_regions/left_subcortical14_fsaverage.nii"
-    
-    # Combine all atlas files into a list
-    atlas_files = [
-        schaefer_atlas["maps"],
-        subcort_right,
-        subcort_left
-    ]
+    atlas_file_path = output_dir / "combined_schaefer_harvard_subcortical_atlas.nii.gz"
+    nib.save(combined_atlas_img, str(atlas_file_path))
+
+    # Write labels to a CSV:
+    labels_csv_path = output_dir / "combined_labels.csv"
+    with open(labels_csv_path, "w", encoding="utf-8") as f:
+        for label in combined_labels:
+            f.write(label + "\n")
+
+    # Save the image path as the atlas file for it to work with extract_timeseries
+    atlas_file = str(atlas_file_path)
     
     # Pass atlas_files 
     args = [
@@ -150,7 +219,7 @@ def main(
             ses,
             threshold,
             bold_template,
-            atlas_files,
+            atlas_file,
             output_dir,
             roi_indices,
             error_log_path,

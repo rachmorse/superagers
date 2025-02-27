@@ -28,7 +28,7 @@ def prepare_directories(root_dir: Path, session: str, subdir_types: List[str]):
 
 
 def compute_functional_connectivity(
-    subject_id: str, timeseries: np.ndarray, output_dir: Path, schaefer_atlas, ses: str
+    subject_id: str, timeseries: np.ndarray, output_dir: Path, ses: str, timeseries_path: Path
 ) -> np.ndarray:
     """Compute the connectivity matrix for all ROIs and each network, save them to CSV files.
 
@@ -38,13 +38,18 @@ def compute_functional_connectivity(
         output_dir (Path): Directory where the connectivity data will be saved.
         roi_names (List[str]): List of ROI names.
         network_mappings (Dict[str, List[int]]): Dict mapping network names to ROI indices.
+        ses (str): Session / timepoint
+        timeseries_path (Path): Path to the directory containing the timeseries data.
 
     Returns:
         Tuple[np.ndarray, np.ndarray]: The full connectivity and fisher z-transformed matrices.
     """
-    # Extract ROI names and networks from the Schaeffer atlas
-    labels = schaefer_atlas["labels"]
-    network_mappings = create_network_mappings(labels)
+    # Read combined labels from CSV
+    labels_csv_path = f"{timeseries_path}/combined_labels.csv"
+    combined_labels = pd.read_csv(labels_csv_path, header=None).squeeze().tolist()
+
+    # Extract ROI names and networks using the combined labels
+    network_mappings = create_network_mappings(combined_labels)
 
     # Compute full connectivity matrix
     print("Computing full connectivity matrix...")
@@ -66,8 +71,8 @@ def compute_functional_connectivity(
     prepare_directories(output_dir, ses, ["within_network_matrices"])
 
     # Save complete connectivity data
-    save_connectivity_data(subject_id, "all_to_all_roi", connectivity_matrix, None, labels, all_to_all_dir)
-    save_connectivity_data(subject_id, "all_to_all_roi", None, fisher_z_matrix, labels, all_to_all_dir)
+    save_connectivity_data(subject_id, "all_to_all_roi", connectivity_matrix, None, combined_labels, all_to_all_dir)
+    save_connectivity_data(subject_id, "all_to_all_roi", None, fisher_z_matrix, combined_labels, all_to_all_dir)
 
     # Compute network-specific connectivity matrices
     for network, indices in network_mappings.items():
@@ -76,7 +81,7 @@ def compute_functional_connectivity(
         np.fill_diagonal(network_correlation_matrix, 0)
         network_fisher_z_matrix = fisher_transform(network_correlation_matrix)
 
-        network_labels = [labels[i] for i in indices]
+        network_labels = [combined_labels[i] for i in indices]
 
         # Save network connectivity data
         save_connectivity_data(
@@ -114,7 +119,11 @@ def create_network_mappings(labels: List[str]) -> Dict[str, List[int]]:
         if isinstance(label, bytes):
             label = label.decode("utf-8")
         parts = label.split("_")
-        network_name = parts[2]  # Based on structure '7Networks_LH_Vis_1'
+        if len(parts) >= 3:
+            network_name = parts[2]  # Based on structure '7Networks_LH_Vis_1'
+        else:
+            # Handle other label formats, e.g., 'Subcortical 201: Left Thalamus'
+            network_name = parts[0]
 
         # Add the index to the network mapping
         if network_name not in network_mappings:

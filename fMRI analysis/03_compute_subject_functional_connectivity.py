@@ -27,7 +27,7 @@ def process_subject_functional(args):
         FileNotFoundError: If the timeseries file is not found.
         Exception: If an error occurs while loading the timeseries data
     """
-    subject_id, ses, output_dir, root_directory, error_log_path, schaefer_atlas = args
+    subject_id, ses, output_dir, root_directory, error_log_path, atlas_file_path = args
 
     timeseries_file = root_directory / f"{subject_id}_ses-{ses}_schaefer200_timeseries.csv"
 
@@ -51,14 +51,17 @@ def process_subject_functional(args):
     if timeseries is None or timeseries.size == 0:
         print(f"No valid timeseries loaded for subject {subject_id}")
         return
-
-    # Compute functional connectivity
+    
+    # Load the combined atlas image
+    combined_atlas_img = nib.load(atlas_file_path)
+        
+    # Compute functional connectivity with the combined atlas
     connectivity_matrix, fisher_z_matrix = compute_functional_connectivity(
         subject_id=subject_id,
         ses=ses,
         timeseries=timeseries,
         output_dir=output_dir,
-        schaefer_atlas=schaefer_atlas,
+        schaefer_atlas=combined_atlas_img  
     )
 
     # Visualize data if you would like by uncommenting the line below
@@ -96,7 +99,7 @@ def get_subjects_to_process(root_directory, output_directory, ses):
     return subjects_to_process
 
 
-def main(output_dir: Union[str, Path], root_directory: Union[str, Path], ses: str):
+def main(output_dir: Union[str, Path], root_directory: Union[str, Path], atlas_file_path: str, ses: str):
     """Main function to run the script.
 
     This function reads the pre-extracted timeseries data for each subject,
@@ -105,6 +108,8 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], ses: st
     Args:
         output_dir (Union[str, Path]): Path where processed data will be output.
         root_directory (Union[str, Path]): Root directory for the timeseries data.
+        atlas_file_path (str): Path to the combined atlas file.
+        ses (str): Session / timepoint.
 
     Raises:
         FileNotFoundError: If the selected ROIs file is not found.
@@ -117,13 +122,8 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], ses: st
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load the Schaefer atlas
-    schaefer_atlas = datasets.fetch_atlas_schaefer_2018(n_rois=200, yeo_networks=7, resolution_mm=2)
-
     # Save the Schaefer atlas as a Nifti file
-    schaefer_nifti_path = Path("/home/rachel/Desktop/schaefer_analysis/schaefer200_atlas.nii")
-    nifti_image = nib.load(schaefer_atlas.maps)
-    nib.save(nifti_image, str(schaefer_nifti_path))
+    combined_atlas_img = nib.load(atlas_file_path)
 
     args = [
         (
@@ -132,7 +132,7 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], ses: st
             output_dir,
             root_directory,
             error_log_path,
-            schaefer_atlas,
+            combined_atlas_img,
         )
         for subject_id in subjects
     ]
@@ -143,7 +143,9 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], ses: st
 
 if __name__ == "__main__":
     ses = "02"
-    root_directory = Path(f"/home/rachel/Desktop/schaefer_analysis/timeseries_data/ses-{ses}")
+    timeseries_path = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data")
+    atlas_file_path = Path(f"{timeseries_path}/combined_schaefer_harvard_subcortical_atlas.nii.gz")
+    root_directory = Path(f"{timeseries_path}/ses-{ses}")
     output_directory = Path("/home/rachel/Desktop/schaefer_analysis/connectivity_matrices")
 
     # Create the output directory if it does not exist
