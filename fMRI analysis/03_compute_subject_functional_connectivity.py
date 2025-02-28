@@ -61,7 +61,7 @@ def process_subject_functional(args):
         ses=ses,
         timeseries=timeseries,
         output_dir=output_dir,
-        schaefer_atlas=combined_atlas_img  
+        timeseries_path=timeseries_path
     )
 
     # Visualize data if you would like by uncommenting the line below
@@ -123,7 +123,7 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], atlas_f
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Save the Schaefer atlas as a Nifti file
-    combined_atlas_img = nib.load(atlas_file_path)
+    # combined_atlas_img = nib.load(atlas_file_path)
 
     args = [
         (
@@ -132,7 +132,7 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], atlas_f
             output_dir,
             root_directory,
             error_log_path,
-            combined_atlas_img,
+            atlas_file_path,
         )
         for subject_id in subjects
     ]
@@ -159,4 +159,5 @@ if __name__ == "__main__":
         output_dir=output_directory,
         root_directory=root_directory,
         ses=ses,
+        atlas_file_path=atlas_file_path,
     )
