@@ -142,7 +142,7 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], atlas_f
 
 
 if __name__ == "__main__":
-    ses = "02"
+    ses = "01"
     timeseries_path = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data")
     atlas_file_path = Path(f"{timeseries_path}/combined_schaefer_harvard_subcortical_atlas.nii.gz")
     root_directory = Path(f"{timeseries_path}/ses-{ses}")

@@ -36,8 +36,6 @@ def compute_functional_connectivity(
         subject_id (str): Subject ID.
         timeseries (np.ndarray): Timeseries data for the subject.
         output_dir (Path): Directory where the connectivity data will be saved.
-        roi_names (List[str]): List of ROI names.
-        network_mappings (Dict[str, List[int]]): Dict mapping network names to ROI indices.
         ses (str): Session / timepoint
         timeseries_path (Path): Path to the directory containing the timeseries data.
 
@@ -50,6 +48,30 @@ def compute_functional_connectivity(
 
     # Extract ROI names and networks using the combined labels
     network_mappings = create_network_mappings(combined_labels)
+
+   # Create special mappings for subcortical regions (combining left and right)
+    subcortical_structures = {}
+
+    # Identify all subcortical structures and their indices
+    for index, label in enumerate(combined_labels):
+        if isinstance(label, bytes):
+            label = label.decode("utf-8")
+            
+        if "Subcortical" in label:
+            # Extract the structure name without "Left" or "Right" prefix
+            parts = label.split(":")
+            if len(parts) >= 2:
+                # Extract structure name and remove "Left" or "Right" prefix
+                structure_name = parts[1].strip()
+                if "Left" in structure_name:
+                    structure_name = structure_name.replace("Left", "").strip()
+                elif "Right" in structure_name:
+                    structure_name = structure_name.replace("Right", "").strip()
+                
+                # Add to the dictionary
+                if structure_name not in subcortical_structures:
+                    subcortical_structures[structure_name] = []
+                subcortical_structures[structure_name].append(index)
 
     # Compute full connectivity matrix
     print("Computing full connectivity matrix...")
@@ -65,10 +87,12 @@ def compute_functional_connectivity(
     # Define target directories
     all_to_all_dir = output_dir / f"ses-{ses}/all_to_all_roi_matrices"
     within_network_dir = output_dir / f"ses-{ses}/within_network_matrices"
+    subcortical_dir = output_dir / f"ses-{ses}/subcortical_matrices"
 
     # Ensure directories exist, eliminating redundancy
     prepare_directories(output_dir, ses, ["all_to_all_roi_matrices"])
     prepare_directories(output_dir, ses, ["within_network_matrices"])
+    prepare_directories(output_dir, ses, ["subcortical_matrices"])
 
     # Save complete connectivity data
     save_connectivity_data(subject_id, "all_to_all_roi", connectivity_matrix, None, combined_labels, all_to_all_dir)
@@ -76,6 +100,10 @@ def compute_functional_connectivity(
 
     # Compute network-specific connectivity matrices
     for network, indices in network_mappings.items():
+        # Skip subcortical networks to handle them separately
+        if network == "Subcortical":
+            continue
+
         network_timeseries = timeseries[:, indices]
         network_correlation_matrix = correlation_measure.fit_transform([network_timeseries])[0]
         np.fill_diagonal(network_correlation_matrix, 0)
@@ -101,6 +129,35 @@ def compute_functional_connectivity(
             network_labels,
             within_network_dir,
         )
+        
+    # Process subcortical structures (left and right combined)
+    for structure_name, indices in subcortical_structures.items():
+        if len(indices) > 0:
+            structure_timeseries = timeseries[:, indices]
+            structure_correlation_matrix = correlation_measure.fit_transform([structure_timeseries])[0]
+            np.fill_diagonal(structure_correlation_matrix, 0)
+            structure_fisher_z_matrix = fisher_transform(structure_correlation_matrix)
+
+            structure_labels = [combined_labels[i] for i in indices]
+
+            # Save subcortical structure connectivity data
+            save_connectivity_data(
+                subject_id,
+                f"{structure_name.strip()}_bilateral",
+                structure_correlation_matrix,
+                None,
+                structure_labels,
+                subcortical_dir,
+            )
+
+            save_connectivity_data(
+                subject_id,
+                f"{structure_name.strip()}_bilateral",
+                None,
+                structure_fisher_z_matrix,
+                structure_labels,
+                subcortical_dir,
+            )
 
     return connectivity_matrix, fisher_z_matrix
 
