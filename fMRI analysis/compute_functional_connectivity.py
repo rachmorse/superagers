@@ -48,16 +48,20 @@ def compute_functional_connectivity(
 
     # Extract ROI names and networks using the combined labels
     network_mappings = create_network_mappings(combined_labels)
-
-   # Create special mappings for subcortical regions (combining left and right)
+    
+    # Create special mappings for subcortical regions (combining left and right)
     subcortical_structures = {}
-
-    # Identify all subcortical structures and their indices
+    all_subcortical_indices = []  # Track all subcortical indices
+    
+    # First, identify all subcortical structures and their indices
     for index, label in enumerate(combined_labels):
         if isinstance(label, bytes):
             label = label.decode("utf-8")
             
         if "Subcortical" in label:
+            # Add to all subcortical indices list
+            all_subcortical_indices.append(index)
+            
             # Extract the structure name without "Left" or "Right" prefix
             parts = label.split(":")
             if len(parts) >= 2:
@@ -89,21 +93,21 @@ def compute_functional_connectivity(
     within_network_dir = output_dir / f"ses-{ses}/within_network_matrices"
     subcortical_dir = output_dir / f"ses-{ses}/subcortical_matrices"
 
-    # Ensure directories exist, eliminating redundancy
+    # Ensure directories exist
     prepare_directories(output_dir, ses, ["all_to_all_roi_matrices"])
-    prepare_directories(output_dir, ses, ["within_network_matrices"])
+    prepare_directories(output_dir, ses, ["within_network_matrices"]) 
     prepare_directories(output_dir, ses, ["subcortical_matrices"])
 
     # Save complete connectivity data
     save_connectivity_data(subject_id, "all_to_all_roi", connectivity_matrix, None, combined_labels, all_to_all_dir)
     save_connectivity_data(subject_id, "all_to_all_roi", None, fisher_z_matrix, combined_labels, all_to_all_dir)
 
-    # Compute network-specific connectivity matrices
+    # Process cortical networks (non-subcortical)
     for network, indices in network_mappings.items():
         # Skip subcortical networks to handle them separately
         if network == "Subcortical":
             continue
-
+            
         network_timeseries = timeseries[:, indices]
         network_correlation_matrix = correlation_measure.fit_transform([network_timeseries])[0]
         np.fill_diagonal(network_correlation_matrix, 0)
@@ -129,8 +133,36 @@ def compute_functional_connectivity(
             network_labels,
             within_network_dir,
         )
+    
+    # Create an all subcortical 'network' connectivity matrix
+    if all_subcortical_indices:
+        all_subcortical_timeseries = timeseries[:, all_subcortical_indices]
+        all_subcortical_corr_matrix = correlation_measure.fit_transform([all_subcortical_timeseries])[0]
+        np.fill_diagonal(all_subcortical_corr_matrix, 0)
+        all_subcortical_fisher_z_matrix = fisher_transform(all_subcortical_corr_matrix)
         
-    # Process subcortical structures (left and right combined)
+        all_subcortical_labels = [combined_labels[i] for i in all_subcortical_indices]
+        
+        # Save all-subcortical connectivity data
+        save_connectivity_data(
+            subject_id,
+            "all_subcortical_rois",
+            all_subcortical_corr_matrix,
+            None,
+            all_subcortical_labels,
+            subcortical_dir,
+        )
+        
+        save_connectivity_data(
+            subject_id,
+            "all_subcortical_rois",
+            None,
+            all_subcortical_fisher_z_matrix,
+            all_subcortical_labels,
+            subcortical_dir,
+        )
+    
+    # Process individual subcortical structures (left and right combined)
     for structure_name, indices in subcortical_structures.items():
         if len(indices) > 0:
             structure_timeseries = timeseries[:, indices]

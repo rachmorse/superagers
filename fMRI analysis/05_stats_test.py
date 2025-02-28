@@ -253,12 +253,12 @@ if __name__ == "__main__":
     superager_file    = "/home/rachel/Desktop/data/maintainer_superager_data.csv"
 
     # All ROIs
-    connectivity_tp1 = output_directory / "ses-01/all_to_all_roi_matrices/fisher_z_all_to_all_roi_matrix.csv"
-    connectivity_tp2 = output_directory / "ses-02/all_to_all_roi_matrices/fisher_z_all_to_all_roi_matrix.csv"
+    # connectivity_tp1 = output_directory / "ses-01/all_to_all_roi_matrices/fisher_z_all_to_all_roi_matrix.csv"
+    # connectivity_tp2 = output_directory / "ses-02/all_to_all_roi_matrices/fisher_z_all_to_all_roi_matrix.csv"
 
     # Network specific ROIs
-    # connectivity_tp1 = output_directory / "ses-01/within_network_matrices/fisher_z_Default_within_network_matrix.csv"
-    # connectivity_tp2 = output_directory / "ses-02/within_network_matrices/fisher_z_Default_within_network_matrix.csv"
+    connectivity_tp1 = output_directory / "ses-01/subcortical_matrices/fisher_z_Thalamus_bilateral_matrix.csv"
+    connectivity_tp2 = output_directory / "ses-02/subcortical_matrices/fisher_z_Thalamus_bilateral_matrix.csv"
 
     out_file = output_directory / "significant_longitudinal.csv"
 
