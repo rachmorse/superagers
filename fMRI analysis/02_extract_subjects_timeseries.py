@@ -10,6 +10,10 @@ from nilearn.datasets import fetch_atlas_schaefer_2018, fetch_atlas_harvard_oxfo
 from nilearn.image import load_img, new_img_like, resample_to_img
 import nibabel as nib
 
+####################################################################################
+# NEED TO UPDATE SCRUBBING PATHS IF USING THIS SCRIPT (THEY WERE MOVED TO INSTITUTE)
+#  /pool/...institut/...Superagers/...resting-preprocessed/sub-xxx/ses-0y/MNI_2mm
+####################################################################################
 
 def process_subject_extract(args):
     """Processes a single subject: extracts timeseries and saves it.
