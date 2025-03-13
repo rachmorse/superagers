@@ -26,7 +26,7 @@ def get_subjects_to_process(root_directory, out_dir, ses):
 
         # Check if the required files exist
         t1w_brain = Path(f"{root_directory}/{subject}/T1w_brain.nii.gz")
-        native_mask_output = Path(f"{out_dir}/{subject}/native_space_masks/schaefer_native_space_mask.nii.gz")
+        native_mask_output = Path(f"{out_dir}/{ses}/native_space_masks/{subject}_{ses}_schaefer_oxford_native_space_mask.nii.gz")
         timeseries_data = Path(f"/home/rachel/Desktop/schaefer_analysis/timeseries_data/{ses}/{subject}_{ses}_schaefer200_timeseries.csv")
 
         if t1w_brain.exists() and timeseries_data.exists() and not native_mask_output.exists():
