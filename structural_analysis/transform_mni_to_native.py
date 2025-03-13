@@ -64,10 +64,6 @@ def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, tra
     # Create output directory if it doesn't exist
     output_file.parent.mkdir(parents=True, exist_ok=True)
     
-    # Ensure transform matrix directories exist
-    transform_mni_t1.parent.mkdir(parents=True, exist_ok=True)
-    transform_t1_mni.parent.mkdir(parents=True, exist_ok=True)
-    
     # Path to standard MNI template in FSL
     fsl_dir = os.environ.get('FSLDIR', '/usr/local/fsl')
     mni_template = Path(fsl_dir) / 'data/standard/MNI152_T1_2mm_brain.nii.gz'
@@ -137,9 +133,12 @@ def main():
     # Set up paths
     dwi_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_{timepoint}")
     mni_mask = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data/combined_schaefer_harvard_subcortical_atlas.nii.gz")
-    out_dir = Path("/home/rachel/Desktop/schaefer_analysis/dwi_analysis")
-    out_t1_masks = Path(f"{out_dir}/{ses}/t1w_masks")
     anat_dir = Path("/pool/guttmann/institut/BBHI/MRI/BIDS")
+
+    out_dir = Path("/home/rachel/Desktop/schaefer_analysis/dwi_analysis")
+    out_b0 = out_dir / f"{ses}/b0"
+    out_t1_masks = Path(f"{out_dir}/{ses}/t1w_masks")
+    out_native_masks = Path(f"{out_dir}/{ses}/native_space_masks")
 
     # Set up FSL so it runs correctly in this script
     os.environ["FSLDIR"] = "/home/rachel/fsl"
@@ -165,12 +164,13 @@ def main():
         t1w_brain = anat_dir / f"{subject}/{ses}/anat/{subject}_{ses}_run-01_T1w.nii.gz"
         t1w_to_native_matrix = subject_dir / "T1w2SBdMRI"
         
-        # Define output paths
-        b0_output = out_dir / f"{ses}/b0/{subject}_{ses}_b0.nii.gz"
-        t1w_mask_output = out_dir / f"{ses}/t1w_masks/{subject}_{ses}_schaefer_t1w_space_mask.nii.gz"
-        transform_mni_t1 = out_dir / f"{ses}/t1w_masks/transforms/{subject}_{ses}_mni_to_t1.mat"
-        transform_t1_mni = out_dir / f"{ses}/t1w_masks/transforms/{subject}_{ses}_t1_to_mni.mat"
-        native_mask_output = out_dir / f"{ses}/native_space_masks/{subject}_{ses}_schaefer_native_space_mask.nii.gz"
+        # Define output paths and file names
+        b0_output = out_b0 / f"{subject}_{ses}_b0.nii.gz"
+        t1w_mask_output = out_t1_masks / f"{subject}_{ses}_schaefer_t1w_space_mask.nii.gz"
+        transforms_dir = out_t1_masks / "transforms"
+        transform_mni_t1 = transforms_dir / f"{subject}_{ses}_mni_to_t1.mat"
+        transform_t1_mni = transforms_dir / f"{subject}_{ses}_t1_to_mni.mat"
+        native_mask_output = out_native_masks / f"{subject}_{ses}_schaefer_native_space_mask.nii.gz"
         
         # Check if required files exist
         if not t1w_brain.exists():
@@ -189,15 +189,17 @@ def main():
         transform_mni_to_t1w(mni_mask, t1w_brain, t1w_mask_output, transform_mni_t1, transform_t1_mni, out_t1_masks)
 
         # Step 3: Transform T1w mask to native space using the transformation matrix
-        transform_t1w_to_native(t1w_mask_output, t1w_to_native_matrix, b0_output, native_mask_output)
-        
+        transform_t1w_to_native(t1w_mask_output, t1w_to_native_matrix, b0_output, native_mask_output, out_native_masks)
+
         print(f"Successfully created native space mask for {subject}")
 
         # Step 4: Erase intermediate files
-
-### ADD THIS
-
-        
+        print(out_b0)
+        print(out_t1_masks)
+        print(transforms_dir)
+        # out_b0.rmdir()
+        # out_t1_masks.rmdir()
+        # transforms_dir.rmdir()
 
 if __name__ == "__main__":
     main()
