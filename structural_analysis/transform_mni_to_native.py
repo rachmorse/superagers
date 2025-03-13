@@ -64,6 +64,10 @@ def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, tra
     # Create output directory if it doesn't exist
     output_file.parent.mkdir(parents=True, exist_ok=True)
     
+    # Ensure transform matrix directories exist
+    transform_mni_t1.parent.mkdir(parents=True, exist_ok=True)
+    transform_t1_mni.parent.mkdir(parents=True, exist_ok=True)
+    
     # Path to standard MNI template in FSL
     fsl_dir = os.environ.get('FSLDIR', '/usr/local/fsl')
     mni_template = Path(fsl_dir) / 'data/standard/MNI152_T1_2mm_brain.nii.gz'
@@ -73,27 +77,36 @@ def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, tra
     tmp_dir.mkdir(parents=True, exist_ok=True)
     
     # Run FLIRT to register T1 to MNI
-    print(f"Registering T1w brain to MNI space...")
+    print(f"Creating matrix for T1w to MNI ...")
     cmd1 = f"flirt -in {t1w_brain} -ref {mni_template} -omat {transform_t1_mni} -dof 12"
     subprocess.run(cmd1, shell=True, check=True)
     
+    # Verify the file was created
+    if not transform_t1_mni.exists():
+        print(f"WARNING: Transform file {transform_t1_mni} was not created!")
+    else:
+        print(f"Successfully created matrix for T1w to MNI")
+    
     # Now, invert the matrix to get MNI->T1 transform
+    print(f"Creating inverse transform (MNI to T1) at: {transform_mni_t1}")
     cmd_convert = f"convert_xfm -omat {transform_mni_t1} -inverse {transform_t1_mni}"
     subprocess.run(cmd_convert, shell=True, check=True)
     
-    # Ensure the final transform directory has proper permissions
-    os.chmod(tmp_dir, 0o755)  # rwxr-xr-x permissions
+    # Verify the inverse transform file was created
+    if not transform_mni_t1.exists():
+        print(f"WARNING: Inverse transform file {transform_mni_t1} was not created!")
+    else:
+        print(f"Successfully created matrix for MNI to T1w: {transform_mni_t1}")
     
     # Apply the transformation matrix to the MNI mask
-    print(f"Transforming MNI mask to T1w space...")
-    cmd = (
+    cmd2 = (
         f"flirt -in {mni_mask} -ref {t1w_brain} "
         f"-out {output_file} -applyxfm -init {transform_mni_t1} -interp nearestneighbour"
     )
-    subprocess.run(cmd, shell=True, check=True)
+    subprocess.run(cmd2, shell=True, check=True)
     
-    print(f"Transformed MNI mask to T1w space: {output_file}")
-    
+    print(f"Transformed MNI Schaefer/Harvard-Oxford mask to T1w space: {output_file}")
+
     return {
         "transform_matrix": transform_mni_t1,
         "transformed_mask": output_file
@@ -155,8 +168,8 @@ def main():
         # Define output paths
         b0_output = out_dir / f"{ses}/b0/{subject}_{ses}_b0.nii.gz"
         t1w_mask_output = out_dir / f"{ses}/t1w_masks/{subject}_{ses}_schaefer_t1w_space_mask.nii.gz"
-        transform_mni_t1 = out_dir / f"{ses}/transforms/{subject}_{ses}_mni_to_t1.mat"
-        transform_t1_mni = out_dir / f"{ses}/transforms/{subject}_{ses}_t1_to_mni.mat"
+        transform_mni_t1 = out_dir / f"{ses}/t1w_masks/transforms/{subject}_{ses}_mni_to_t1.mat"
+        transform_t1_mni = out_dir / f"{ses}/t1w_masks/transforms/{subject}_{ses}_t1_to_mni.mat"
         native_mask_output = out_dir / f"{ses}/native_space_masks/{subject}_{ses}_schaefer_native_space_mask.nii.gz"
         
         # Check if required files exist
@@ -174,11 +187,17 @@ def main():
         
         # Step 2: Transform MNI mask to T1w space
         transform_mni_to_t1w(mni_mask, t1w_brain, t1w_mask_output, transform_mni_t1, transform_t1_mni, out_t1_masks)
-        
+
         # Step 3: Transform T1w mask to native space using the transformation matrix
         transform_t1w_to_native(t1w_mask_output, t1w_to_native_matrix, b0_output, native_mask_output)
         
         print(f"Successfully created native space mask for {subject}")
+
+        # Step 4: Erase intermediate files
+
+### ADD THIS
+
+        
 
 if __name__ == "__main__":
     main()
