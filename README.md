@@ -47,7 +47,7 @@ The folders, listed in their intended order of use, are described below along wi
     - `05_stats_test`: Runs t-tests to compare unthresholded connectivity by group. 
     - `05_threshold_all_subjects.py`: Thresholds connectivity matrices and runs t-tests to compare connectivity by group. This thresholds the data for the whole cohort (e.g. top 15% for the whole cohort) 
 - **Notes:**
-    - The scripts used to preprocesses the fMRI data used here are available in another [repository](https://github.com/rachmorse/fmri_preprocessing)
+    - The scripts used to preprocesses the fMRI data used here are available in another [repository](https://github.com/rachmorse/fmri_preprocessing).
 
 ### structural_analysis
 - **Purpose:** These scripts extract the structural data using FreeSurfer. 
