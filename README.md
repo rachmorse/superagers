@@ -53,6 +53,7 @@ The folders, listed in their intended order of use, are described below along wi
 - **Purpose:** These scripts extract the structural data using FreeSurfer. 
 - **Scripts:**
     - `extract_freesurfer_stats.py`: Extracts the structural data following the recon-all processing including hippocampal volumes and white matter hypointensities.
+    - `transform_mni_to_native.py`: Transforms the Schaefer/Harvard-Oxford atlas that is used for the functional analyses (see `02_extract_subjects_timeseries.py`) from MNI space to each participant's native space. 
 - **Notes:**
     - The script uses subprocess and a wrapper to run in Python 2 to be compatable with Freesurfer 6.
 
