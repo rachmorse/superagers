@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 import nibabel as nib
 import numpy as np
+import shutil
 
 def get_subjects_to_process(root_directory, out_dir, ses):
     """Generate a list of subjects to process based on whether they have
@@ -34,6 +35,7 @@ def get_subjects_to_process(root_directory, out_dir, ses):
     print(f"Number of subjects to process: {len(subjects_to_process)}")
     return subjects_to_process
 
+
 def extract_b0(input_path, output_path):
     """Extract the b0 volume from the eddy-corrected data.
     
@@ -48,6 +50,7 @@ def extract_b0(input_path, output_path):
     cmd = f"fslroi {input_path} {output_path} 0 1"
     subprocess.run(cmd, shell=True, check=True)
     print(f"Extracted b0 volume to {output_path}")
+
 
 def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, transform_t1_mni, out_t1_masks):
     """
@@ -73,7 +76,6 @@ def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, tra
     tmp_dir.mkdir(parents=True, exist_ok=True)
     
     # Run FLIRT to register T1 to MNI
-    print(f"Creating matrix for T1w to MNI ...")
     cmd1 = f"flirt -in {t1w_brain} -ref {mni_template} -omat {transform_t1_mni} -dof 12"
     subprocess.run(cmd1, shell=True, check=True)
     
@@ -81,10 +83,9 @@ def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, tra
     if not transform_t1_mni.exists():
         print(f"WARNING: Transform file {transform_t1_mni} was not created!")
     else:
-        print(f"Successfully created matrix for T1w to MNI")
+        print(f"Successfully created matrix for T1w to MNI: {transform_t1_mni}")
     
     # Now, invert the matrix to get MNI->T1 transform
-    print(f"Creating inverse transform (MNI to T1) at: {transform_mni_t1}")
     cmd_convert = f"convert_xfm -omat {transform_mni_t1} -inverse {transform_t1_mni}"
     subprocess.run(cmd_convert, shell=True, check=True)
     
@@ -108,6 +109,7 @@ def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, tra
         "transformed_mask": output_file
     }
 
+
 def transform_t1w_to_native(t1w_mask, t1w_to_native_matrix, b0_ref, output_path):
     """Transform the T1w space mask to native space using the transformation matrix.
     
@@ -124,6 +126,7 @@ def transform_t1w_to_native(t1w_mask, t1w_to_native_matrix, b0_ref, output_path)
     cmd = f"flirt -in {t1w_mask} -ref {b0_ref} -out {output_path} -applyxfm -init {t1w_to_native_matrix} -interp nearestneighbour"
     subprocess.run(cmd, shell=True, check=True)
     print(f"Transformed T1w mask to native space: {output_path}")
+
 
 def main():
     # Set timepoint
@@ -149,10 +152,10 @@ def main():
     os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
     
     # Generate the list of subjects to process
-    # subjects = get_subjects_to_process(dwi_root_dir, out_dir, ses)
+    subjects = get_subjects_to_process(dwi_root_dir, out_dir, ses)
 
     # Run a test on a single subject
-    subjects = ["sub-55772"]
+    # subjects = ["sub-42173"]
     
     # Process each subject
     for subject in subjects:
@@ -166,11 +169,11 @@ def main():
         
         # Define output paths and file names
         b0_output = out_b0 / f"{subject}_{ses}_b0.nii.gz"
-        t1w_mask_output = out_t1_masks / f"{subject}_{ses}_schaefer_t1w_space_mask.nii.gz"
+        t1w_mask_output = out_t1_masks / f"{subject}_{ses}_schaefer_oxford_t1w_space_mask.nii.gz"
         transforms_dir = out_t1_masks / "transforms"
         transform_mni_t1 = transforms_dir / f"{subject}_{ses}_mni_to_t1.mat"
         transform_t1_mni = transforms_dir / f"{subject}_{ses}_t1_to_mni.mat"
-        native_mask_output = out_native_masks / f"{subject}_{ses}_schaefer_native_space_mask.nii.gz"
+        native_mask_output = out_native_masks / f"{subject}_{ses}_schaefer_oxford_native_space_mask.nii.gz"
         
         # Check if required files exist
         if not t1w_brain.exists():
@@ -181,25 +184,27 @@ def main():
             print(f"WARNING: T1w2SBdMRI not found for {subject}, skipping.")
             continue
         
-        # Step 1: Extract b0 from eddy corrected data if needed
-        if not b0_output.exists():
-            extract_b0(eddy_corrected, b0_output)
-        
-        # Step 2: Transform MNI mask to T1w space
-        transform_mni_to_t1w(mni_mask, t1w_brain, t1w_mask_output, transform_mni_t1, transform_t1_mni, out_t1_masks)
+        try:
+            # Step 1: Extract b0 from eddy corrected data
+            if not b0_output.exists():
+                extract_b0(eddy_corrected, b0_output)
+            
+            # Step 2: Transform MNI mask to T1w space
+            transform_mni_to_t1w(mni_mask, t1w_brain, t1w_mask_output, transform_mni_t1, transform_t1_mni, out_t1_masks)
 
-        # Step 3: Transform T1w mask to native space using the transformation matrix
-        transform_t1w_to_native(t1w_mask_output, t1w_to_native_matrix, b0_output, native_mask_output, out_native_masks)
+            # Step 3: Transform T1w mask to native space using the transformation matrix
+            transform_t1w_to_native(t1w_mask_output, t1w_to_native_matrix, b0_output, native_mask_output)
 
-        print(f"Successfully created native space mask for {subject}")
+            print(f"Successfully created native space mask for {subject}")
 
-        # Step 4: Erase intermediate files
-        print(out_b0)
-        print(out_t1_masks)
-        print(transforms_dir)
-        # out_b0.rmdir()
-        # out_t1_masks.rmdir()
-        # transforms_dir.rmdir()
+            # Step 4: Clean up individual subject's intermediate files
+            os.remove(b0_output) if b0_output.exists() else None
+            os.remove(t1w_mask_output) if t1w_mask_output.exists() else None
+            
+            return subject
+        except Exception as e:
+            print(f"Error processing {subject}: {e}")
+            return None
 
 if __name__ == "__main__":
     main()
