@@ -1,0 +1,298 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import os
+import subprocess
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from pathlib import Path
+from typing import List
+import sys
+
+# Import functions from functional connectivity script
+sys.path.append('/home/rachel/Desktop/superagers/fMRI analysis')
+from compute_functional_connectivity import (
+    prepare_directories,
+    create_network_mappings,
+    save_connectivity_data,
+    visualize_fc_data
+)
+
+def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
+    """Generate a list of subjects to process based on whether they 
+    have a native space mask and the tractogram file but don't already have an entry in the output CSV.
+
+    Args:
+        tractogram_dir (Path): Path to the directory containing the tractogram files.
+        mask_dir (Path): Path to the directory containing the native space masks.
+        output_dir (Path): Path to the output directory where matrices will be saved.
+        ses (str): Timepoint (format 01 or 02).
+
+    Returns:
+        list: List of subject IDs to process.
+    """
+    subjects_to_process = []
+
+    # Determine which session-specific tractogram directory to use
+    if ses == "01":
+        tract_path = Path(f"{tractogram_dir}/tracto_MSMTCSD_TP1")
+    else:  # ses-02
+        tract_path = Path(f"{tractogram_dir}/tracto_MSMTCSD_TP2")
+    
+    # Get all subjects with tractogram files
+    tractogram_subjects = []
+    for file in os.listdir(tract_path):
+        if file.endswith("_dwi_tractogram_1M_SIFT.tck"):
+            subject_id = file.split("_")[0]
+            tractogram_subjects.append(subject_id)
+    
+    # Define output CSV paths
+    all_to_all_csv = output_dir / f"ses-{ses}/all_to_all_roi_matrices/all_to_all_roi_matrix.csv"
+    
+    # Load existing subjects from CSV if it exists
+    existing_subjects = set()
+    if all_to_all_csv.exists():
+        try:
+            existing_df = pd.read_csv(all_to_all_csv, index_col="id")
+            existing_subjects = set(existing_df.index)
+        except Exception as e:
+            print(f"Error reading existing CSV: {e}")
+    
+    # Iterate through subjects with tractograms
+    for subject in tractogram_subjects:
+        # Check if native space mask exists
+        mask_file = Path(f"{mask_dir}/ses-{ses}/native_space_masks/{subject}_ses-{ses}_schaefer_oxford_native_space_mask.nii.gz")
+        
+        # Check if subject already processed (in the CSV)
+        if mask_file.exists() and subject not in existing_subjects:
+            subjects_to_process.append(subject)
+    
+    print(f"Number of subjects to process: {len(subjects_to_process)}")
+    return subjects_to_process
+
+
+def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_dir, ses, labels_csv_path, run_visualization=True):
+    """Generate a structural connectivity matrix using MRTrix tck2connectome.
+    
+    Args:
+        subject (str): Subject ID.
+        tractogram_dir (Path): Directory containing tractogram files.
+        mask_dir (Path): Directory containing native space masks.
+        output_dir (Path): Directory to save output files.
+        ses (str): Session / timepoint (format 01 or 02).
+        labels_csv_path (str): Path to the CSV file containing ROI labels.
+        run_visualization (bool): Whether to visualize the matrix after generation.
+    
+    Returns:
+        np.ndarray: The generated connectivity matrix.
+    """
+    # Set up file paths based on the session
+    if ses == "01":
+        tract_path = Path(f"{tractogram_dir}/tracto_MSMTCSD_TP1")
+    else:  # ses-02
+        tract_path = Path(f"{tractogram_dir}/tracto_MSMTCSD_TP2")
+    
+    tractogram_file = tract_path / f"{subject}_dwi_tractogram_1M_SIFT.tck"
+    mask_file = Path(f"{mask_dir}/ses-{ses}/native_space_masks/{subject}_ses-{ses}_schaefer_oxford_native_space_mask.nii.gz")
+    
+    # Create output directories
+    prepare_directories(output_dir, ses, ["all_to_all_roi_matrices", "within_network_matrices", "subcortical_matrices", "visualization"])
+    
+    # Create a temporary file for the matrix
+    import tempfile
+    temp_dir = tempfile.gettempdir()
+    temp_matrix_file = Path(temp_dir) / f"{subject}_{ses}_temp_matrix.csv"
+    
+    # Run tck2connectome to generate the connectivity matrix
+    cmd = [
+        "tck2connectome", 
+        str(tractogram_file), 
+        str(mask_file), 
+        str(temp_matrix_file),
+        "-zero_diagonal",  # Set diagonal elements to zero
+        "-symmetric"      # Ensure matrix is symmetric
+    ]
+
+    try:
+        print(f"Processing {subject} for ses-{ses}...")
+        subprocess.run(cmd, check=True)
+        print(f"Successfully created connectivity matrix for {subject}")
+        
+        # Read the generated connectivity matrix
+        connectivity_matrix = np.loadtxt(temp_matrix_file, delimiter=',')
+        
+        # Read labels from CSV (same as in functional connectivity)
+        combined_labels = pd.read_csv(labels_csv_path, header=None).squeeze().tolist()
+        
+        # Save the connectivity data to CSV
+        all_to_all_dir = output_dir / f"ses-{ses}/all_to_all_roi_matrices"
+        save_connectivity_data(
+            subject_id=subject,
+            label="all_to_all_roi",
+            matrix=connectivity_matrix,
+            fisher_z_matrix=None,
+            roi_names=combined_labels,
+            output_dir=all_to_all_dir
+        )
+        
+        # Process network-specific matrices
+        process_network_matrices(subject, connectivity_matrix, combined_labels, output_dir, ses)
+        
+        # If visualization is requested
+        if run_visualization:
+            # Use the imported visualize_fc_data but adapt it for structural connectivity
+            visualize_fc_data(
+                subject_id=subject,
+                connectivity_matrix=connectivity_matrix,
+                output_directory=output_dir,
+                ses=ses,
+                is_fisher_z=False
+            )
+        
+        # Remove temporary file
+        if temp_matrix_file.exists():
+            os.remove(temp_matrix_file)
+        
+        return connectivity_matrix
+    
+    except subprocess.CalledProcessError as e:
+        print(f"Error processing {subject}: {e}")
+        # Remove temporary file if it exists
+        if temp_matrix_file.exists():
+            os.remove(temp_matrix_file)
+        return None
+
+
+def process_network_matrices(subject_id, full_matrix, combined_labels, output_dir, ses):
+    """Process and save network-specific connectivity matrices.
+    
+    Args:
+        subject_id (str): Subject ID.
+        full_matrix (np.ndarray): Full connectivity matrix.
+        combined_labels (list): List of region labels.
+        output_dir (Path): Output directory.
+        ses (str): Session / timepoint.
+    """
+    # Create network mappings
+    network_mappings = create_network_mappings(combined_labels)
+    
+    # Process each network
+    for network, indices in network_mappings.items():
+        # Skip subcortical network to handle separately
+        if network == "Subcortical":
+            continue
+        
+        # Extract network submatrix
+        network_matrix = full_matrix[np.ix_(indices, indices)]
+        network_labels = [combined_labels[i] for i in indices]
+        
+        # Save network connectivity data
+        network_dir = output_dir / f"ses-{ses}/within_network_matrices"
+        save_connectivity_data(
+            subject_id=subject_id,
+            label=f"{network}_within_network",
+            matrix=network_matrix,
+            fisher_z_matrix=None,
+            roi_names=network_labels,
+            output_dir=network_dir
+        )
+    
+    # Process subcortical matrices if available
+    if "Subcortical" in network_mappings:
+        subcortical_indices = network_mappings["Subcortical"]
+        
+        # All subcortical ROIs
+        subcortical_matrix = full_matrix[np.ix_(subcortical_indices, subcortical_indices)]
+        subcortical_labels = [combined_labels[i] for i in subcortical_indices]
+        
+        # Save all subcortical connectivity data
+        subcortical_dir = output_dir / f"ses-{ses}/subcortical_matrices"
+        save_connectivity_data(
+            subject_id=subject_id,
+            label="all_subcortical_rois",
+            matrix=subcortical_matrix,
+            fisher_z_matrix=None,
+            roi_names=subcortical_labels,
+            output_dir=subcortical_dir
+        )
+        
+        # Process bilateral subcortical structures
+        subcortical_structures = {}
+        
+        # Group subcortical regions by structure
+        for idx in subcortical_indices:
+            label = combined_labels[idx]
+            if isinstance(label, bytes):
+                label = label.decode("utf-8")
+            
+            # Extract structure name without "Left" or "Right" prefix
+            if ":" in label:
+                structure_name = label.split(":")[1].strip()
+                if "Left" in structure_name:
+                    structure_name = structure_name.replace("Left", "").strip()
+                elif "Right" in structure_name:
+                    structure_name = structure_name.replace("Right", "").strip()
+                
+                if structure_name not in subcortical_structures:
+                    subcortical_structures[structure_name] = []
+                subcortical_structures[structure_name].append(idx)
+        
+        # Process each bilateral structure
+        for structure_name, indices in subcortical_structures.items():
+            if len(indices) > 0:
+                structure_matrix = full_matrix[np.ix_(indices, indices)]
+                structure_labels = [combined_labels[i] for i in indices]
+                
+                # Save structure connectivity data
+                save_connectivity_data(
+                    subject_id=subject_id,
+                    label=f"{structure_name.strip()}_bilateral",
+                    matrix=structure_matrix,
+                    fisher_z_matrix=None,
+                    roi_names=structure_labels,
+                    output_dir=subcortical_dir
+                )
+
+
+def main():
+    """Main function to process structural connectivity for subjects."""
+    # Set parameters
+    ses = "01"  
+    tractogram_dir = Path("/pool/guttmann/institut/BBHI/MRI/processed_data")
+    mask_dir = Path("/home/rachel/Desktop/schaefer_analysis/dwi_analysis")
+    output_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
+    labels_csv_path = "/home/rachel/Desktop/schaefer_analysis/timeseries_data/combined_labels.csv"
+
+    # Setup MRTrix 
+    os.environ["PATH"] = f"/home/rachel/miniconda3/bin:{os.environ['PATH']}"
+    
+    # Create output directory if it doesn't exist
+    output_dir.mkdir(parents=True, exist_ok=True)
+    prepare_directories(output_dir, ses, ["all_to_all_roi_matrices", "within_network_matrices", "subcortical_matrices", "visualization"])
+    
+    # # Get subjects to process
+    # subjects = get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses)
+    
+    # For testing with a single subject
+    subjects = ["sub-44010"]
+    
+    # Process each subject
+    processed_subjects = []
+    for subject in subjects:
+        result = generate_structural_connectivity(
+            subject=subject,
+            tractogram_dir=tractogram_dir,
+            mask_dir=mask_dir,
+            output_dir=output_dir,
+            ses=ses, 
+            labels_csv_path=labels_csv_path
+        )
+        if result is not None:
+            processed_subjects.append(subject)
+    
+    print(f"Successfully processed {len(processed_subjects)} subjects")
+
+
+if __name__ == "__main__":
+    main()

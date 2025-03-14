@@ -204,8 +204,8 @@ def main():
     """
     
     # Set timepoint
-    timepoint = "tp1"
-    ses = "ses-01"
+    timepoint = "tp2"
+    ses = "ses-02"
 
     # Set up paths
     dwi_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_{timepoint}")
