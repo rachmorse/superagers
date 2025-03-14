@@ -199,6 +199,9 @@ def create_network_mappings(labels: List[str]) -> Dict[str, List[int]]:
 
     Args:
         labels (List[str]): List of ROI labels.
+
+    Returns:
+        Dict[str, List[int]]: Dictionary mapping network names to indices.
     """
     # Initialize network mappings
     network_mappings = {}
@@ -207,13 +210,25 @@ def create_network_mappings(labels: List[str]) -> Dict[str, List[int]]:
     for index, label in enumerate(labels):
         if isinstance(label, bytes):
             label = label.decode("utf-8")
-        parts = label.split("_")
-        if len(parts) >= 3:
-            network_name = parts[2]  # Based on structure '7Networks_LH_Vis_1'
+        
+        # For Schaefer atlas regions (format: 7Networks_LH_Vis_1)
+        if label.startswith("7Networks_"):
+            parts = label.split("_")
+            if len(parts) >= 3:
+                network_name = parts[2]  # Extract network name (e.g., "Vis", "SomMot", etc.)
+            else:
+                network_name = "Other"
+        
+        # For subcortical regions (format: Subcortical 202: Left Caudate)
+        elif label.startswith("Subcortical"):
+            network_name = "Subcortical"
+        
+        # For any other format
         else:
-            # Handle other label formats, e.g., 'Subcortical 201: Left Thalamus'
-            network_name = parts[0]
-
+            # Try to extract from first part before a space or underscore
+            parts = label.split(" ")[0].split("_")[0]
+            network_name = parts
+        
         # Add the index to the network mapping
         if network_name not in network_mappings:
             network_mappings[network_name] = []

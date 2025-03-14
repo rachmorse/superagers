@@ -1,13 +1,10 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 import os
 import subprocess
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
-from typing import List
+# from typing import List
 import sys
 
 # Import functions from functional connectivity script
@@ -92,7 +89,7 @@ def save_structural_connectivity(subject_id, label, matrix, roi_names, output_di
     column_names = []
     
     for i in range(len(roi_names)):
-        for j in range(len(roi_names)):
+        for j in range(i+1, len(roi_names)):  # Start from i+1 to get upper triangle only
             if i != j:  # Skip diagonal
                 flat_data.append(matrix[i, j])
                 column_names.append(f"{roi_names[i]}-{roi_names[j]}")
@@ -154,6 +151,7 @@ def visualize_sc_data(subject_id, connectivity_matrix, output_directory, ses, cm
 
 def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_dir, ses, labels_csv_path, run_visualization=True):
     """Generate a structural connectivity matrix using MRTrix tck2connectome.
+    focusing on roi-to-roi connectivity.
     
     Args:
         subject (str): Subject ID.
@@ -219,9 +217,8 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
         # Process network-specific matrices
         process_network_matrices(subject, connectivity_matrix, combined_labels, output_dir, ses)
         
-        # If visualization is requested
+        # To run visualization
         if run_visualization:
-            # Use the imported visualize_fc_data but adapt it for structural connectivity
             visualize_sc_data(
                 subject_id=subject,
                 connectivity_matrix=connectivity_matrix,
@@ -237,7 +234,6 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
     
     except subprocess.CalledProcessError as e:
         print(f"Error processing {subject}: {e}")
-        # Remove temporary file if it exists
         if temp_matrix_file.exists():
             os.remove(temp_matrix_file)
         return None
@@ -258,7 +254,7 @@ def process_network_matrices(subject_id, full_matrix, combined_labels, output_di
     
     # Process each network
     for network, indices in network_mappings.items():
-        # Skip subcortical network to handle separately
+        # Skip subcortical 'network' to handle separately
         if network == "Subcortical":
             continue
         
@@ -336,14 +332,14 @@ def main():
     # Set parameters
     ses = "01"  
     tractogram_dir = Path("/pool/guttmann/institut/BBHI/MRI/processed_data")
-    mask_dir = Path("/home/rachel/Desktop/schaefer_analysis/dwi_analysis")
+    mask_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_masks")
     output_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
     labels_csv_path = "/home/rachel/Desktop/schaefer_analysis/timeseries_data/combined_labels.csv"
 
     # Setup MRTrix 
     os.environ["PATH"] = f"/home/rachel/miniconda3/bin:{os.environ['PATH']}"
     
-    # Create output directory if it doesn't exist
+    # Create output directory if it does not exist
     output_dir.mkdir(parents=True, exist_ok=True)
     prepare_directories(output_dir, ses, ["all_to_all_roi_matrices", "within_network_matrices", "subcortical_matrices", "visualization"])
     

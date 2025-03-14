@@ -204,14 +204,14 @@ def main():
     """
     
     # Set timepoint
-    timepoint = "tp2"
-    ses = "ses-02"
+    timepoint = "tp1"
+    ses = "ses-01"
 
     # Set up paths
     dwi_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_{timepoint}")
     mni_mask = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data/combined_schaefer_harvard_subcortical_atlas.nii.gz")
     anat_dir = Path("/pool/guttmann/institut/BBHI/MRI/BIDS")
-    out_dir = Path("/home/rachel/Desktop/schaefer_analysis/dwi_analysis")
+    out_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_masks")
 
     # Set up FSL so it runs correctly in this script
     os.environ["FSLDIR"] = "/home/rachel/fsl"

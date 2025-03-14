@@ -377,7 +377,7 @@ def main(
 
 if __name__ == "__main__":
 
-    output_directory = Path("/home/rachel/Desktop/schaefer_analysis/connectivity_matrices")
+    output_directory = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity")
     superager_file    = "/home/rachel/Desktop/data/maintainer_superager_data.csv"
 
     # All ROIs

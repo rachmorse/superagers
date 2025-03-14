@@ -146,7 +146,7 @@ if __name__ == "__main__":
     timeseries_path = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data")
     atlas_file_path = Path(f"{timeseries_path}/combined_schaefer_harvard_subcortical_atlas.nii.gz")
     root_directory = Path(f"{timeseries_path}/ses-{ses}")
-    output_directory = Path("/home/rachel/Desktop/schaefer_analysis/connectivity_matrices")
+    output_directory = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity")
 
     # Create the output directory if it does not exist
     output_directory.mkdir(parents=True, exist_ok=True)

@@ -92,7 +92,7 @@ def main(output_dir: Union[str, Path], connectivity_file: Union[str, Path], supe
 if __name__ == "__main__":
     ses = "02"
     superager_file = "/home/rachel/Desktop/data/maintainer_superager_data.csv"  
-    output_directory = Path(f"/home/rachel/Desktop/schaefer_analysis/connectivity_matrices/ses-{ses}/all_to_all_roi_matrices")
+    output_directory = Path(f"/home/rachel/Desktop/schaefer_analysis/functional_connectivity/ses-{ses}/all_to_all_roi_matrices")
     connectivity_file = Path(f"{output_directory}/fisher_z_all_to_all_roi_matrix.csv")
 
     main(
