@@ -204,8 +204,8 @@ def main():
     """
     
     # Set timepoint
-    timepoint = "tp2"
-    ses = "ses-02"
+    timepoint = "tp1"
+    ses = "ses-01"
 
     # Set up paths
     dwi_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_{timepoint}")
@@ -224,8 +224,11 @@ def main():
     # Generate the list of subjects to process
     # subjects = get_subjects_to_process(dwi_root_dir, out_dir, ses)
 
-    # For testing with a single subject
-    subjects = ["sub-46334"]
+    # Process problematic subjects again manually
+    subjects = ["sub-139895"]
+                    # "sub-120927", "sub-101848", "sub-154095", "sub-139350", 
+                    # "sub-134038", "sub-153265", "sub-141692", "sub-178055", "sub-182146", 
+                    # "sub-116054", "sub-163261"]    
     
     # Process each subject
     results = []
