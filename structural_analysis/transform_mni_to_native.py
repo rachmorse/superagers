@@ -187,10 +187,10 @@ def process_subject(subject, dwi_root_dir, anat_dir, mni_mask, out_dir, ses):
         print(f"Successfully created native space mask for {subject}")
 
         # Step 4: Clean up individual subject's intermediate files
-        if b0_output.exists():
-            os.remove(b0_output)
-        if t1w_mask_output.exists():
-            os.remove(t1w_mask_output)
+        if out_b0.exists():
+            shutil.rmtree(out_b0)
+        if out_t1_masks.exists():
+            shutil.rmtree(out_t1_masks)
         
         return subject
     except Exception as e:
@@ -204,8 +204,8 @@ def main():
     """
     
     # Set timepoint
-    timepoint = "tp1"
-    ses = "ses-01"
+    timepoint = "tp2"
+    ses = "ses-02"
 
     # Set up paths
     dwi_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_{timepoint}")
@@ -222,10 +222,10 @@ def main():
     os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
     
     # Generate the list of subjects to process
-    subjects = get_subjects_to_process(dwi_root_dir, out_dir, ses)
+    # subjects = get_subjects_to_process(dwi_root_dir, out_dir, ses)
 
     # For testing with a single subject
-    # subjects = ["sub-42173"]
+    subjects = ["sub-46334"]
     
     # Process each subject
     results = []

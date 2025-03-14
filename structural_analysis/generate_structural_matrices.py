@@ -2,10 +2,11 @@ import os
 import subprocess
 import numpy as np
 import pandas as pd
+import logging
+import sys
+from datetime import datetime
 import matplotlib.pyplot as plt
 from pathlib import Path
-# from typing import List
-import sys
 
 # Import functions from functional connectivity script
 sys.path.append('/home/rachel/Desktop/superagers/fMRI analysis')
@@ -13,6 +14,22 @@ from compute_functional_connectivity import (
     prepare_directories,
     create_network_mappings,
 )
+
+
+def setup_logging(output_dir):
+    """Setup basic logging to file and console"""
+    log_file = output_dir / f"structural_connectivity_{datetime.now().strftime('%Y%m%d')}.log"
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ]
+    )
+    return logging.getLogger()
+
 
 def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
     """Generate a list of subjects to process based on whether they 
@@ -78,35 +95,42 @@ def save_structural_connectivity(subject_id, label, matrix, roi_names, output_di
         roi_names (list): List of ROI names
         output_dir (Path): Directory to save the output file
     """
-    # Ensure the output directory exists
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Prepare the group file path
-    all_subjects_file = output_dir / f"{label}_matrix.csv"
-    
-    # Flatten the matrix, skip diagonal elements
-    flat_data = []
-    column_names = []
-    
-    for i in range(len(roi_names)):
-        for j in range(i+1, len(roi_names)):  # Start from i+1 to get upper triangle only
-            if i != j:  # Skip diagonal
-                flat_data.append(matrix[i, j])
-                column_names.append(f"{roi_names[i]}-{roi_names[j]}")
-    
-    # Create new row for this subject
-    subject_df = pd.DataFrame([flat_data], index=[subject_id], columns=column_names)
-    
-    if all_subjects_file.exists():
-        # Read existing file
-        all_subjects_df = pd.read_csv(all_subjects_file, index_col=0)
+    try:
+        # Ensure the output directory exists
+        output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Append new subject
-        updated_df = pd.concat([all_subjects_df, subject_df])
-        updated_df.to_csv(all_subjects_file)
-    else:
-        # Create new file with this subject
-        subject_df.to_csv(all_subjects_file)    
+        # Prepare the group file path
+        all_subjects_file = output_dir / f"{label}_matrix.csv"
+        
+        # Flatten the matrix, skip diagonal elements
+        flat_data = []
+        column_names = []
+        
+        for i in range(len(roi_names)):
+            for j in range(i+1, len(roi_names)):  # Start from i+1 to get upper triangle only
+                if i != j:  # Skip diagonal
+                    flat_data.append(matrix[i, j])
+                    column_names.append(f"{roi_names[i]}-{roi_names[j]}")
+        
+        # Create new row for this subject
+        subject_df = pd.DataFrame([flat_data], index=[subject_id], columns=column_names)
+        
+        if all_subjects_file.exists():
+            # Read existing file
+            all_subjects_df = pd.read_csv(all_subjects_file, index_col=0)
+            
+            # Append new subject
+            updated_df = pd.concat([all_subjects_df, subject_df])
+            updated_df.to_csv(all_subjects_file)
+        else:
+            # Create new file with this subject
+            subject_df.to_csv(all_subjects_file)    
+
+        return True
+    
+    except Exception as e:
+            logging.error(f"{subject_id}: Error saving connectivity data: {str(e)}")
+            return False
 
 def visualize_sc_data(subject_id, connectivity_matrix, output_directory, ses, cmap='RdBu_r'):
     """
@@ -342,29 +366,56 @@ def main():
     # Create output directory if it does not exist
     output_dir.mkdir(parents=True, exist_ok=True)
     prepare_directories(output_dir, ses, ["all_to_all_roi_matrices", "within_network_matrices", "subcortical_matrices", "visualization"])
+
+    # Setup logging
+    setup_logging(output_dir)
     
-    # # Get subjects to process
-    # subjects = get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses)
+    # Get subjects to process
+    subjects = get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses)
     
     # For testing with a single subject
-    subjects = ["sub-44010"]
+    # subjects = ["sub-44010"]
+
+        # Track both failed and successful subjects
+    successful_subjects = []
+    failed_subjects = []
     
     # Process each subject
-    processed_subjects = []
     for subject in subjects:
-        result = generate_structural_connectivity(
-            subject=subject,
-            tractogram_dir=tractogram_dir,
-            mask_dir=mask_dir,
-            output_dir=output_dir,
-            ses=ses, 
-            labels_csv_path=labels_csv_path
-        )
-        if result is not None:
-            processed_subjects.append(subject)
+        logging.info(f"Processing {subject} for ses-{ses}...")
+        
+        try:
+            # Assuming generate_structural_connectivity returns the connectivity matrix if successful, or None if it fails
+            result = generate_structural_connectivity(
+                subject=subject,
+                tractogram_dir=tractogram_dir,
+                mask_dir=mask_dir,
+                output_dir=output_dir,
+                ses=ses, 
+                labels_csv_path=labels_csv_path,
+                run_visualization=True
+            )
+            
+            # Check if processing was successful
+            if result is not None:
+                successful_subjects.append(subject)
+                logging.info(f"Successfully processed {subject}")
+            else:
+                failed_subjects.append(subject)
+                logging.error(f"Failed to process {subject} - generate_structural_connectivity returned None")
+                
+        except Exception as e:
+            logging.error(f"{subject}: Error during processing: {str(e)}")
+            failed_subjects.append(subject)
     
-    print(f"Successfully processed {len(processed_subjects)} subjects")
-
+    # Log summary
+    total_subjects = len(subjects)
+    successful_count = len(successful_subjects)
+    failed_count = len(failed_subjects)
+    
+    logging.info(f"Processing complete: {successful_count}/{total_subjects} successful, {failed_count}/{total_subjects} failed")
+    if failed_subjects:
+        logging.info(f"Failed subjects: {', '.join(failed_subjects)}")
 
 if __name__ == "__main__":
     main()
