@@ -15,8 +15,6 @@ sys.path.append('/home/rachel/Desktop/superagers/fMRI analysis')
 from compute_functional_connectivity import (
     prepare_directories,
     create_network_mappings,
-    save_connectivity_data,
-    visualize_fc_data
 )
 
 def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
@@ -71,6 +69,88 @@ def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
     print(f"Number of subjects to process: {len(subjects_to_process)}")
     return subjects_to_process
 
+def save_structural_connectivity(subject_id, label, matrix, roi_names, output_dir):
+    """
+    Save structural connectivity matrix without normalization.
+    Only saves to the group CSV file, not individual subject files.
+    
+    Args:
+        subject_id (str): Subject ID
+        label (str): Label for the matrix (e.g., 'all_to_all_roi')
+        matrix (np.ndarray): Connectivity matrix
+        roi_names (list): List of ROI names
+        output_dir (Path): Directory to save the output file
+    """
+    # Ensure the output directory exists
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Prepare the group file path
+    all_subjects_file = output_dir / f"{label}_matrix.csv"
+    
+    # Flatten the matrix, skip diagonal elements
+    flat_data = []
+    column_names = []
+    
+    for i in range(len(roi_names)):
+        for j in range(len(roi_names)):
+            if i != j:  # Skip diagonal
+                flat_data.append(matrix[i, j])
+                column_names.append(f"{roi_names[i]}-{roi_names[j]}")
+    
+    # Create new row for this subject
+    subject_df = pd.DataFrame([flat_data], index=[subject_id], columns=column_names)
+    
+    if all_subjects_file.exists():
+        # Read existing file
+        all_subjects_df = pd.read_csv(all_subjects_file, index_col=0)
+        
+        # Append new subject
+        updated_df = pd.concat([all_subjects_df, subject_df])
+        updated_df.to_csv(all_subjects_file)
+    else:
+        # Create new file with this subject
+        subject_df.to_csv(all_subjects_file)    
+
+def visualize_sc_data(subject_id, connectivity_matrix, output_directory, ses, cmap='RdBu_r'):
+    """
+    Visualize structural connectivity matrices using the same colormap as functional connectivity.
+    
+    Args:
+        subject_id (str): Subject ID for labeling the figure
+        connectivity_matrix (np.ndarray): The structural connectivity matrix
+        output_directory (Path): Directory to save the visualization
+        ses (str): Session identifier (e.g., "01" or "02")
+        cmap (str): Colormap to use, default 'RdBu_r' to match FC visualization
+    """
+    # Set up the figure
+    plt.figure(figsize=(10, 8))
+    
+    # For structural connectivity, use absolute max for symmetric color scaling
+    vmax = np.max(connectivity_matrix)
+    
+    # Create the heatmap
+    im = plt.imshow(connectivity_matrix, cmap=cmap, vmin=0, vmax=vmax)
+    
+    # Add a colorbar
+    cbar = plt.colorbar(im)
+    cbar.set_label('Number of Streamlines')
+    
+    # Set title and labels
+    plt.title(f'Structural Connectivity: {subject_id} (ses-{ses})')
+    plt.xlabel('ROI Index')
+    plt.ylabel('ROI Index')
+    
+    # Ensure output directory exists
+    vis_dir = Path(output_directory) / f"ses-{ses}/visualization"
+    vis_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save the figure
+    output_file = vis_dir / f"{subject_id}_structural_connectivity.png"
+    plt.savefig(output_file, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    print(f"Saved visualization to {output_file}")
+    
 
 def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_dir, ses, labels_csv_path, run_visualization=True):
     """Generate a structural connectivity matrix using MRTrix tck2connectome.
@@ -110,6 +190,7 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
         str(tractogram_file), 
         str(mask_file), 
         str(temp_matrix_file),
+        "-force",
         "-zero_diagonal",  # Set diagonal elements to zero
         "-symmetric"      # Ensure matrix is symmetric
     ]
@@ -121,17 +202,16 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
         
         # Read the generated connectivity matrix
         connectivity_matrix = np.loadtxt(temp_matrix_file, delimiter=',')
-        
+
         # Read labels from CSV (same as in functional connectivity)
         combined_labels = pd.read_csv(labels_csv_path, header=None).squeeze().tolist()
         
         # Save the connectivity data to CSV
         all_to_all_dir = output_dir / f"ses-{ses}/all_to_all_roi_matrices"
-        save_connectivity_data(
+        save_structural_connectivity(
             subject_id=subject,
             label="all_to_all_roi",
             matrix=connectivity_matrix,
-            fisher_z_matrix=None,
             roi_names=combined_labels,
             output_dir=all_to_all_dir
         )
@@ -142,12 +222,11 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
         # If visualization is requested
         if run_visualization:
             # Use the imported visualize_fc_data but adapt it for structural connectivity
-            visualize_fc_data(
+            visualize_sc_data(
                 subject_id=subject,
                 connectivity_matrix=connectivity_matrix,
                 output_directory=output_dir,
-                ses=ses,
-                is_fisher_z=False
+                ses=ses
             )
         
         # Remove temporary file
@@ -189,11 +268,10 @@ def process_network_matrices(subject_id, full_matrix, combined_labels, output_di
         
         # Save network connectivity data
         network_dir = output_dir / f"ses-{ses}/within_network_matrices"
-        save_connectivity_data(
+        save_structural_connectivity(
             subject_id=subject_id,
             label=f"{network}_within_network",
             matrix=network_matrix,
-            fisher_z_matrix=None,
             roi_names=network_labels,
             output_dir=network_dir
         )
@@ -208,11 +286,10 @@ def process_network_matrices(subject_id, full_matrix, combined_labels, output_di
         
         # Save all subcortical connectivity data
         subcortical_dir = output_dir / f"ses-{ses}/subcortical_matrices"
-        save_connectivity_data(
+        save_structural_connectivity(
             subject_id=subject_id,
             label="all_subcortical_rois",
             matrix=subcortical_matrix,
-            fisher_z_matrix=None,
             roi_names=subcortical_labels,
             output_dir=subcortical_dir
         )
@@ -245,11 +322,10 @@ def process_network_matrices(subject_id, full_matrix, combined_labels, output_di
                 structure_labels = [combined_labels[i] for i in indices]
                 
                 # Save structure connectivity data
-                save_connectivity_data(
+                save_structural_connectivity(
                     subject_id=subject_id,
                     label=f"{structure_name.strip()}_bilateral",
                     matrix=structure_matrix,
-                    fisher_z_matrix=None,
                     roi_names=structure_labels,
                     output_dir=subcortical_dir
                 )
