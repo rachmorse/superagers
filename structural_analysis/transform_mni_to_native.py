@@ -5,7 +5,11 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 import shutil
+import gzip
 import nipype.interfaces.spm as spm
+from nipype.interfaces.spm import Normalize12, NewSegment
+from nipype.interfaces.spm.preprocess import ApplyDeformations 
+import nipype.interfaces.spm.utils as spmu
 
 def get_subjects_to_process(root_directory, out_dir, ses):
     """Generate a list of subjects to process based on whether they have
@@ -110,7 +114,7 @@ def extract_b0(input_path, output_path):
 #         "transformed_mask": output_file
 #     }
 
-def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, out_t1_masks):
+def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, out_t1_masks, subject, ses):
     """
     Transform the MNI space mask to T1w space using SPM.
 
@@ -119,7 +123,9 @@ def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, out_t1_masks):
         t1w_brain (Path): Path to the T1w brain image.
         output_file (Path): Path to save the transformed mask.
         out_t1_masks (Path): Path to the output directory.
-    """    
+        subject (str): Subject ID.
+        ses (str): Timepoint.
+    """        
     # Create output directory if it doesn't exist
     output_file.parent.mkdir(parents=True, exist_ok=True)
     
@@ -127,61 +133,124 @@ def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, out_t1_masks):
     tmp_dir = Path(out_t1_masks / "tmp")
     tmp_dir.mkdir(parents=True, exist_ok=True)
     
+    # Function to unzip a gzipped file using Python's gzip module
+    def ungzip_file(gzipped_file, output_file):
+        try:
+            with gzip.open(gzipped_file, 'rb') as f_in:
+                with open(output_file, 'wb') as f_out:
+                    f_out.write(f_in.read())
+            return True
+        except Exception as e:
+            print(f"Error unzipping file {gzipped_file}: {e}")
+            return False
+    
     # Unzip files for SPM (SPM requires uncompressed NIfTI files)
     # Copy and unzip t1w_brain
     t1w_copy = tmp_dir / t1w_brain.name
-    shutil.copy(t1w_brain, t1w_copy)
-    subprocess.run(["gunzip", "-f", t1w_copy], check=True)
     t1w_unzipped = Path(str(t1w_copy).replace('.gz', ''))
+    
+    try:
+        shutil.copy(t1w_brain, t1w_copy)
+        if not ungzip_file(t1w_copy, t1w_unzipped):
+            raise Exception(f"Failed to unzip {t1w_copy}")
+    except Exception as e:
+        print(f"Error with T1w brain: {e}")
+        # Try direct unzipping without copying first
+        if not ungzip_file(t1w_brain, t1w_unzipped):
+            raise Exception(f"Could not process T1w brain file {t1w_brain}")
     
     # Copy and unzip mni_mask
     mni_mask_copy = tmp_dir / mni_mask.name
-    shutil.copy(mni_mask, mni_mask_copy)
-    subprocess.run(["gunzip", "-f", mni_mask_copy], check=True)
     mni_mask_unzipped = Path(str(mni_mask_copy).replace('.gz', ''))
     
-    # Setup SPM coregistration object
-    coreg_mask = spm.Coregister()
+    try:
+        shutil.copy(mni_mask, mni_mask_copy)
+        if not ungzip_file(mni_mask_copy, mni_mask_unzipped):
+            raise Exception(f"Failed to unzip {mni_mask_copy}")
+    except Exception as e:
+        print(f"Error with MNI mask: {e}")
+        # Try direct unzipping without copying first
+        if not ungzip_file(mni_mask, mni_mask_unzipped):
+            raise Exception(f"Could not process MNI mask file {mni_mask}")
     
-    # Transform the MNI mask to T1 space
-    # Use the T1 as target and the MNI mask as source
-    coreg_mask.inputs.target = str(t1w_unzipped)
-    coreg_mask.inputs.source = str(mni_mask_unzipped)
-    coreg_mask.inputs.jobtype = "estwrite" 
-    coreg_mask.inputs.write_interp = 0       # Nearest neighbor interpolation for masks
-    coreg_mask.inputs.write_mask = True      # Enable masking
+    # Verify files exist
+    if not t1w_unzipped.exists():
+        raise FileNotFoundError(f"Unzipped T1w file does not exist: {t1w_unzipped}")
+    if not mni_mask_unzipped.exists():
+        raise FileNotFoundError(f"Unzipped MNI mask does not exist: {mni_mask_unzipped}")
+        
+    # Use SPM's Normalize12 and ApplyDeformations for a simpler approach
+    import nipype.interfaces.spm as spm
     
-    print(f"Transforming MNI mask to T1w space using SPM...")
-    result = coreg_mask.run()
+    print(f"Setting up normalization from T1w to MNI space to invert...")
     
-    # The coregistered mask is prefixed with 'r' in SPM
-    renamed_transformed_mask = tmp_dir / f"r{mni_mask_unzipped.name}"
+    # 1. Setup normalization to estimate the deformation field
+    normalize = spm.Normalize12()
+    normalize.inputs.image_to_align = str(t1w_unzipped)
+    normalize.inputs.jobtype = 'est'  # Just estimate the deformation
     
-    # Check if the transformed file exists or get it from the results
-    if renamed_transformed_mask.exists():
-        transformed_mask = renamed_transformed_mask
-    elif hasattr(result.outputs, 'coregistered_source'):
-        transformed_mask = Path(result.outputs.coregistered_source)
-    else:
-        print("Unable to locate the transformed mask file!")
-        transformed_mask = None
+    print("Running normalization to compute deformation fields...")
+    norm_result = normalize.run()
     
-    if transformed_mask and transformed_mask.exists():
+    # Get the deformation field (T1w -> MNI)
+    forward_def_field = norm_result.outputs.deformation_field
+    
+    # 2. Invert the deformation field
+    print("Inverting the deformation field...")
+    invert_def = spmu.ApplyInverseDeformation()
+    invert_def.inputs.deformation = forward_def_field
+    invert_def.inputs.reference = str(t1w_unzipped)  # Reference for the inverse is the T1w image
+    invert_result = invert_def.run()
+    
+    # Get the inverted deformation field (MNI -> T1w)
+    inverse_def_field = invert_result.outputs.inverted_deformation
+    
+    print(f"Applying inverse deformation to MNI mask...")
+    
+    # 3. Apply the inverted deformation field to the MNI mask
+    apply_def = spm.preprocess.ApplyDeformations()
+    apply_def.inputs.in_files = str(mni_mask_unzipped)
+    apply_def.inputs.deformation_field = inverse_def_field
+    apply_def.inputs.reference_volume = str(t1w_unzipped)
+    apply_def.inputs.interp = 0  # Nearest neighbor interpolation for masks
+    
+    print("Running ApplyDeformations to transform MNI mask to T1w space...")
+    apply_result = apply_def.run()
+    
+    # Get the transformed mask
+    transformed_mask = Path(apply_result.outputs.out_files[0])
+    
+    if transformed_mask.exists():
         # Compress the result and move to the final output location
-        subprocess.run(["gzip", "-f", transformed_mask], check=True)
         gzipped_mask = Path(f"{transformed_mask}.gz")
+        
+        # Use Python's gzip to compress
+        try:
+            with open(transformed_mask, 'rb') as f_in:
+                with gzip.open(gzipped_mask, 'wb') as f_out:
+                    f_out.write(f_in.read())
+        except Exception as e:
+            print(f"Error compressing output file: {e}")
+            # Try using command line gzip as fallback
+            try:
+                subprocess.run(["gzip", "-f", str(transformed_mask)], check=True)
+            except Exception as e2:
+                print(f"Command-line gzip also failed: {e2}")
         
         # Move the gzipped mask to the final output location
         if gzipped_mask.exists():
             shutil.copy(gzipped_mask, output_file)
-            print(f"Transformed MNI Schaefer/Harvard-Oxford mask to T1w space: {output_file}")
+            print(f"Transformed MNI mask to T1w space: {output_file}")
         else:
             print(f"WARNING: Expected gzipped mask at {gzipped_mask} was not found!")
     else:
         print("Transformation failed!")
     
     # Clean up temporary files
-    shutil.rmtree(tmp_dir)
+    try:
+        shutil.rmtree(tmp_dir)
+    except Exception as e:
+        print(f"Warning: Could not remove temp directory: {e}")
     
     return {
         "transformed_mask": output_file
@@ -257,7 +326,7 @@ def process_subject(subject, dwi_root_dir, anat_dir, mni_mask, out_dir, ses):
         
         # Step 2: Transform MNI mask to T1w space
         # transform_mni_to_t1w(mni_mask, t1w_brain, t1w_mask_output, transform_mni_t1, transform_t1_mni, out_t1_masks)
-        transform_mni_to_t1w(mni_mask, t1w_brain, t1w_mask_output, out_t1_masks)
+        transform_mni_to_t1w(mni_mask, t1w_brain, t1w_mask_output, out_t1_masks, subject, ses)
 
         # Step 3: Transform T1w mask to native space using the transformation matrix
         transform_t1w_to_native(t1w_mask_output, t1w_to_native_matrix, b0_output, native_mask_output)
@@ -307,7 +376,8 @@ def main():
     # subjects = get_subjects_to_process(dwi_root_dir, out_dir, ses)
 
     # Process problematic subjects again manually
-    subjects = ["sub-139895"]
+    subjects = ["sub-80035"]
+    # subjects = ["sub-139895"]
                     # "sub-120927", "sub-101848", "sub-154095", "sub-139350", 
                     # "sub-134038", "sub-153265", "sub-141692", "sub-178055", "sub-182146", 
                     # "sub-116054", "sub-163261"]    
