@@ -62,48 +62,90 @@ def extract_b0(input_path, output_path):
 # THEN TRY TO GET SPM TO WORK. SPM IS NOT RUNNING AT ALL.
 ##########################################################
 
-def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, transform_t1_mni, out_t1_masks):
+def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, transform_t1_mni, out_t1_masks, mni_mask_reoriented, t1w_reoriented):
     """
-    Transform the MNI space mask to T1w space with proper resampling.
+    Transform the MNI space mask to T1w space.
+
+    Args:
+        mni_mask (Path): Path to the MNI space mask.
+        t1w_brain (Path): Path to the T1w brain image.
+        output_file (Path): Path to save the transformed mask.
+        transform_mni_t1 (Path): Path to save the MNI to T1w transformation matrix.
+        transform_t1_mni (Path): Path to save the T1w to MNI transformation matrix.
+        out_t1_masks (Path): Path to the output directory.
+        mni_mask_reoriented (Path): Path to save the reoriented MNI mask.
+        t1w_reoriented (Path): Path to save the reoriented T1w mask.
     """
     # Create output directory if it doesn't exist
     output_file.parent.mkdir(parents=True, exist_ok=True)
     
     # Path to standard MNI template in FSL
     fsl_dir = os.environ.get('FSLDIR', '/usr/local/fsl')
-    # Create a 0.8mm version from the 1mm template if needed
-    mni_template_original = Path(fsl_dir) / 'data/standard/MNI152_T1_1mm_brain.nii.gz'
-    mni_template_08mm = Path(tmp_dir) / 'MNI152_T1_0.8mm_brain.nii.gz'
-
-    # Resample to 0.8mm resolution
-    cmd_resample = f"flirt -in {mni_template_original} -ref {mni_template_original} -out {mni_template_08mm} -applyisoxfm 0.8"
-    subprocess.run(cmd_resample, shell=True, check=True)
-
-    # Then use this resampled template
-    mni_template = mni_template_08mm
+    mni_template = Path(fsl_dir) / 'data/standard/MNI152_T1_2mm_brain.nii.gz'
     
     # Create temporary directory for transforms 
     tmp_dir = Path(out_t1_masks / "transforms")
     tmp_dir.mkdir(parents=True, exist_ok=True)
     
-    # STEP 2: Run FLIRT to register downsampled T1 to MNI
+    # Run FLIRT to register T1 to MNI
     cmd1 = f"flirt -in {t1w_brain} -ref {mni_template} -omat {transform_t1_mni} -dof 12"
     subprocess.run(cmd1, shell=True, check=True)
     
-    # STEP 3: Invert the matrix to get MNI->T1 transform
+    # Verify the file was created
+    if not transform_t1_mni.exists():
+        print(f"WARNING: Transform file {transform_t1_mni} was not created!")
+    else:
+        print(f"Successfully created matrix for T1w to MNI: {transform_t1_mni}")
+    
+    # Now, invert the matrix to get MNI->T1 transform
     cmd_convert = f"convert_xfm -omat {transform_mni_t1} -inverse {transform_t1_mni}"
     subprocess.run(cmd_convert, shell=True, check=True)
     
-    # STEP 4: Apply the transformation to the MNI mask
-    # Option A: Transform to high-res T1w space directly (may cause interpolation artifacts)
+    # Verify the inverse transform file was created
+    if not transform_mni_t1.exists():
+        print(f"WARNING: Inverse transform file {transform_mni_t1} was not created!")
+    else:
+        print(f"Successfully created matrix for MNI to T1w: {transform_mni_t1}")
+    
+    # Reorient the MNI mask to neurological (currently radiological)
+    # Load the image
+    img = nib.load(mni_mask)
+
+    # Simple way to flip from radiological to neurological
+    # This flips the x-axis which is the difference between radiological and neurological
+    data = img.get_fdata()
+    flipped_data = data[::-1, :, :]  # Flip the first dimension (L-R axis)
+
+    # Create new image with flipped data, keeping original header and affine
+    # but update the affine to reflect the flip
+    affine = img.affine.copy()
+    affine[0, :] = -affine[0, :]  # Negate the x-direction in the affine
+
+    reoriented_img = nib.Nifti1Image(flipped_data, affine, img.header)
+    nib.save(reoriented_img, mni_mask_reoriented)
+
+    # Apply the transformation matrix to the MNI mask
     cmd2 = (
-        f"flirt -in {mni_mask} -ref {t1w_brain} "
+        f"flirt -in {mni_mask_reoriented} -ref {t1w_brain} "
         f"-out {output_file} -applyxfm -init {transform_mni_t1} -interp nearestneighbour"
     )
     subprocess.run(cmd2, shell=True, check=True)
     
     print(f"Transformed MNI Schaefer/Harvard-Oxford mask to T1w space: {output_file}")
-    
+
+    # Now flip the t1w mask back to radiological
+    img = nib.load(output_file)
+    data = img.get_fdata()
+    flipped_data = data[::-1, :, :]  # Flip the first dimension (L-R axis)
+
+    # Create new image with flipped data, keeping original header and affine
+    # but update the affine to reflect the flip
+    affine = img.affine.copy()
+    affine[0, :] = -affine[0, :]  # Negate the x-direction in the affine
+
+    t1w_reoriented_mask = nib.Nifti1Image(flipped_data, affine, img.header)
+    nib.save(t1w_reoriented, t1w_reoriented_mask)
+
     return {
         "transform_matrix": transform_mni_t1,
         "transformed_mask": output_file
@@ -116,7 +158,6 @@ def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, tra
 #     Args:
 #         mni_mask (Path): Path to the MNI space mask.
 #         t1w_brain (Path): Path to the T1w brain image.
-#         output_file (Path): Path to save the transformed mask.
 #         out_t1_masks (Path): Path to the output directory.
 #         subject (str): Subject ID.
 #         ses (str): Timepoint.
@@ -254,11 +295,11 @@ def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, tra
     
 
 
-def transform_t1w_to_native(t1w_mask, t1w_to_native_matrix, b0_ref, output_path):
+def transform_t1w_to_native(t1w_mask_reoriented, t1w_to_native_matrix, b0_ref, output_path):
     """Transform the T1w space mask to native space using the transformation matrix.
     
     Args:
-        t1w_mask (Path): Path to the T1w space mask.
+        t1w_mask_reoriented (Path): Path to the T1w space reoriented mask.
         t1w_to_native_matrix (Path): Path to the T1w to native space transformation matrix.
         b0_ref (Path): Path to the b0 reference image.
         output_path (Path): Path to save the native space mask.
@@ -267,7 +308,7 @@ def transform_t1w_to_native(t1w_mask, t1w_to_native_matrix, b0_ref, output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Use FSL's flirt to apply the transformation matrix
-    cmd = f"flirt -in {t1w_mask} -ref {b0_ref} -out {output_path} -applyxfm -init {t1w_to_native_matrix} -interp nearestneighbour"
+    cmd = f"flirt -in {t1w_mask_reoriented} -ref {b0_ref} -out {output_path} -applyxfm -init {t1w_to_native_matrix} -interp nearestneighbour"
     subprocess.run(cmd, shell=True, check=True)
     print(f"Transformed T1w mask to native space: {output_path}")
 
@@ -302,7 +343,10 @@ def process_subject(subject, dwi_root_dir, anat_dir, mni_mask, out_dir, ses):
     
     # Define output paths and file names
     b0_output = out_b0 / f"{subject}_{ses}_b0.nii.gz"
+    b0_reoriented = out_b0 / f"{subject}_{ses}_b0_reoriented.nii.gz"
     t1w_mask_output = out_t1_masks / f"{subject}_{ses}_schaefer_oxford_t1w_space_mask.nii.gz"
+    mni_mask_reoriented = out_t1_masks / f"{subject}_{ses}_reoriented_schaefer_oxford_mni_mask.nii.gz"
+    t1w_reoriented = out_t1_masks / f"{subject}_{ses}_schaefer_oxford_t1w_reoriented_mask.nii.gz"
     transforms_dir = out_t1_masks / "transforms"
     transform_mni_t1 = transforms_dir / f"{subject}_{ses}_mni_to_t1.mat"
     transform_t1_mni = transforms_dir / f"{subject}_{ses}_t1_to_mni.mat"
@@ -323,11 +367,11 @@ def process_subject(subject, dwi_root_dir, anat_dir, mni_mask, out_dir, ses):
             extract_b0(eddy_corrected, b0_output)
         
         # Step 2: Transform MNI mask to T1w space
-        transform_mni_to_t1w(mni_mask, t1w_brain, t1w_mask_output, transform_mni_t1, transform_t1_mni, out_t1_masks)
+        transform_mni_to_t1w(mni_mask, t1w_brain, t1w_mask_output, transform_mni_t1, transform_t1_mni, out_t1_masks, mni_mask_reoriented, t1w_reoriented)
         # transform_mni_to_t1w(mni_mask, t1w_brain, t1w_mask_output, out_t1_masks, subject, ses)
 
         # Step 3: Transform T1w mask to native space using the transformation matrix
-        transform_t1w_to_native(t1w_mask_output, t1w_to_native_matrix, b0_output, native_mask_output)
+        transform_t1w_to_native(t1w_reoriented, t1w_to_native_matrix, b0_reoriented, native_mask_output)
 
         print(f"Successfully created native space mask for {subject}")
 
@@ -374,8 +418,8 @@ def main():
     # subjects = get_subjects_to_process(dwi_root_dir, out_dir, ses)
 
     # Process problematic subjects again manually
-    subjects = ["sub-46808"]
-    # subjects = ["sub-139895"]
+    # subjects = ["sub-46808"]
+    subjects = ["sub-139895"]
                     # "sub-120927", "sub-101848", "sub-154095", "sub-139350", 
                     # "sub-134038", "sub-153265", "sub-141692", "sub-178055", "sub-182146", 
                     # "sub-116054", "sub-163261"]    
