@@ -62,7 +62,7 @@ def extract_b0(input_path, output_path):
 # THEN TRY TO GET SPM TO WORK. SPM IS NOT RUNNING AT ALL.
 ##########################################################
 
-def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, transform_t1_mni, out_t1_masks, mni_mask_reoriented):
+def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, transform_t1_mni, out_t1_masks, mni_mask_reoriented, subject_id):
     """
     Transform the MNI space mask to T1w space.
 
@@ -123,29 +123,45 @@ def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, tra
     cmd = ["fslorient", "-copysform2qform", mni_mask_reoriented]
     subprocess.run(cmd, check=True)
 
-    # Apply the transformation matrix to the MNI mask
-    cmd2 = (
-        f"flirt -in {mni_mask_reoriented} -ref {t1w_brain} "
-        f"-out {output_file} -applyxfm -init {transform_mni_t1} -interp nearestneighbour"
+#     # Apply the transformation matrix to the MNI mask
+#     cmd2 = (
+#         f"flirt -in {mni_mask_reoriented} -ref {t1w_brain} "
+#         f"-out {output_file} -applyxfm -init {transform_mni_t1} -interp nearestneighbour"
+#     )
+#     subprocess.run(cmd2, shell=True, check=True)
+
+    # Try FNIRT for funsies 
+    # Create FNIRT-specific file paths
+    fnirt_dir = Path(tmp_dir / subject_id)
+    fnirt_dir.mkdir(parents=True, exist_ok=True)
+
+    flirt_mat = fnirt_dir / f"{subject_id}_flirt.mat"
+    flirt_output = fnirt_dir / f"{subject_id}_flirt_output.nii.gz"
+    fnirt_coef = fnirt_dir / f"{subject_id}_fnirt_coef.nii.gz"
+    fnirt_invwarp = fnirt_dir / f"{subject_id}_invwarp.nii.gz"
+    
+    # Step 1: Initial linear registration with FLIRT
+    print("Step 1: Running initial FLIRT registration...")
+    cmd_flirt = f"flirt -in {mni_mask_reoriented} -ref {t1w_brain} -omat {flirt_mat} -out {flirt_output}"
+    subprocess.run(cmd_flirt, shell=True, check=True)
+    
+    # Step 2: Non-linear registration with FNIRT
+    print("Step 2: Running FNIRT non-linear registration...")
+    cmd_fnirt = (
+        f"fnirt --in={mni_mask_reoriented} --ref={t1w_brain} "
+        f"--aff={flirt_mat} --cout={fnirt_coef} "
+        f"--config=T1_2_MNI152_2mm"
     )
-    subprocess.run(cmd2, shell=True, check=True)
+    subprocess.run(cmd_fnirt, shell=True, check=True)
     
     print(f"Transformed MNI Schaefer/Harvard-Oxford mask to T1w space: {output_file}")
-
-    cmd = f"fslhd {mni_mask_reoriented}"
-    result1 = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    print(result1.stdout)
-
-    cmd = f"fslhd {t1w_brain}"
-    result2 = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    print(result2.stdout)
 
     return {
         "transform_matrix": transform_mni_t1,
         "transformed_mask": output_file
     }
 
-# def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, out_t1_masks, subject, ses):
+# def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, out_t1_masks, subject, ses, transform_t1_mni, transform_mni_t1):
 #     """
 #     Transform the MNI space mask to T1w space using SPM.
 
@@ -223,13 +239,13 @@ def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, tra
 #     norm_result = normalize.run()
     
 #     # Get the deformation field (T1w -> MNI)
-#     forward_def_field = norm_result.outputs.deformation_field
+#     forward_def = norm_result.outputs.deformation_field
     
 #     # 2. Invert the deformation field
 #     print("Inverting the deformation field...")
 #     invert_def = spmu.ApplyInverseDeformation()
 #     invert_def.inputs.in_files = str(mni_mask_unzipped)
-#     invert_def.inputs.deformation = forward_def_field
+#     invert_def.inputs.deformation_field = forward_def
 #     invert_def.inputs.target = str(t1w_unzipped) 
 #     invert_result = invert_def.run()
     
@@ -249,22 +265,22 @@ def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, tra
 #     apply_result = apply_def.run()
     
 #     # Get the transformed mask
-#     transformed_mask = Path(apply_result.outputs.out_files[0])
+#     output_file = Path(apply_result.outputs.out_files[0])
     
-#     if transformed_mask.exists():
+#     if output_file.exists():
 #         # Compress the result and move to the final output location
-#         gzipped_mask = Path(f"{transformed_mask}.gz")
+#         gzipped_mask = Path(f"{output_file}.gz")
         
 #         # Use Python's gzip to compress
 #         try:
-#             with open(transformed_mask, 'rb') as f_in:
+#             with open(output_file, 'rb') as f_in:
 #                 with gzip.open(gzipped_mask, 'wb') as f_out:
 #                     f_out.write(f_in.read())
 #         except Exception as e:
 #             print(f"Error compressing output file: {e}")
 #             # Try using command line gzip as fallback
 #             try:
-#                 subprocess.run(["gzip", "-f", str(transformed_mask)], check=True)
+#                 subprocess.run(["gzip", "-f", str(output_file)], check=True)
 #             except Exception as e2:
 #                 print(f"Command-line gzip also failed: {e2}")
         
@@ -307,7 +323,7 @@ def transform_t1w_to_native(t1w_mask, t1w_to_native_matrix, b0_ref, output_path)
     print(f"Transformed T1w mask to native space: {output_path}")
 
 
-def process_subject(subject, dwi_root_dir, anat_dir, mni_mask, out_dir, ses):
+def process_subject(subject, dwi_root_dir, anat_dir, mni_mask, out_dir, ses, subject_id):
     """
     Process a single subject's DWI data.
     
@@ -359,8 +375,8 @@ def process_subject(subject, dwi_root_dir, anat_dir, mni_mask, out_dir, ses):
             extract_b0(eddy_corrected, b0_output)
         
         # Step 2: Transform MNI mask to T1w space
-        transform_mni_to_t1w(mni_mask, t1w_brain, t1w_mask_output, transform_mni_t1, transform_t1_mni, out_t1_masks, mni_mask_reoriented)
-        # transform_mni_to_t1w(mni_mask, t1w_brain, t1w_mask_output, out_t1_masks, subject, ses)
+        transform_mni_to_t1w(mni_mask, t1w_brain, t1w_mask_output, transform_mni_t1, transform_t1_mni, out_t1_masks, mni_mask_reoriented, subject_id)
+        # transform_mni_to_t1w(mni_mask, t1w_brain, t1w_mask_output, out_t1_masks, subject, ses, transform_t1_mni, transform_mni_t1)
 
         # Step 3: Transform T1w mask to native space using the transformation matrix
         # transform_t1w_to_native(t1w_mask_output, t1w_to_native_matrix, b0_output, native_mask_output)
@@ -419,7 +435,7 @@ def main():
     # Process each subject
     results = []
     for subject in subjects:
-        result = process_subject(subject, dwi_root_dir, anat_dir, mni_mask, out_dir, ses)
+        result = process_subject(subject, dwi_root_dir, anat_dir, mni_mask, out_dir, ses, subject)
         if result:
             results.append(result)
             
