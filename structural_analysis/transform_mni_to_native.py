@@ -123,36 +123,12 @@ def transform_mni_to_t1w(mni_mask, t1w_brain, output_file, transform_mni_t1, tra
     cmd = ["fslorient", "-copysform2qform", mni_mask_reoriented]
     subprocess.run(cmd, check=True)
 
-#     # Apply the transformation matrix to the MNI mask
-#     cmd2 = (
-#         f"flirt -in {mni_mask_reoriented} -ref {t1w_brain} "
-#         f"-out {output_file} -applyxfm -init {transform_mni_t1} -interp nearestneighbour"
-#     )
-#     subprocess.run(cmd2, shell=True, check=True)
-
-    # Try FNIRT for funsies 
-    # Create FNIRT-specific file paths
-    fnirt_dir = Path(tmp_dir / subject_id)
-    fnirt_dir.mkdir(parents=True, exist_ok=True)
-
-    flirt_mat = fnirt_dir / f"{subject_id}_flirt.mat"
-    flirt_output = fnirt_dir / f"{subject_id}_flirt_output.nii.gz"
-    fnirt_coef = fnirt_dir / f"{subject_id}_fnirt_coef.nii.gz"
-    fnirt_invwarp = fnirt_dir / f"{subject_id}_invwarp.nii.gz"
-    
-    # Step 1: Initial linear registration with FLIRT
-    print("Step 1: Running initial FLIRT registration...")
-    cmd_flirt = f"flirt -in {mni_mask_reoriented} -ref {t1w_brain} -omat {flirt_mat} -out {flirt_output}"
-    subprocess.run(cmd_flirt, shell=True, check=True)
-    
-    # Step 2: Non-linear registration with FNIRT
-    print("Step 2: Running FNIRT non-linear registration...")
-    cmd_fnirt = (
-        f"fnirt --in={mni_mask_reoriented} --ref={t1w_brain} "
-        f"--aff={flirt_mat} --cout={fnirt_coef} "
-        f"--config=T1_2_MNI152_2mm"
+    # Apply the transformation matrix to the MNI mask
+    cmd2 = (
+        f"flirt -in {mni_mask_reoriented} -ref {t1w_brain} "
+        f"-out {output_file} -applyxfm -init {transform_mni_t1} -interp nearestneighbour"
     )
-    subprocess.run(cmd_fnirt, shell=True, check=True)
+    subprocess.run(cmd2, shell=True, check=True)
     
     print(f"Transformed MNI Schaefer/Harvard-Oxford mask to T1w space: {output_file}")
 
