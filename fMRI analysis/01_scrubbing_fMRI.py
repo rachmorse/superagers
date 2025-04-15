@@ -166,7 +166,7 @@ def process_subject(
                 method="interpolate",
             )
         else:
-            print(f"{subject} already scrubbed!")
+            print(f"{subject} already scrubbed at {scrubbed_file}")
     except Exception as e:
         print(f"Error processing subject {subject}: {e}")
         with open(error_log, "a") as f:

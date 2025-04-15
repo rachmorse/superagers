@@ -240,7 +240,7 @@ def main(
 
 
 if __name__ == "__main__":
-    ses = "01"
+    ses = "02"
     threshold = "0.5"
     output_directory = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data")
     root_directory = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
