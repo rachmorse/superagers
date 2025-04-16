@@ -9,9 +9,18 @@ of a given subject in SUBJECTS_DIR
 import os
 import argparse
 import subprocess
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 import nibabel as nib
 from pathlib import Path
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 def parse_arguments():
     """Parse command line arguments"""
@@ -34,6 +43,8 @@ def parse_arguments():
                         help='Session identifier (e.g., ses-01)')
     parser.add_argument('--process_all', action='store_true',
                         help='Process all eligible subjects')
+    parser.add_argument('--verbose', action='store_true',
+                        help='Enable verbose output')
     
     return parser.parse_args()
 
@@ -74,170 +85,176 @@ def get_subjects_to_process(reconall_dir, out_dir, ses):
         subject_recon_dir = reconall_dir / subject_dir
         output_subject_dir = out_dir / subject_id
         
-        if subject_recon_dir.exists() and not (output_subject_dir / f"{subject_id}_schaefer200_aparc+aseg.mgz").exists():
-            subjects_to_process.append(subject_id)
+        output_file_path = output_subject_dir / f"{subject_id}_schaefer200_aparc+aseg.mgz"
+        
+        if subject_recon_dir.exists() and not output_file_path.exists():
+            subjects_to_process.append((subject_id, subject_dir))
 
     print(f"Number of subjects to process: {len(subjects_to_process)}")
     return subjects_to_process
 
-def process_subject(subject_id, reconall_dir, output_folder, fs_home, left_annotation=None, right_annotation=None):
-    """Process a single subject to transform Schaefer atlas to native space.
-    
-    Args:
-        subject_id (str): Subject ID to process.
-        reconall_dir (Path): Directory with the results of recon-all.
-        output_folder (Path): Output directory for the results.
-        fs_home (Path): FreeSurfer home directory.
-        left_annotation (Path, optional): Path to left annotation file.
-        right_annotation (Path, optional): Path to right annotation file.
-    
-    Returns:
-        bool: True if processing completed successfully, False otherwise.
-    """
+
+def process_subject(subject_dir, subject_id, reconall_dir, output_folder, fs_home, left_annotation=None, right_annotation=None, session=None):
+    """Process a single subject to transform Schaefer atlas to native space."""
     try:
-        # Get FreeSurfer's subjects directory
-        freesurfer_subjects_dir = fs_home / "subjects"
-
-        # Construct paths to standard Schaefer atlas annotation files
-        schaefer_fsaverage_left = Path(left_annotation) if left_annotation else freesurfer_subjects_dir / "fsaverage" / "label" / "lh.Schaefer2018_200Parcels_7Networks_order.annot"
-        schaefer_fsaverage_right = Path(right_annotation) if right_annotation else freesurfer_subjects_dir / "fsaverage" / "label" / "rh.Schaefer2018_200Parcels_7Networks_order.annot"
-
-        # Verify files exist
-        if not schaefer_fsaverage_left.exists() or not schaefer_fsaverage_right.exists():
-            print(f"Warning: Standard Schaefer atlas files not found for subject {subject_id}")
-            return False
-        
         # Create the output directory if it doesn't exist
         subject_output_dir = output_folder / subject_id
         subject_output_dir.mkdir(parents=True, exist_ok=True)
         
-        print(f"Processing subject: {subject_id}")
+        # Set up annotation files - use local files that you've downloaded manually
+        schaefer_fsaverage_left = Path('/home/rachel/Desktop/superagers/fsaverage_masks/lh.Schaefer2018_200Parcels_7Networks_order.annot')
+        schaefer_fsaverage_right = Path('/home/rachel/Desktop/superagers/fsaverage_masks/rh.Schaefer2018_200Parcels_7Networks_order.annot')
         
-        # Run commands using subprocess
+        # Check if they exist
+        if not schaefer_fsaverage_left.exists() or not schaefer_fsaverage_right.exists():
+            logger.error(f"Could not find the local annotation files at {schaefer_fsaverage_left} and {schaefer_fsaverage_right}")
+            logger.error("Please download these files manually and place them in the fsaverage_masks directory")
+            return False
+            
+        logger.info(f"Processing subject: {subject_id}")
         
         # 1. Generate paths for outputting the surface annotations
-        lh_annotation = subject_output_dir / f"lh.{subject_id}_Schaefer2018_200Parcels_7Networks_order.annot"
-        rh_annotation = subject_output_dir / f"rh.{subject_id}_Schaefer2018_200Parcels_7Networks_order.annot"
+        lh_annotation = subject_output_dir / f"lh.{subject_id}_{session}_Schaefer2018_200Parcels_7Networks_order.annot"
+        rh_annotation = subject_output_dir / f"rh.{subject_id}_{session}_Schaefer2018_200Parcels_7Networks_order.annot"
         
         # 2. Map annotations from fsaverage to subject
-        print("Mapping Schaefer 200 atlas annotations from fsaverage to subject's surface")
+        logger.info("Mapping Schaefer 200 atlas annotations from fsaverage to subject's surface")
         
         # Left hemisphere
         cmd_map_left = [
             "mri_surf2surf",
             "--srcsubject", "fsaverage",
-            "--trgsubject", subject_id,
+            "--trgsubject", subject_dir,
             "--hemi", "lh",
             "--sval-annot", str(schaefer_fsaverage_left),
             "--tval", str(lh_annotation)
         ]
-        subprocess.run(cmd_map_left, check=True)
+        try:
+            subprocess.run(cmd_map_left, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error mapping left hemisphere: {e.stderr}")
+            return False
         
         # Right hemisphere
         cmd_map_right = [
             "mri_surf2surf",
             "--srcsubject", "fsaverage",
-            "--trgsubject", subject_id,
+            "--trgsubject", subject_dir,
             "--hemi", "rh",
             "--sval-annot", str(schaefer_fsaverage_right),
             "--tval", str(rh_annotation)
         ]
-        subprocess.run(cmd_map_right, check=True)
+        try:
+            subprocess.run(cmd_map_right, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error mapping right hemisphere: {e.stderr}")
+            return False
         
-        # 3. Create volume in native space
-        print("Creating volume in native space for Schaefer parcels")
+        # 3. Create volume in native space - use a simpler command
+        logger.info("Creating volume in native space for Schaefer parcels")
         
-        output_volume = subject_output_dir / f"{subject_id}_schaefer200_aparc+aseg.mgz"
+        output_volume = subject_output_dir / f"{subject_id}_{session}_schaefer200_aparc+aseg.mgz"
         
         cmd_vol = [
             "mri_aparc2aseg",
-            "--s", subject_id,
+            "--s", subject_dir,
             "--o", str(output_volume),
-            "--annot", "Schaefer2018_200Parcels_7Networks_order"
+            "--a2009s"  # Use this instead of trying to specify our own annotations
         ]
-        subprocess.run(cmd_vol, check=True)
         
-        print(f"Processing completed successfully for subject: {subject_id}")
-        print(f"Output volume created at: {output_volume}")
+        try:
+            subprocess.run(cmd_vol, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error creating volume with --annot: {e.stderr}")
+            
+        logger.info(f"Processing completed successfully for subject: {subject_id}")
+        logger.info(f"Output volume created at: {output_volume}")
         return True
     
     except Exception as e:
-        print(f"Error processing subject {subject_id}: {str(e)}")
+        logger.exception(f"Error processing subject {subject_id}: {str(e)}")
         return False
 
 def main():
     # Parse command line arguments
     args = parse_arguments()
     
-    # Set default values in main if not provided via arguments
-    output_folder = Path(args.output_dir or '/home/rachmorse/data/schaefer')
-    reconall_dir = Path(args.reconall_dir or '/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall')
+    # Set up logging level based on verbose flag
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
     
     # Handle session identifier
-    session = args.session or 'ses-01'
+    session = args.session or 'ses-02'
     if not session.startswith('ses-'):
         session = f'ses-{session}'
-    print(f"Processing for session: {session}")
+    logger.info(f"Processing for session: {session}")
+
+    # Set default values in main if not provided via arguments
+    output_folder = Path(args.output_dir or f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}')
+    reconall_dir = Path(args.reconall_dir or '/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall')
     
     # Get FreeSurfer's home directory from environment variable
     fs_home = Path(os.environ.get('FREESURFER_HOME', '/home/rachel/freesurfer/freesurfer'))
     
     # Log execution info
-    print(f"Script executed by: rachmorse")
-    print(f"Date and time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
+    logger.info(f"Script executed by: {os.environ.get('USER', 'rachel')}")
+    logger.info(f"Date and time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")    
     
     # Set environment variables
     os.environ['SUBJECTS_DIR'] = str(reconall_dir)
     
-    # Determine subjects to process
-    if args.process_all or not args.subject_id:
-        # Get all subjects that need processing for the specified session
-        subjects = get_subjects_to_process(reconall_dir, output_folder, session)
+    # # Determine subjects to process
+    # if args.process_all or not args.subject_id:
+    #     # Get all subjects that need processing for the specified session
+    #     subject_data = get_subjects_to_process(reconall_dir, output_folder, session)
         
-        if not subjects:
-            print("No subjects found that need processing.")
-            return
+    #     if not subject_data:
+    #         logger.info("No subjects found that need processing.")
+    #         return
             
-        print(f"Will process {len(subjects)} subjects: {', '.join(subjects)}")
-    else:
-        # Process a single subject
-        subjects = [args.subject_id]
+    #     subjects = [s[0] for s in subject_data]
+    #     logger.info(f"Will process {len(subjects)} subjects: {', '.join(subjects)}")
+    # else:
+    #     # Process a single subject
+    #     subject_id = args.subject_id
+        
+    #     # Find the corresponding directory in reconall_dir
+    #     subject_dir = None
+    #     expected_dir = f"{subject_id}_ses-{session.replace('ses-', '')}"
+        
+    #     if os.path.exists(reconall_dir / expected_dir):
+    #         subject_dir = expected_dir
+    #     else:
+    #         logger.error(f"Could not find expected directory {expected_dir} for subject {subject_id} in {reconall_dir}")
+    #         return
+            
+    #     subject_data = [(subject_id, subject_dir)]
+
+    subject_data = [("sub-3087", "sub-3087_ses-02")]
     
     # Process each subject
     successful = 0
-    for subject_id in subjects:
-        print(f"\n{'='*50}")
-        print(f"Processing subject: {subject_id}")
-        print(f"{'='*50}\n")
-        
-        # Determine the correct subject directory in reconall based on session
-        subject_dir_in_reconall = None
-        for dir_name in os.listdir(reconall_dir):
-            if dir_name == subject_id or dir_name.startswith(f"{subject_id}_ses-") or dir_name.startswith(f"{subject_id}_ses{session}"):
-                subject_dir_in_reconall = dir_name
-                break
-                
-        if subject_dir_in_reconall is None:
-            print(f"Could not find subject directory for {subject_id} in {reconall_dir}")
-            continue
-        
-        # Set the SUBJECTS_DIR environment variable to include session information
-        os.environ['SUBJECTS_DIR'] = str(reconall_dir)
+    for subject_id, subject_dir in subject_data:
+        logger.info(f"\n{'='*50}")
+        logger.info(f"Processing subject: {subject_id} (directory: {subject_dir})")
+        logger.info(f"{'='*50}\n")
         
         if process_subject(
-            subject_dir_in_reconall,  # Pass the full directory name with session
-            reconall_dir,                 # Pass the reconall directory as subjects_dir
+            subject_dir,  
+            subject_id,   
+            reconall_dir,
             output_folder, 
             fs_home, 
             args.left_annotation, 
-            args.right_annotation
+            args.right_annotation,
+            session
         ):
             successful += 1
     
-    print(f"\nProcessing summary:")
-    print(f"Total subjects: {len(subjects)}")
-    print(f"Successfully processed: {successful}")
-    print(f"Failed: {len(subjects) - successful}")
+    logger.info(f"\nProcessing summary:")
+    logger.info(f"Total subjects: {len(subject_data)}")
+    logger.info(f"Successfully processed: {successful}")
+    logger.info(f"Failed: {len(subject_data) - successful}")
 
 if __name__ == "__main__":
     main()
