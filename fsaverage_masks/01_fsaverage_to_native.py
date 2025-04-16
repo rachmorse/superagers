@@ -28,7 +28,7 @@ def parse_arguments():
                         help='Path to right annotation file for Schaefer 200')
     parser.add_argument('--output_dir', 
                         help='Output directory')
-    parser.add_argument('--data_root', 
+    parser.add_argument('--reconall_dir', 
                         help='Root directory containing subject data')
     parser.add_argument('--session', 
                         help='Session identifier (e.g., ses-01)')
@@ -37,12 +37,12 @@ def parse_arguments():
     
     return parser.parse_args()
 
-def get_subjects_to_process(data_root, out_dir, ses):
+def get_subjects_to_process(reconall_dir, out_dir, ses):
     """Generate a list of subjects to process based on whether they have
     recon-all done for the specified timepoint.
 
     Args:
-        data_root (Path): Path to the directory containing the recon-all results.
+        reconall_dir (Path): Path to the directory containing the recon-all results.
         out_dir (Path): Path to the output directory where the results will be saved.
         ses (str): Session (e.g., ses-01).
         
@@ -52,7 +52,7 @@ def get_subjects_to_process(data_root, out_dir, ses):
     subjects_to_process = []
 
     # Iterate over all possible subject directories
-    for subject_dir in os.listdir(data_root):
+    for subject_dir in os.listdir(reconall_dir):
         # Check if it's a subject directory with session (sub-xxx_ses-yy format)
         if not subject_dir.startswith("sub-"):
             continue
@@ -71,7 +71,7 @@ def get_subjects_to_process(data_root, out_dir, ses):
             subject_id = subject_dir
         
         # Check if the required directory exists and hasn't been processed yet
-        subject_recon_dir = data_root / subject_dir
+        subject_recon_dir = reconall_dir / subject_dir
         output_subject_dir = out_dir / subject_id
         
         if subject_recon_dir.exists() and not (output_subject_dir / f"{subject_id}_schaefer200_aparc+aseg.mgz").exists():
@@ -80,12 +80,12 @@ def get_subjects_to_process(data_root, out_dir, ses):
     print(f"Number of subjects to process: {len(subjects_to_process)}")
     return subjects_to_process
 
-def process_subject(subject_id, subjects_dir, output_folder, fs_home, left_annotation=None, right_annotation=None):
+def process_subject(subject_id, reconall_dir, output_folder, fs_home, left_annotation=None, right_annotation=None):
     """Process a single subject to transform Schaefer atlas to native space.
     
     Args:
         subject_id (str): Subject ID to process.
-        subjects_dir (Path): Directory with the results of recon-all.
+        reconall_dir (Path): Directory with the results of recon-all.
         output_folder (Path): Output directory for the results.
         fs_home (Path): FreeSurfer home directory.
         left_annotation (Path, optional): Path to left annotation file.
@@ -112,14 +112,12 @@ def process_subject(subject_id, subjects_dir, output_folder, fs_home, left_annot
         subject_output_dir.mkdir(parents=True, exist_ok=True)
         
         print(f"Processing subject: {subject_id}")
-        print(f"Using Schaefer 200 parcellation atlas")
-        print(f"Output directory: {subject_output_dir}")
         
         # Run commands using subprocess
         
-        # 1. Generate paths for surface annotations
-        lh_annotation = subject_output_dir / f"lh.{subject_id}_Schaefer2018_200Parcels.annot"
-        rh_annotation = subject_output_dir / f"rh.{subject_id}_Schaefer2018_200Parcels.annot"
+        # 1. Generate paths for outputting the surface annotations
+        lh_annotation = subject_output_dir / f"lh.{subject_id}_Schaefer2018_200Parcels_7Networks_order.annot"
+        rh_annotation = subject_output_dir / f"rh.{subject_id}_Schaefer2018_200Parcels_7Networks_order.annot"
         
         # 2. Map annotations from fsaverage to subject
         print("Mapping Schaefer 200 atlas annotations from fsaverage to subject's surface")
@@ -146,42 +144,16 @@ def process_subject(subject_id, subjects_dir, output_folder, fs_home, left_annot
         ]
         subprocess.run(cmd_map_right, check=True)
         
-        # 3. Create label files for each Schaefer parcel
-        print("Creating label files for each Schaefer parcel")
-        
-        # Left hemisphere
-        cmd_label_left = [
-            "mri_annotation2label",
-            "--subject", subject_id,
-            "--hemi", "lh",
-            "--annotation", str(lh_annotation),
-            "--outdir", str(subject_output_dir)
-        ]
-        subprocess.run(cmd_label_left, check=True)
-        
-        # Right hemisphere
-        cmd_label_right = [
-            "mri_annotation2label",
-            "--subject", subject_id,
-            "--hemi", "rh",
-            "--annotation", str(rh_annotation),
-            "--outdir", str(subject_output_dir)
-        ]
-        subprocess.run(cmd_label_right, check=True)
-        
-        # 4. Create volume in native space
+        # 3. Create volume in native space
         print("Creating volume in native space for Schaefer parcels")
         
         output_volume = subject_output_dir / f"{subject_id}_schaefer200_aparc+aseg.mgz"
         
-        # Note: We're using "Schaefer2018_200Parcels" as the annotation name
-        # Update this if your FreeSurfer installation uses a different naming convention
         cmd_vol = [
             "mri_aparc2aseg",
             "--s", subject_id,
-            "--volmask",
             "--o", str(output_volume),
-            "--annot", "Schaefer2018_200Parcels"
+            "--annot", "Schaefer2018_200Parcels_7Networks_order"
         ]
         subprocess.run(cmd_vol, check=True)
         
@@ -198,9 +170,8 @@ def main():
     args = parse_arguments()
     
     # Set default values in main if not provided via arguments
-    subjects_dir = Path(args.subjects_dir or '/home/rachmorse/data/recon_all')
     output_folder = Path(args.output_dir or '/home/rachmorse/data/schaefer')
-    data_root = Path(args.data_root or '/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall')
+    reconall_dir = Path(args.reconall_dir or '/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall')
     
     # Handle session identifier
     session = args.session or 'ses-01'
@@ -216,12 +187,12 @@ def main():
     print(f"Date and time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
     
     # Set environment variables
-    os.environ['SUBJECTS_DIR'] = str(subjects_dir)
+    os.environ['SUBJECTS_DIR'] = str(reconall_dir)
     
     # Determine subjects to process
     if args.process_all or not args.subject_id:
         # Get all subjects that need processing for the specified session
-        subjects = get_subjects_to_process(data_root, output_folder, session)
+        subjects = get_subjects_to_process(reconall_dir, output_folder, session)
         
         if not subjects:
             print("No subjects found that need processing.")
@@ -241,21 +212,21 @@ def main():
         
         # Determine the correct subject directory in reconall based on session
         subject_dir_in_reconall = None
-        for dir_name in os.listdir(data_root):
+        for dir_name in os.listdir(reconall_dir):
             if dir_name == subject_id or dir_name.startswith(f"{subject_id}_ses-") or dir_name.startswith(f"{subject_id}_ses{session}"):
                 subject_dir_in_reconall = dir_name
                 break
                 
         if subject_dir_in_reconall is None:
-            print(f"Could not find subject directory for {subject_id} in {data_root}")
+            print(f"Could not find subject directory for {subject_id} in {reconall_dir}")
             continue
         
         # Set the SUBJECTS_DIR environment variable to include session information
-        os.environ['SUBJECTS_DIR'] = str(data_root)
+        os.environ['SUBJECTS_DIR'] = str(reconall_dir)
         
         if process_subject(
             subject_dir_in_reconall,  # Pass the full directory name with session
-            data_root,                 # Pass the reconall directory as subjects_dir
+            reconall_dir,                 # Pass the reconall directory as subjects_dir
             output_folder, 
             fs_home, 
             args.left_annotation, 
