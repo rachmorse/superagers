@@ -98,12 +98,12 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder, fs_hom
     """Process a single subject to transform Schaefer atlas to native space."""
     try:
         # Create the output directory if it doesn't exist
-        subject_output_dir = output_folder / subject_id
+        subject_output_dir = Path(f"{output_folder}/{subject_id}_{session}")
         subject_output_dir.mkdir(parents=True, exist_ok=True)
         
         # Set up annotation files - use local files that you've downloaded manually
         schaefer_fsaverage_left = Path('/home/rachel/Desktop/superagers/fsaverage_masks/lh.Schaefer2018_200Parcels_7Networks_order.annot')
-        schaefer_fsaverage_right = Path('/home/rachel/Desktop/superagers/fsaverage_masks/rh.Schaefer2018_200Parcels_7Networks_order.annot')
+        schaefer_fsaverage_right = Path('/home/rachel/Desktop/superagers/fsaverage_masks/rh.Schaefer2018_200Parcels_7Networks_order.annot')        
         
         # Check if they exist
         if not schaefer_fsaverage_left.exists() or not schaefer_fsaverage_right.exists():
@@ -114,8 +114,15 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder, fs_hom
         logger.info(f"Processing subject: {subject_id}")
         
         # 1. Generate paths for outputting the surface annotations
-        lh_annotation = subject_output_dir / f"lh.{subject_id}_{session}_Schaefer2018_200Parcels_7Networks_order.annot"
-        rh_annotation = subject_output_dir / f"rh.{subject_id}_{session}_Schaefer2018_200Parcels_7Networks_order.annot"
+        # lh_annotation = subject_output_dir / f"lh.{subject_id}_{session}_Schaefer2018_200Parcels_7Networks_order.annot"
+        # rh_annotation = subject_output_dir / f"rh.{subject_id}_{session}_Schaefer2018_200Parcels_7Networks_order.annot"
+        
+        # Put the output files where FreeSurfer expects them
+        output_label_dir = subject_output_dir / "label"
+        os.makedirs(output_label_dir, exist_ok=True)
+
+        lh_annotation = output_label_dir / f"lh.Schaefer2018_200Parcels_7Networks_order.annot"
+        rh_annotation = output_label_dir / f"rh.Schaefer2018_200Parcels_7Networks_order.annot"
         
         # 2. Map annotations from fsaverage to subject
         logger.info("Mapping Schaefer 200 atlas annotations from fsaverage to subject's surface")
@@ -150,28 +157,127 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder, fs_hom
             logger.error(f"Error mapping right hemisphere: {e.stderr}")
             return False
         
-        # 3. Create volume in native space - use a simpler command
+        # 3. Create volume in native space using Nipype
+
+        # Copy needed FreeSurfer files to the subject_output_dir
+        logger.info(f"Copying required FreeSurfer files to output directory: {subject_output_dir}")
+        
+        # Create necessary subdirectories in the output directory
+        output_surf_dir = subject_output_dir / "surf"
+        output_mri_dir = subject_output_dir / "mri"
+        os.makedirs(output_surf_dir, exist_ok=True)
+        os.makedirs(output_mri_dir, exist_ok=True)
+        
+        # Define paths to FreeSurfer files
+        reconall_surf = Path(f"{reconall_dir}/{subject_dir}/surf")
+        reconall_mri = Path(f"{reconall_dir}/{subject_dir}/mri")
+
+        # Define files to copy
+        import shutil
+        
+        # Surface files to copy
+        surface_files = [
+            reconall_surf / "lh.white",
+            reconall_surf / "rh.white",
+            reconall_surf / "lh.pial",
+            reconall_surf / "rh.pial"
+        ]
+        
+        # MRI files to copy
+        mri_files = [
+            reconall_mri / "ribbon.mgz",
+            reconall_mri / "lh.ribbon.mgz",
+            reconall_mri / "rh.ribbon.mgz"
+        ]
+        
+        # Copy surface files
+        for src_file in surface_files:
+            if src_file.exists():
+                dst_file = output_surf_dir / src_file.name
+                logger.info(f"Copying {src_file} to {dst_file}")
+                shutil.copy2(src_file, dst_file)
+            else:
+                logger.warning(f"Surface file not found: {src_file}")
+        
+        # Copy MRI files
+        for src_file in mri_files:
+            if src_file.exists():
+                dst_file = output_mri_dir / src_file.name
+                logger.info(f"Copying {src_file} to {dst_file}")
+                shutil.copy2(src_file, dst_file)
+            else:
+                logger.warning(f"MRI file not found: {src_file}")
+        
+        # Copy the schaefer_fsaverage_left and schaefer_fsaverage_right files to the output directory
+        # shutil.copy2(schaefer_fsaverage_left, output_label_dir / schaefer_fsaverage_left.name)
+        # shutil.copy2(schaefer_fsaverage_right, output_label_dir / schaefer_fsaverage_right.name)
+        
         logger.info("Creating volume in native space for Schaefer parcels")
         
         output_volume = subject_output_dir / f"{subject_id}_{session}_schaefer200_aparc+aseg.mgz"
-        
+
+        # Get the base annotation name for --annot (no hemi, no extension)
+        annot_base = "Schaefer2018_200Parcels_7Networks_order"
+
+        # Create a custom environment with SUBJECTS_DIR pointing to our output folder
+        custom_env = os.environ.copy()
+        custom_env["SUBJECTS_DIR"] = str(output_folder)  # Point to our output folder
+
         cmd_vol = [
             "mri_aparc2aseg",
             "--s", subject_dir,
-            "--o", str(output_volume),
-            "--a2009s"  # Use this instead of trying to specify our own annotations
+            "--annot", annot_base,
+            "--o", str(output_volume)
         ]
         
         try:
-            subprocess.run(cmd_vol, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            subprocess.run(cmd_vol, env=custom_env, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         except subprocess.CalledProcessError as e:
-            logger.error(f"Error creating volume with --annot: {e.stderr}")
+            logger.error(f"Error creating volume in native space: {e.stderr}")
+            return False
+
+        # # Import Nipype components
+        # from nipype.interfaces.freesurfer import Aparc2Aseg
+        
+        # # Set up the Aparc2Aseg interface
+        # aparc2aseg = Aparc2Aseg()
+        
+        # # Set all required inputs with correct paths
+        # aparc2aseg.inputs.subjects_dir = str(reconall_dir)  # Original subjects directory
+        # aparc2aseg.inputs.subject_id = subject_dir  # Subject directory name
+        # aparc2aseg.inputs.out_file = str(output_volume)  # Output file location
+
+        # # Surface files from reconall directory
+        # aparc2aseg.inputs.lh_white = str(reconall_surf/'lh.white')
+        # aparc2aseg.inputs.rh_white = str(reconall_surf/'rh.white')
+        # aparc2aseg.inputs.lh_pial = str(reconall_surf/'lh.pial')
+        # aparc2aseg.inputs.rh_pial = str(reconall_surf/'rh.pial')
+        # aparc2aseg.inputs.ribbon = str(reconall_mri/'ribbon.mgz')
+        # aparc2aseg.inputs.lh_ribbon = str(reconall_mri/'lh.ribbon.mgz')
+        # aparc2aseg.inputs.rh_ribbon = str(reconall_mri/'rh.ribbon.mgz')
+        
+        # # Annotation files from the output directory
+        # aparc2aseg.inputs.lh_annotation = str(lh_annotation)
+        # aparc2aseg.inputs.rh_annotation = str(rh_annotation)
+        # # aparc2aseg.inputs.annot_name = "Schaefer2018_200Parcels_7Networks_order"
+        
+        # # Additional options that can help
+        # aparc2aseg.inputs.label_wm = True  # Label white matter
+        # aparc2aseg.inputs.rip_unknown = True  # Replace unknown areas
+        
+        # # Run the command
+        # logger.info(f"Running: {aparc2aseg.cmdline}")
+        
+        # result = aparc2aseg.run()
+        
+        # if result.runtime.returncode != 0:
+        #     logger.error(f"Error creating volume: {result.runtime.stderr}")
+        #     return False
             
-        logger.info(f"Processing completed successfully for subject: {subject_id}")
-        logger.info(f"Output volume created at: {output_volume}")
+        logger.info(f"Successfully created volume at: {output_volume}")
         return True
-    
-    except Exception as e:
+            
+    except Exception as e:  # Add this missing except block to close the try at the beginning of the function
         logger.exception(f"Error processing subject {subject_id}: {str(e)}")
         return False
 
@@ -230,6 +336,7 @@ def main():
             
     #     subject_data = [(subject_id, subject_dir)]
 
+    # Uncomment this code to process a single subject 
     subject_data = [("sub-3087", "sub-3087_ses-02")]
     
     # Process each subject

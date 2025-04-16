@@ -9,3 +9,5 @@
 *.RData
 *.Rhistory
 *.m
+*.annot
+*.txt
