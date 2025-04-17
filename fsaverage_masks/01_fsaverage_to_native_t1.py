@@ -195,28 +195,6 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
         except subprocess.CalledProcessError as e:
             logger.error(f"Error mapping right hemisphere to volume: {e.stderr}")
             return False
-        
-        # 4. Combine the left and right hemisphere volumes into a single volume
-
-        # Load the hemisphere volumes
-        try:
-            lh_vol = nib.load(f"{subject_output_dir}/{subject_id}_schaefer_volumetric_t1_lh.nii.gz")
-            rh_vol = nib.load(f"{subject_output_dir}/{subject_id}_schaefer_volumetric_t1_rh.nii.gz")
-
-            # Combine data
-            lh_data = lh_vol.get_fdata()
-            rh_data = rh_vol.get_fdata()
-
-            # Create combined volume where RH values take precedence over LH where they overlap
-            combined_data = lh_data.copy()
-            combined_data[rh_data > 0] = rh_data[rh_data > 0]
-
-            # Save the combined volume
-            combined_vol = nib.Nifti1Image(combined_data, lh_vol.affine, lh_vol.header)
-            nib.save(combined_vol, f"{subject_output_dir}/{subject_id}_schaefer_volumetric_t1.nii.gz")
-        except Exception as e:
-            logger.error(f"Error combining left and right hemisphere volumes: {e}")
-            return False
 
         logger.info(f"Successfully processed subject {subject_id}")
         return True  
