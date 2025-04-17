@@ -198,18 +198,46 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder, fs_hom
 
         # 3. Create volume in native space using Nipype
 
-        # Copy needed FreeSurfer files to the subject_output_dir
-        logger.info(f"Copying required FreeSurfer files to output directory: {subject_output_dir}")
+        # Project left hemisphere annotation to volume
+        cmd_lh_label2vol = [
+            "mri_label2vol",
+            "--annot", str(lh_annotation),
+            "--temp", f"{reconall_dir}/{subject_dir}/mri/T1.mgz",
+            "--identity",
+            "--fillthresh", "0.3",
+            "--proj", "frac", "0", "1", "0.1",
+            "--subject", subject_dir,
+            "--o", f"{subject_output_dir}/schaefer_volumetric_T1_lh.nii.gz",
+            "--hemi", "lh"
+        ]
+        subprocess.run(cmd_lh_label2vol, env=custom_env, check=True)
+
+        # Project right hemisphere annotation to volume
+        cmd_rh_label2vol = [
+            "mri_label2vol",
+            "--annot", str(rh_annotation),
+            "--temp", f"{reconall_dir}/{subject_dir}/mri/T1.mgz",
+            "--identity",
+            "--fillthresh", "0.3",
+            "--proj", "frac", "0", "1", "0.1",
+            "--subject", subject_dir,
+            "--o", f"{subject_output_dir}/schaefer_volumetric_T1_rh.nii.gz",
+            "--hemi", "rh"
+        ]
+        subprocess.run(cmd_rh_label2vol, env=custom_env, check=True)
+
+        # # Copy needed FreeSurfer files to the subject_output_dir
+        # logger.info(f"Copying required FreeSurfer files to output directory: {subject_output_dir}")
         
-        # Create necessary subdirectories in the output directory
-        output_surf_dir = subject_output_dir / "surf"
-        output_mri_dir = subject_output_dir / "mri"
-        os.makedirs(output_surf_dir, exist_ok=True)
-        os.makedirs(output_mri_dir, exist_ok=True)
+        # # Create necessary subdirectories in the output directory
+        # output_surf_dir = subject_output_dir / "surf"
+        # output_mri_dir = subject_output_dir / "mri"
+        # os.makedirs(output_surf_dir, exist_ok=True)
+        # os.makedirs(output_mri_dir, exist_ok=True)
         
-        # Define paths to FreeSurfer files
-        reconall_surf = Path(f"{reconall_dir}/{subject_dir}/surf")
-        reconall_mri = Path(f"{reconall_dir}/{subject_dir}/mri")
+        # # Define paths to FreeSurfer files
+        # reconall_surf = Path(f"{reconall_dir}/{subject_dir}/surf")
+        # reconall_mri = Path(f"{reconall_dir}/{subject_dir}/mri")
 
         # # Define files to copy
         # import shutil
@@ -249,10 +277,10 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder, fs_hom
         
         # logger.info("Creating volume in native space for Schaefer parcels")
         
-        output_volume = subject_output_dir / f"{subject_id}_{session}_schaefer200_aparc+aseg.mgz"
+        # output_volume = subject_output_dir / f"{subject_id}_{session}_schaefer200_aparc+aseg.mgz"
 
-        # Get the base annotation name for --annot (no hemi, no extension)
-        annot_base = "Schaefer2018_200Parcels_7Networks_order"
+        # # Get the base annotation name for --annot (no hemi, no extension)
+        # annot_base = "Schaefer2018_200Parcels_7Networks_order"
 
         # # Create a custom environment with SUBJECTS_DIR pointing to our output folder
         # custom_env = os.environ.copy()
@@ -271,46 +299,46 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder, fs_hom
         #     logger.error(f"Error creating volume in native space: {e.stderr}")
         #     return False
 
-        # Import Nipype components
-        from nipype.interfaces.freesurfer import Aparc2Aseg
+        # # Import Nipype components
+        # from nipype.interfaces.freesurfer import Aparc2Aseg
         
-        # Set up the Aparc2Aseg interface
-        aparc2aseg = Aparc2Aseg()
+        # # Set up the Aparc2Aseg interface
+        # aparc2aseg = Aparc2Aseg()
         
-        # Set all required inputs with correct paths
-        aparc2aseg.inputs.subjects_dir = str(reconall_dir)  # Original subjects directory
-        aparc2aseg.inputs.subject_id = subject_dir  # Subject directory name
-        aparc2aseg.inputs.out_file = str(output_volume)  # Output file location
+        # # Set all required inputs with correct paths
+        # aparc2aseg.inputs.subjects_dir = str(reconall_dir)  # Original subjects directory
+        # aparc2aseg.inputs.subject_id = subject_dir  # Subject directory name
+        # aparc2aseg.inputs.out_file = str(output_volume)  # Output file location
 
-        # Surface files from reconall directory
-        aparc2aseg.inputs.lh_white = str(reconall_surf/'lh.white')
-        aparc2aseg.inputs.rh_white = str(reconall_surf/'rh.white')
-        aparc2aseg.inputs.lh_pial = str(reconall_surf/'lh.pial')
-        aparc2aseg.inputs.rh_pial = str(reconall_surf/'rh.pial')
-        aparc2aseg.inputs.ribbon = str(reconall_mri/'ribbon.mgz')
-        aparc2aseg.inputs.lh_ribbon = str(reconall_mri/'lh.ribbon.mgz')
-        aparc2aseg.inputs.rh_ribbon = str(reconall_mri/'rh.ribbon.mgz')
+        # # Surface files from reconall directory
+        # aparc2aseg.inputs.lh_white = str(reconall_surf/'lh.white')
+        # aparc2aseg.inputs.rh_white = str(reconall_surf/'rh.white')
+        # aparc2aseg.inputs.lh_pial = str(reconall_surf/'lh.pial')
+        # aparc2aseg.inputs.rh_pial = str(reconall_surf/'rh.pial')
+        # aparc2aseg.inputs.ribbon = str(reconall_mri/'ribbon.mgz')
+        # aparc2aseg.inputs.lh_ribbon = str(reconall_mri/'lh.ribbon.mgz')
+        # aparc2aseg.inputs.rh_ribbon = str(reconall_mri/'rh.ribbon.mgz')
         
-        # Annotation files from the output directory
-        aparc2aseg.inputs.lh_annotation = str(lh_annotation)
-        aparc2aseg.inputs.rh_annotation = str(rh_annotation)
-        # aparc2aseg.inputs.annot_name = "Schaefer2018_200Parcels_7Networks_order"
+        # # Annotation files from the output directory
+        # aparc2aseg.inputs.lh_annotation = str(lh_annotation)
+        # aparc2aseg.inputs.rh_annotation = str(rh_annotation)
+        # # aparc2aseg.inputs.annot_name = "Schaefer2018_200Parcels_7Networks_order"
         
-        # Additional options that can help
-        aparc2aseg.inputs.label_wm = True  # Label white matter
-        aparc2aseg.inputs.rip_unknown = True  # Replace unknown areas
+        # # Additional options that can help
+        # aparc2aseg.inputs.label_wm = True  # Label white matter
+        # aparc2aseg.inputs.rip_unknown = True  # Replace unknown areas
         
-        # Run the command
-        logger.info(f"Running: {aparc2aseg.cmdline}")
+        # # Run the command
+        # logger.info(f"Running: {aparc2aseg.cmdline}")
         
-        result = aparc2aseg.run()
+        # result = aparc2aseg.run()
         
-        if result.runtime.returncode != 0:
-            logger.error(f"Error creating volume: {result.runtime.stderr}")
-            return False
+        # if result.runtime.returncode != 0:
+        #     logger.error(f"Error creating volume: {result.runtime.stderr}")
+        #     return False
             
-        logger.info(f"Successfully created volume at: {output_volume}")
-        return True
+        # logger.info(f"Successfully created volume at: {output_volume}")
+        # return True
             
     except Exception as e:  # Add this missing except block to close the try at the beginning of the function
         logger.exception(f"Error processing subject {subject_id}: {str(e)}")
