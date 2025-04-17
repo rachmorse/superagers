@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+import os
+import subprocess
+from pathlib import Path
+import nibabel as nib
+import numpy as np
+import shutil
+import nipype.interfaces.spm as spm
+from nipype.interfaces.spm import Normalize12, NewSegment
+from nipype.interfaces.spm.preprocess import ApplyDeformations 
+import nipype.interfaces.spm.utils as spmu
+
+def get_subjects_to_process(dwi_root_dir, out_dir, ses):
+    """Generate a list of subjects to process based on whether they have
+    T1 Schaefer / subcortical mask created and DWI data and do not already 
+    have a DWI space mask.
+
+    Args:
+        dwi_root_dir (Path): Path to the root directory containing the DWI data.
+        out_dir (Path): Path to the output directory where the native space masks are saved.
+        ses (str): Timepoint (format ses-01).
+    """
+    subjects_to_process = []
+
+    # Iterate over all possible subject directories
+    for subject_dir in os.listdir(out_dir):
+        if not subject_dir.startswith("sub-"):
+            continue
+        subject = subject_dir
+
+        # Check if the required files exist
+        schaefer_subcort_atlas = Path(f"{out_dir}/{subject}/{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz")
+        eddy_corrected = Path(f"{dwi_root_dir}/{subject}_{ses}/eddy_corrected_data.nii.gz")
+        dwi_mask_output = Path(f"{out_dir}/{subject}/{subject}_{ses}_schaefer200_subcortical14_dwi_space.nii.gz")
+
+        if schaefer_subcort_atlas.exists() and eddy_corrected.exists() and not dwi_mask_output.exists():
+            subjects_to_process.append(subject)
+
+    print(f"Number of subjects to process: {len(subjects_to_process)}")
+    return subjects_to_process
+
+
+def extract_b0(input_path, output_path):
+    """Extract the b0 volume from the eddy-corrected data.
+    
+    Args:
+        input_path (Path): Path to the eddy-corrected data.
+        output_path (Path): Path where to save the extracted b0 volume.
+    """
+    # Create output directory if it doesn't exist
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Using FSL's fslroi to extract the first volume (b0)
+    cmd = f"fslroi {input_path} {output_path} 0 1"
+    subprocess.run(cmd, shell=True, check=True)
+    print(f"Extracted b0 volume to {output_path}")
+
+
+def transform_t1w_to_dwi(t1w_mask, b0_ref, output_path, out_native_masks):
+    """Transform the T1w space mask to native space using the transformation matrix.
+    
+    Args:
+        t1w_mask (Path): Path to the T1w space mask.
+        b0_ref (Path): Path to the b0 reference image.
+        output_path (Path): Path to save the native space mask.
+        out_native_masks (Path): Output directory to where the T1 mask is.
+    """
+    # Create output directory if it doesn't exist
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Define the transformation matrix path
+    transform_mat = out_native_masks / "T1w_to_b0.mat"  
+
+    # Step 1: Generate transformation matrix directly
+    subprocess.run(f"flirt -in {t1w_mask} -ref {b0_ref} -omat {transform_mat}", shell=True, check=True)
+
+    # Step 2: Apply transformation to mask
+    subprocess.run(f"flirt -in {t1w_mask} -ref {b0_ref} -applyxfm -init {transform_mat} -out {output_path} -paddingsize 0.0 -interp nearestneighbour", shell=True, check=True)
+
+    print(f"Transformed T1w mask to DWI space: {output_path}")
+    
+
+def transform_t1w_to_bold(t1w_mask, bold_path, out_bold_masks, output_path_bold):
+    """Transform the T1w space mask to native space using the transformation matrix.
+    
+    Args:
+        t1w_mask (Path): Path to the T1w space mask.
+        bold_path (Path): Path to the BOLD image.
+        out_bold_masks (Path): Output directory to where the matrix and mask are saved.
+        output_path_bold (Path): Path to save the BOLD space mask.
+    """
+    # Create output directory if it doesn't exist
+    output_path_bold.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Extract the first volume from the 4D BOLD dataset
+    bold_ref_path = out_bold_masks / "bold_reference.nii.gz"
+    subprocess.run(f"fslroi {bold_path} {bold_ref_path} 0 1", shell=True, check=True)
+    
+    # Define the transformation matrix path
+    transform_mat = out_bold_masks / "T1w_to_bold.mat"  
+
+    # Step 1: Generate transformation matrix using the single-volume reference
+    subprocess.run(f"flirt -in {t1w_mask} -ref {bold_ref_path} -omat {transform_mat}", 
+                   shell=True, check=True)
+
+    # Step 2: Apply transformation to mask
+    subprocess.run(f"flirt -in {t1w_mask} -ref {bold_ref_path} -applyxfm -init {transform_mat} "
+                   f"-out {output_path_bold} -paddingsize 0.0 -interp nearestneighbour", 
+                   shell=True, check=True)
+
+    print(f"Transformed T1w mask to BOLD space: {output_path_bold}")
+
+
+def process_subject(subject, dwi_root_dir, bold_root_dir, out_dir, ses):
+    """
+    Process a single subject's DWI data.
+    
+    Args:
+        subject: The subject ID
+        dwi_root_dir: Root directory for DWI data
+        bold_root_dir: Root directory for BOLD data
+        out_dir: Output directory
+        ses: Session identifier
+        
+    Returns:
+        subject ID if processing was successful, None otherwise
+    """
+    out_subject_dir = out_dir / subject
+    print(f"\nProcessing {subject}...")
+    
+    # Define output directories
+    out_b0 = out_subject_dir / f"b0"
+    # out_t1_masks =  out_subject_dir / f"t1w_masks"
+    out_native_masks =  out_subject_dir / f"dwi_space_masks"
+    out_bold_masks =  out_subject_dir / f"bold_space_masks"
+    
+    # Define paths for this subject
+    eddy_corrected = Path(f"{dwi_root_dir}/{subject}_{ses}/eddy_corrected_data.nii.gz")
+    
+    # Define output paths and file names
+    b0_output = out_b0 / f"{subject}_{ses}_b0.nii.gz"
+    t1w_mask = out_subject_dir / f"{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz"
+    output_path_dwi = out_native_masks / f"{subject}_{ses}_schaefer200_subcortical14_dwi_space.nii.gz"
+    output_path_bold = out_bold_masks / f"{subject}_{ses}_schaefer200_subcortical14_bold_space.nii.gz"
+
+    # Define BOLD paths
+    bold_subject_dir = bold_root_dir / f"{subject}"
+    bold_path = bold_subject_dir / f"{ses}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz"
+    
+    try:
+        # Step 1: Extract b0 from eddy corrected data
+        if not b0_output.exists():
+            extract_b0(eddy_corrected, b0_output)
+
+        # Step 2: Transform T1w mask to native space using the transformation matrix
+        transform_t1w_to_dwi(t1w_mask, b0_output, output_path_dwi, out_native_masks)
+
+        # Step 3: Transform T1w mask to native space using the transformation matrix
+        transform_t1w_to_bold(t1w_mask, bold_path, out_bold_masks, output_path_bold)
+
+        print(f"Successfully created native space mask for {subject}")
+
+        # Step 4: Clean up individual subject's intermediate files
+        if out_b0.exists():
+            shutil.rmtree(out_b0)
+        
+        return subject
+    except Exception as e:
+        print(f"Error processing {subject}: {e}")
+        return None
+
+def main():
+    """
+    Main function to process transform the Schaefer/
+    Harvard-Oxford MNI mask to native space.
+    """
+    
+    # Set timepoint
+    timepoint = "2"
+    ses = "ses-02"
+    cohort = "bbhi senior"
+
+    # Set up paths
+    # Set paths based on cohort
+    if cohort == "bbhi":
+        # BBHI paths
+        dwi_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp{timepoint}")
+        if timepoint == "2":
+            bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp{timepoint}")
+        else:  # timepoint == "1"
+            bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed")
+    else:  # cohort == "bbhi senior"
+        dwi_root_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP{timepoint}")
+        bold_root_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed")
+
+    out_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
+
+    # Set up FSL so it runs correctly in this script
+    os.environ["FSLDIR"] = "/home/rachel/fsl"
+    os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:" + os.environ["PATH"]
+    subprocess.run(["bash", "-c", "source /home/rachel/fsl/etc/fslconf/fsl.sh"], check=True)
+
+    # Set FSL to output compressed NIFTI files
+    os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
+
+    # Generate the list of subjects to process
+    subjects = get_subjects_to_process(dwi_root_dir, out_dir, ses)
+
+    # Uncomment the following line to process one subject
+    # subjects = ["sub-4064"] 
+    
+    # Process each subject
+    results = []
+    for subject in subjects:
+        result = process_subject(subject, dwi_root_dir, bold_root_dir, out_dir, ses)
+        if result:
+            results.append(result)
+            
+    print(f"Successfully processed {len(results)} subjects")
+    return results
+
+if __name__ == "__main__":
+    main()

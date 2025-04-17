@@ -21,12 +21,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def get_subjects_to_process(output_folder):
+def get_subjects_to_process(output_folder, ses):
     """Generate a list of subjects to process based on whether they have
     t1 cortical and subcortical atlases for the specified timepoint.
 
     Args:
         output_folder (Path): Path to the directory t1 results
+        ses (str): Session ID (format: ses-01).
 
     Returns:
         list: List of subject IDs to process.
@@ -45,7 +46,7 @@ def get_subjects_to_process(output_folder):
         right_t1_file_path = subject_folder / f"{subject}_schaefer_volumetric_t1_rh.nii.gz"
         subcort_left_file_path = subject_folder / f"{subject}_left_subcortical14_t1.nii.gz"
         subcort_right_file_path = subject_folder / f"{subject}_right_subcortical14_t1.nii.gz"
-        output_file_path = subject_folder / f"{subject}_schaefer_subcortical_t1.nii.gz"
+        output_file_path = subject_folder / f"{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz"
 
         if left_t1_file_path.exists() and right_t1_file_path.exists() and subcort_left_file_path.exists() and subcort_right_file_path.exists() and not output_file_path.exists():
             subjects_to_process.append(subject)
@@ -171,7 +172,7 @@ def process_subject(output_folder, subject, ses):
                 f.write(f"{subject} {unique_values.shape[0]-1}\n")
         
         # Save the combined atlas
-        nib.save(nib.Nifti1Image(result, affine), Path(f"{subject_folder}/{subject}_schaefer_subcortical_t1.nii.gz"))
+        nib.save(nib.Nifti1Image(result, affine), Path(f"{subject_folder}/{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz"))
         
         logger.info(f"Successfully processed subject {subject}")
         return True
@@ -194,7 +195,7 @@ def main():
     logger.info(f"Date and time: {start_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
     
     # Get subjects to process
-    subjects = get_subjects_to_process(output_folder)
+    subjects = get_subjects_to_process(output_folder, ses)
     
     if not subjects:
         logger.info("No subjects found that need processing.")
