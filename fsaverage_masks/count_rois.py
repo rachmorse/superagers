@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from collections import Counter
 
 # Path to your MGZ file
-file_path = '/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-02/sub-3087/sub-3087_ses-02_schaefer200_aparc+aseg.mgz'
+file_path = '/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-02/sub-3087_ses-02/sub-3087_ses-02_schaefer200_aparc+aseg.mgz'
 
 # Load the MGZ file
 img = nib.load(file_path)
@@ -107,7 +107,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Path to your annotation file
-annot_file = '/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-02/sub-3087/lh.sub-3087_ses-02_Schaefer2018_200Parcels_7Networks_order.annot'
+annot_file = '/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-02/sub-3087_ses-02/label/lh.Schaefer2018_200Parcels_7Networks_order.annot'
 
 # Function to read and analyze annotation files
 def analyze_annotation_file(annot_file):
