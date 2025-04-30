@@ -59,10 +59,11 @@ def get_subjects_to_process(reconall_dir, out_dir, ses):
         
         # Check if the required directory exists and hasn't been processed yet
         subject_recon_dir = reconall_dir / subject_dir
-        output_subject_dir = out_dir_t1 / subject_id
+        output_subject_dir = out_dir_t1 
         
-        output_file_path = output_subject_dir / f"{subject_id}_schaefer200_aparc+aseg.mgz"
-        
+        # Just checks left hemisphere 
+        output_file_path = output_subject_dir / f"{subject_id}_schaefer_volumetric_t1_lh.nii.gz"
+
         if subject_recon_dir.exists() and not output_file_path.exists():
             subjects_to_process.append((subject_id, subject_dir))
 

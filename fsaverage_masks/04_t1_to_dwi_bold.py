@@ -234,12 +234,20 @@ def main():
     
     # Process each subject
     results = []
+    print(f"Number of subjects to process: {len(subjects)}")
+
     for subject in subjects:
         result = process_subject(subject, dwi_root_dir, bold_root_dir, out_dir, ses, cohort)
+
         if result:
+            print(f"Successfully processed {subject}")
             results.append(result)
+        else:
+            print(f"Failed to process {subject}")
             
     print(f"Successfully processed {len(results)} subjects")
+    print(f"Failed to process {len(subjects) - len(results)} subjects")
+    print(f"Failed subjects: {set(subjects) - set(results)}")
     return results
 
 if __name__ == "__main__":

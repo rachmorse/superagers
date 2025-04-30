@@ -40,10 +40,11 @@ def get_subjects_to_process(output_folder):
         # Check if the required directory exists and hasn't been processed yet  
         subject_folder = output_folder / subject
       
-        t1_file_path = subject_folder / f"{subject}_schaefer_volumetric_t1.nii.gz"
+        t1_left_path = subject_folder / f"t1_masks/{subject}_schaefer_volumetric_t1_lh.nii.gz"
+        t1_right_path = subject_folder / f"t1_masks/{subject}_schaefer_volumetric_t1_rh.nii.gz"
         output_file_path = subject_folder / f"{subject}_left_subcortical14_t1.nii.gz"
 
-        if t1_file_path.exists() and not output_file_path.exists():
+        if t1_left_path.exists() and t1_right_path.exists() and not output_file_path.exists():
             subjects_to_process.append(subject)
 
     print(f"Number of subjects to process: {len(subjects_to_process)}")
@@ -232,6 +233,7 @@ def main():
         successful_subjects = []
         failed_subjects = []
 
+        print(f"Number of subjects to process: {len(subjects)}")
         logger.info(f"Processing subject {subject}...")
         # Process left subcortical regions
         left_success = process_subcortical_regions(
@@ -255,8 +257,10 @@ def main():
         cleanup_temp_files(output_folder_sub)
 
         if left_success and right_success:
+            print(f"Successfully processed {subject}")
             successful_subjects.append(subject)
         else:
+            print(f"Failed to process {subject}")
             failed_subjects.append(subject)
 
     print(f"\n{len(successful_subjects)}/{len(subjects)} subjects processed successfully")

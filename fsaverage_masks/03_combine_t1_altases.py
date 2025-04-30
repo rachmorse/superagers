@@ -206,16 +206,19 @@ def main():
     # Create tracking lists
     successful_subjects = []
     failed_subjects = []
-    
+    print(f"Number of subjects to process: {len(subjects)}")
+
     # Process each subject
     for i, subject in enumerate(subjects, 1):
         logger.info(f"Processing subject {i}/{len(subjects)}: {subject}")
         
         success = process_subject(output_folder, subject, ses)
-        
+
         if success:
+            print(f"Successfully processed {subject}")
             successful_subjects.append(subject)
         else:
+            print(f"Failed to process {subject}")
             failed_subjects.append(subject)
     
     # Print summary
