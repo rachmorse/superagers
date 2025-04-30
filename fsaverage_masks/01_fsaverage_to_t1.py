@@ -79,8 +79,7 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
     """
     try:
         # Create the output directory if it doesn't exist
-        subject_output_dir = Path(f"{output_folder}/{subject_id}")
-        subject_output_dir.mkdir(parents=True, exist_ok=True)
+        output_folder.mkdir(parents=True, exist_ok=True)
         
         # Set up annotation files - these are the Schaefer 200 atlas files from GitHub
         schaefer_fsaverage_left = Path('/home/rachel/Desktop/superagers/fsaverage_masks/lh.Schaefer2018_200Parcels_7Networks_order.annot')
@@ -94,8 +93,8 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
             
         logger.info(f"Processing subject: {subject_id}")
 
-        lh_annotation = subject_output_dir / f"lh.Schaefer2018_200Parcels_7Networks_order.annot"
-        rh_annotation = subject_output_dir / f"rh.Schaefer2018_200Parcels_7Networks_order.annot"
+        lh_annotation = output_folder / f"lh.Schaefer2018_200Parcels_7Networks_order.annot"
+        rh_annotation = output_folder / f"rh.Schaefer2018_200Parcels_7Networks_order.annot"
         
         # 2. Map annotations from fsaverage to subject
         logger.info("Mapping Schaefer 200 atlas annotations from fsaverage to subject's surface")
@@ -146,7 +145,7 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
             "--fillthresh", "0.3",
             "--proj", "frac", "0", "1", "0.1",
             "--subject", subject_dir,
-            "--o", f"{subject_output_dir}/{subject_id}_schaefer_volumetric_t1_lh.nii.gz",
+            "--o", f"{output_folder}/{subject_id}_schaefer_volumetric_t1_lh.nii.gz",
             "--hemi", "lh"
         ]
         try:
@@ -164,7 +163,7 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
             "--fillthresh", "0.3",
             "--proj", "frac", "0", "1", "0.1",
             "--subject", subject_dir,
-            "--o", f"{subject_output_dir}/{subject_id}_schaefer_volumetric_t1_rh.nii.gz",
+            "--o", f"{output_folder}/{subject_id}_schaefer_volumetric_t1_rh.nii.gz",
             "--hemi", "rh"
         ]
         try:
@@ -185,14 +184,11 @@ def main():
     logger.setLevel(logging.DEBUG)
 
     # Set up parameters
-    cohort = "bbhi"
+    cohort = "bbhi senior" 
     session = 'ses-01'
     if not session.startswith('ses-'):
         session = f'ses-{session}'
     logger.info(f"Processing for session: {session}")
-
-    # Set up paths
-    output_folder = Path(f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}/t1_masks')
 
     # Set paths based on cohort
     if cohort == "bbhi":
@@ -209,29 +205,28 @@ def main():
     os.environ['SUBJECTS_DIR'] = str(reconall_dir)
     
     # Determine subjects to process
-    # subject_data = get_subjects_to_process(reconall_dir, output_folder, session)
+    subject_data = get_subjects_to_process(reconall_dir, output_folder, session)
     
-    # if not subject_data:
-    #     logger.info("No subjects found that need processing.")
-    #     return
+    if not subject_data:
+        logger.info("No subjects found that need processing.")
+        return
         
-    # subjects = [s[0] for s in subject_data]
-    # logger.info(f"Will process {len(subjects)} subjects: {', '.join(subjects)}")
+    subjects = [s[0] for s in subject_data]
+    logger.info(f"Will process {len(subjects)} subjects: {', '.join(subjects)}")
         
-    # # Find the corresponding directory in reconall_dir
-    # subject_dir = None
-    # expected_dir = f"{subject_id}_ses-{session.replace('ses-', '')}"
+    # Find the corresponding directory in reconall_dir
+    subject_dir = None
+    expected_dir = f"{subject_id}_ses-{session.replace('ses-', '')}"
     
-    # if os.path.exists(reconall_dir / expected_dir):
-    #     subject_dir = expected_dir
-    # else:
-    #     logger.error(f"Could not find expected directory {expected_dir} for subject {subject_id} in {reconall_dir}")
-    #     return
+    if os.path.exists(reconall_dir / expected_dir):
+        subject_dir = expected_dir
+    else:
+        logger.error(f"Could not find expected directory {expected_dir} for subject {subject_id} in {reconall_dir}")
+        return
     
-
     # Uncomment this code to process a single subject 
     # Format subject_data = [(subject_id, subject_dir)]
-    subject_data = [("sub-120927", "sub-120927_ses-01")]
+    # subject_data = [("sub-1014", "sub-1014_ses-01")]
     
     # Process each subject
     successful = 0
@@ -239,6 +234,9 @@ def main():
         logger.info(f"\n{'='*50}")
         logger.info(f"Processing subject: {subject_id} (directory: {subject_dir})")
         logger.info(f"{'='*50}\n")
+
+        # Set up paths
+        output_folder = Path(f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}/{subject_id}/t1_masks')
         
         if process_subject(
             subject_dir,  

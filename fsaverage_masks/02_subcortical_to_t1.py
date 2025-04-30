@@ -192,37 +192,42 @@ def main():
     # Set up logging level based on verbose flag
     logger.setLevel(logging.DEBUG)
 
-    ses = "ses-02"
+    cohort = "bbhi senior"
+    ses = "ses-01"
     output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
 
-    # # Determine subjects to process
-    # subject_list = get_subjects_to_process(output_folder)
-    # print(f"Number of subjects to process: {len(subject_list)}")
-    # print(subject_list)
+    # Determine subjects to process
+    subject_list = get_subjects_to_process(output_folder)
+    print(f"Number of subjects to process: {len(subject_list)}")
+    print(subject_list)
     
-    # if not subject_list:
-    #     logger.info("No subjects found that need processing.")
-    #     return
+    if not subject_list:
+        logger.info("No subjects found that need processing.")
+        return
         
-    # subjects = subject_list
+    subjects = subject_list
 
     # Uncomment this line to run the script with one subject
-    subjects = ["sub-4064"]
+    # subjects = ["sub-1014"]
    
     # Log execution info
     logger.info(f"Script executed by: {os.environ.get('USER', 'unknown')}")
     logger.info(f"Date and time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
 
     for subject in subjects:
-        output_folder_sub = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}/subcortical_t1_masks/{subject}")
+        output_folder_sub = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}/{subject}/subcortical_t1_masks")
 
-        # BBHI senior
-        aseg_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")
-        reference_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed/{subject}/{ses}/native_T1/{subject}_{ses}_run-01_rest_sbref_ap_T1-space.nii.gz")
+        # Create the output directory if it doesn't exist
+        os.makedirs(output_folder_sub, exist_ok=True)
 
-        # BBHI 
-        # aseg_file = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall/{subject_id}_{ses}/mri/aseg.mgz")
-        # reference_file = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed/{subject_id}/native_T1/{subject_id}_{ses}_run-01_rest_sbref_ap_T1-space.nii.gz")
+        # Set paths based on cohort
+        if cohort == "bbhi":
+            # BBHI paths
+            aseg_file = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")
+            reference_file = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed/{subject}/native_T1/{subject}_{ses}_run-01_rest_sbref_ap_T1-space.nii.gz")
+        else:  # cohort == "bbhi senior"
+            aseg_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")
+            reference_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed/{subject}/{ses}/native_T1/{subject}_{ses}_run-01_rest_sbref_ap_T1-space.nii.gz") 
 
         successful_subjects = []
         failed_subjects = []

@@ -91,10 +91,20 @@ def transform_t1w_to_bold(t1w_mask, bold_path, out_bold_masks, output_path_bold)
     """
     # Create output directory if it doesn't exist
     output_path_bold.parent.mkdir(parents=True, exist_ok=True)
+
+    # Check if the BOLD file exists
+    if not bold_path.exists():
+        print(f"ERROR: BOLD file not found: {bold_path}")
+        raise FileNotFoundError(f"BOLD file not found: {bold_path}")
     
     # Extract the first volume from the 4D BOLD dataset
     bold_ref_path = out_bold_masks / "bold_reference.nii.gz"
     subprocess.run(f"fslroi {bold_path} {bold_ref_path} 0 1", shell=True, check=True)
+
+    # Verify the reference file was created
+    if not bold_ref_path.exists():
+        print(f"ERROR: Failed to create BOLD reference: {bold_ref_path}")
+        raise FileNotFoundError(f"BOLD reference not created: {bold_ref_path}")
     
     # Define the transformation matrix path
     transform_mat = out_bold_masks / "T1w_to_bold.mat"  
@@ -103,15 +113,25 @@ def transform_t1w_to_bold(t1w_mask, bold_path, out_bold_masks, output_path_bold)
     subprocess.run(f"flirt -in {t1w_mask} -ref {bold_ref_path} -omat {transform_mat}", 
                    shell=True, check=True)
 
+    # Verify the transformation matrix was created
+    if not transform_mat.exists():
+        print(f"ERROR: Failed to create transformation matrix: {transform_mat}")
+        raise FileNotFoundError(f"Transformation matrix not created: {transform_mat}")
+    
     # Step 2: Apply transformation to mask
     subprocess.run(f"flirt -in {t1w_mask} -ref {bold_ref_path} -applyxfm -init {transform_mat} "
                    f"-out {output_path_bold} -paddingsize 0.0 -interp nearestneighbour", 
                    shell=True, check=True)
+    
+    # Verify the output file was created
+    if not output_path_bold.exists():
+        print(f"ERROR: Failed to create BOLD space mask: {output_path_bold}")
+        raise FileNotFoundError(f"BOLD space mask not created: {output_path_bold}")
 
     print(f"Transformed T1w mask to BOLD space: {output_path_bold}")
 
 
-def process_subject(subject, dwi_root_dir, bold_root_dir, out_dir, ses):
+def process_subject(subject, dwi_root_dir, bold_root_dir, out_dir, ses, cohort):
     """
     Process a single subject's DWI data.
     
@@ -121,6 +141,7 @@ def process_subject(subject, dwi_root_dir, bold_root_dir, out_dir, ses):
         bold_root_dir: Root directory for BOLD data
         out_dir: Output directory
         ses: Session identifier
+        cohort: Cohort identifier (e.g., "bbhi" or "bbhi senior")
         
     Returns:
         subject ID if processing was successful, None otherwise
@@ -135,17 +156,19 @@ def process_subject(subject, dwi_root_dir, bold_root_dir, out_dir, ses):
     out_bold_masks =  out_subject_dir / f"bold_space_masks"
     
     # Define paths for this subject
-    eddy_corrected = Path(f"{dwi_root_dir}/{subject}_{ses}/eddy_corrected_data.nii.gz")
+    eddy_corrected = Path(f"{dwi_root_dir}/{subject}/eddy_corrected_data.nii.gz")
     
     # Define output paths and file names
     b0_output = out_b0 / f"{subject}_{ses}_b0.nii.gz"
-    t1w_mask = out_subject_dir / f"{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz"
+    t1w_mask = out_subject_dir / f"subcortical_t1_masks/{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz"
     output_path_dwi = out_native_masks / f"{subject}_{ses}_schaefer200_subcortical14_dwi_space.nii.gz"
     output_path_bold = out_bold_masks / f"{subject}_{ses}_schaefer200_subcortical14_bold_space.nii.gz"
 
     # Define BOLD paths
-    bold_subject_dir = bold_root_dir / f"{subject}"
-    bold_path = bold_subject_dir / f"{ses}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz"
+    if cohort == "bbhi":
+        bold_path = bold_root_dir / f"{subject}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz"
+    else:  # cohort == "bbhi senior"
+        bold_path = bold_root_dir / f"{subject}/{ses}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz"
     
     try:
         # Step 1: Extract b0 from eddy corrected data
@@ -176,8 +199,8 @@ def main():
     """
     
     # Set up parameters
-    timepoint = "2"
-    ses = "ses-02"
+    timepoint = "1"
+    ses = "ses-01"
     cohort = "bbhi senior"
 
     # Set up paths
@@ -207,12 +230,12 @@ def main():
     subjects = get_subjects_to_process(dwi_root_dir, out_dir, ses)
 
     # Uncomment the following line to process one subject
-    # subjects = ["sub-4064"] 
+    # subjects = ["sub-1014"] 
     
     # Process each subject
     results = []
     for subject in subjects:
-        result = process_subject(subject, dwi_root_dir, bold_root_dir, out_dir, ses)
+        result = process_subject(subject, dwi_root_dir, bold_root_dir, out_dir, ses, cohort)
         if result:
             results.append(result)
             

@@ -40,13 +40,14 @@ def get_subjects_to_process(output_folder, ses):
             continue
         
         # Check if the required directory exists and hasn't been processed yet  
-        subject_folder = output_folder / subject
-      
-        left_t1_file_path = subject_folder / f"{subject}_schaefer_volumetric_t1_lh.nii.gz"
-        right_t1_file_path = subject_folder / f"{subject}_schaefer_volumetric_t1_rh.nii.gz"
-        subcort_left_file_path = subject_folder / f"{subject}_left_subcortical14_t1.nii.gz"
-        subcort_right_file_path = subject_folder / f"{subject}_right_subcortical14_t1.nii.gz"
-        output_file_path = subject_folder / f"{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz"
+        subject_t1_folder = output_folder / subject / "t1_masks"
+        subject_subcort_folder = output_folder / subject / "subcortical_t1_masks"
+
+        left_t1_file_path = subject_t1_folder / f"{subject}_schaefer_volumetric_t1_lh.nii.gz"
+        right_t1_file_path = subject_t1_folder / f"{subject}_schaefer_volumetric_t1_rh.nii.gz"
+        subcort_left_file_path = subject_subcort_folder / f"{subject}_left_subcortical14_t1.nii.gz"
+        subcort_right_file_path = subject_subcort_folder / f"{subject}_right_subcortical14_t1.nii.gz"
+        output_file_path = subject_subcort_folder / f"{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz"
 
         if left_t1_file_path.exists() and right_t1_file_path.exists() and subcort_left_file_path.exists() and subcort_right_file_path.exists() and not output_file_path.exists():
             subjects_to_process.append(subject)
@@ -68,13 +69,14 @@ def process_subject(output_folder, subject, ses):
     """
     try:                        
         # Define the subject folder
-        subject_folder = output_folder / subject
+        subject_t1_folder = output_folder / subject / "t1_masks"
+        subject_subcort_folder = output_folder / subject / "subcortical_t1_masks"
         
         # Load the individual brain atlas components with correct paths
-        right_cortical_path = subject_folder / f"{subject}_schaefer_volumetric_t1_rh.nii.gz"
-        left_cortical_path = subject_folder / f"{subject}_schaefer_volumetric_t1_lh.nii.gz"
-        left_subcortical_path = subject_folder / f"{subject}_left_subcortical14_t1.nii.gz"
-        right_subcortical_path = subject_folder / f"{subject}_right_subcortical14_t1.nii.gz"
+        right_cortical_path = subject_t1_folder / f"{subject}_schaefer_volumetric_t1_rh.nii.gz"
+        left_cortical_path = subject_t1_folder / f"{subject}_schaefer_volumetric_t1_lh.nii.gz"
+        left_subcortical_path = subject_subcort_folder / f"{subject}_left_subcortical14_t1.nii.gz"
+        right_subcortical_path = subject_subcort_folder / f"{subject}_right_subcortical14_t1.nii.gz"
 
         # Load the individual brain atlas components with correct paths
         left_cortical = nib.load(left_cortical_path).get_fdata()
@@ -108,7 +110,7 @@ def process_subject(output_folder, subject, ses):
         overlap_values = stacked[overlap_mask]
         overlap_values = np.unique(overlap_values, axis=0, return_counts=True)
         
-        output_file = "overlap_values_percentages.txt"
+        output_file = subject_subcort_folder / "overlap_values_percentages.txt"
         
         # Open file in append mode
         with open(output_file, "a") as file:
@@ -172,7 +174,7 @@ def process_subject(output_folder, subject, ses):
                 f.write(f"{subject} {unique_values.shape[0]-1}\n")
         
         # Save the combined atlas
-        nib.save(nib.Nifti1Image(result, affine), Path(f"{subject_folder}/{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz"))
+        nib.save(nib.Nifti1Image(result, affine), Path(f"{subject_subcort_folder}/{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz"))
         
         logger.info(f"Successfully processed subject {subject}")
         return True
@@ -183,7 +185,7 @@ def process_subject(output_folder, subject, ses):
 
 def main():
     # Define paths
-    ses = "ses-02"
+    ses = "ses-01"
     output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
     
     # Set up logging level
