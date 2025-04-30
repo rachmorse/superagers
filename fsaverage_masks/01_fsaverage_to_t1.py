@@ -48,6 +48,8 @@ def get_subjects_to_process(reconall_dir, out_dir, ses):
             subject_id = subject_dir.split("_ses-")[0]
             dir_session = subject_dir.split("_ses-")[1]
             
+            out_dir_t1 = out_dir / subject_id / "t1_masks"
+
             # Check if this directory matches the requested session
             if f"ses-{dir_session}" != ses and f"{dir_session}" != ses:
                 continue
@@ -57,7 +59,7 @@ def get_subjects_to_process(reconall_dir, out_dir, ses):
         
         # Check if the required directory exists and hasn't been processed yet
         subject_recon_dir = reconall_dir / subject_dir
-        output_subject_dir = out_dir / subject_id
+        output_subject_dir = out_dir_t1 / subject_id
         
         output_file_path = output_subject_dir / f"{subject_id}_schaefer200_aparc+aseg.mgz"
         
@@ -190,6 +192,8 @@ def main():
         session = f'ses-{session}'
     logger.info(f"Processing for session: {session}")
 
+    output_folder = Path(f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}')
+
     # Set paths based on cohort
     if cohort == "bbhi":
         # BBHI paths
@@ -213,16 +217,6 @@ def main():
         
     subjects = [s[0] for s in subject_data]
     logger.info(f"Will process {len(subjects)} subjects: {', '.join(subjects)}")
-        
-    # Find the corresponding directory in reconall_dir
-    subject_dir = None
-    expected_dir = f"{subject_id}_ses-{session.replace('ses-', '')}"
-    
-    if os.path.exists(reconall_dir / expected_dir):
-        subject_dir = expected_dir
-    else:
-        logger.error(f"Could not find expected directory {expected_dir} for subject {subject_id} in {reconall_dir}")
-        return
     
     # Uncomment this code to process a single subject 
     # Format subject_data = [(subject_id, subject_dir)]
@@ -236,13 +230,13 @@ def main():
         logger.info(f"{'='*50}\n")
 
         # Set up paths
-        output_folder = Path(f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}/{subject_id}/t1_masks')
+        output_folder_t1 = Path(f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}/{subject_id}/t1_masks')
         
         if process_subject(
             subject_dir,  
             subject_id,   
             reconall_dir,
-            output_folder
+            output_folder_t1
         ):
             successful += 1
     
