@@ -8,7 +8,6 @@ of a given subject in SUBJECTS_DIR
 
 import os
 import numpy as np
-import argparse
 import subprocess
 import logging
 from datetime import datetime, timezone
@@ -22,28 +21,6 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
-
-def parse_arguments():
-    """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description='Transform Schaefer 200 atlas from fsaverage to native BOLD volume')
-    
-    # Define arguments without default values for subjects_dir and output_dir
-    parser.add_argument('--subjects_dir', 
-                        help='Directory with the results of recon-all')
-    parser.add_argument('--subject_id', 
-                        help='Subject ID (e.g., sub-XXXXX). If not provided, will process all eligible subjects')
-    parser.add_argument('--output_dir', 
-                        help='Output directory')
-    parser.add_argument('--reconall_dir', 
-                        help='Directory containing recon-all data')
-    parser.add_argument('--session', 
-                        help='Session identifier (e.g., ses-01)')
-    parser.add_argument('--process_all', action='store_true',
-                        help='Process all eligible subjects')
-    parser.add_argument('--verbose', action='store_true',
-                        help='Enable verbose output')
-    
-    return parser.parse_args()
 
 def get_subjects_to_process(reconall_dir, out_dir, ses):
     """Generate a list of subjects to process based on whether they have
@@ -204,27 +181,25 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
         return False
 
 def main():
-    # Parse command line arguments
-    args = parse_arguments()
-    
     # Set up logging level based on verbose flag
-    if args.verbose:
-        logger.setLevel(logging.DEBUG)
-    
-    # Handle session identifier
-    session = args.session or 'ses-02'
+    logger.setLevel(logging.DEBUG)
+
+    # Set up parameters
+    cohort = "bbhi"
+    session = 'ses-01'
     if not session.startswith('ses-'):
         session = f'ses-{session}'
     logger.info(f"Processing for session: {session}")
 
-    # Set default values in main if not provided via arguments
-    output_folder = Path(args.output_dir or f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}')
+    # Set up paths
+    output_folder = Path(f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}/t1_masks')
 
-    # Uncomment to run BBHI senior 
-    reconall_dir = Path(args.reconall_dir or '/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall')
-
-    # Uncomment to run BBHI 
-    # reconall_dir = Path(args.reconall_dir or '/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall')
+    # Set paths based on cohort
+    if cohort == "bbhi":
+        # BBHI paths
+        reconall_dir = Path('/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall')
+    else:  # cohort == "bbhi senior"
+        reconall_dir = Path('/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall')
 
     # Log execution info
     logger.info(f"Script executed by: {os.environ.get('USER', 'rachel')}")
@@ -234,34 +209,29 @@ def main():
     os.environ['SUBJECTS_DIR'] = str(reconall_dir)
     
     # Determine subjects to process
-    if args.process_all or not args.subject_id:
-        # Get all subjects that need processing for the specified session
-        subject_data = get_subjects_to_process(reconall_dir, output_folder, session)
+    # subject_data = get_subjects_to_process(reconall_dir, output_folder, session)
+    
+    # if not subject_data:
+    #     logger.info("No subjects found that need processing.")
+    #     return
         
-        if not subject_data:
-            logger.info("No subjects found that need processing.")
-            return
-            
-        subjects = [s[0] for s in subject_data]
-        logger.info(f"Will process {len(subjects)} subjects: {', '.join(subjects)}")
-    else:
-        # Process a single subject
-        subject_id = args.subject_id
+    # subjects = [s[0] for s in subject_data]
+    # logger.info(f"Will process {len(subjects)} subjects: {', '.join(subjects)}")
         
-        # Find the corresponding directory in reconall_dir
-        subject_dir = None
-        expected_dir = f"{subject_id}_ses-{session.replace('ses-', '')}"
-        
-        if os.path.exists(reconall_dir / expected_dir):
-            subject_dir = expected_dir
-        else:
-            logger.error(f"Could not find expected directory {expected_dir} for subject {subject_id} in {reconall_dir}")
-            return
-            
-        subject_data = [(subject_id, subject_dir)]
+    # # Find the corresponding directory in reconall_dir
+    # subject_dir = None
+    # expected_dir = f"{subject_id}_ses-{session.replace('ses-', '')}"
+    
+    # if os.path.exists(reconall_dir / expected_dir):
+    #     subject_dir = expected_dir
+    # else:
+    #     logger.error(f"Could not find expected directory {expected_dir} for subject {subject_id} in {reconall_dir}")
+    #     return
+    
 
     # Uncomment this code to process a single subject 
-    # subject_data = [("sub-120927", "sub-120927_ses-01")]
+    # Format subject_data = [(subject_id, subject_dir)]
+    subject_data = [("sub-120927", "sub-120927_ses-01")]
     
     # Process each subject
     successful = 0

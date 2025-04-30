@@ -83,7 +83,7 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
         os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:{os.environ['PATH']}"
         os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
         
-        # Use absolute paths for commands
+        # Add this path as it has trouble finding fslmaths otherwise
         fslmaths_bin = "/home/rachel/fsl/bin/fslmaths"
 
         # Process each label
@@ -214,7 +214,7 @@ def main():
     logger.info(f"Date and time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
 
     for subject in subjects:
-        output_folder_sub = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}/{subject}")
+        output_folder_sub = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}/subcortical_t1_masks/{subject}")
 
         # BBHI senior
         aseg_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")

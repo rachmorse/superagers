@@ -175,7 +175,7 @@ def main():
     Harvard-Oxford MNI mask to native space.
     """
     
-    # Set timepoint
+    # Set up parameters
     timepoint = "2"
     ses = "ses-02"
     cohort = "bbhi senior"
