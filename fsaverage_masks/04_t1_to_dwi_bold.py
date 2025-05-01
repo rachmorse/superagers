@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import subprocess
+import sys
 from pathlib import Path
 import nibabel as nib
 import numpy as np
@@ -10,17 +11,20 @@ from nipype.interfaces.spm import Normalize12, NewSegment
 from nipype.interfaces.spm.preprocess import ApplyDeformations 
 import nipype.interfaces.spm.utils as spmu
 
-def get_subjects_to_process(dwi_root_dir, out_dir, ses):
+def get_subjects_to_process(dwi_bbhi_dir, dwi_bbhi_senior_dir, out_dir, ses, cohort):
     """Generate a list of subjects to process based on whether they have
     T1 Schaefer / subcortical mask created and DWI data and do not already 
     have a DWI space mask.
 
     Args:
-        dwi_root_dir (Path): Path to the root directory containing the DWI data.
+        dwi_bbhi_dir (Path): Path to the directory containing the DWI data for BBHI cohort.
+        dwi_bbhi_senior_dir (Path): Path to the directory containing the DWI data for BBHI senior cohort.
         out_dir (Path): Path to the output directory where the native space masks are saved.
         ses (str): Timepoint (format ses-01).
+        cohort (str): Cohort identifier (e.g., "bbhi" or "bbhi senior").
     """
     subjects_to_process = []
+    already_processed = []
 
     # Iterate over all possible subject directories
     for subject_dir in os.listdir(out_dir):
@@ -28,16 +32,22 @@ def get_subjects_to_process(dwi_root_dir, out_dir, ses):
             continue
         subject = subject_dir
 
+        if cohort == "bbhi":
+            dwi_root_dir = Path(f"{dwi_bbhi_dir}/{subject}_{ses}")
+        else:  # cohort == "bbhi senior"
+            dwi_root_dir = Path(f"{dwi_bbhi_senior_dir}/{subject}")
+
         # Check if the required files exist
-        schaefer_subcort_atlas = Path(f"{out_dir}/{subject}/{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz")
-        eddy_corrected = Path(f"{dwi_root_dir}/{subject}_{ses}/eddy_corrected_data.nii.gz")
-        dwi_mask_output = Path(f"{out_dir}/{subject}/{subject}_{ses}_schaefer200_subcortical14_dwi_space.nii.gz")
+        schaefer_subcort_atlas = Path(f"{out_dir}/{subject}/subcortical_t1_masks/{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz")
+        eddy_corrected = Path(f"{dwi_root_dir}/eddy_corrected_data.nii.gz")
+        dwi_mask_output = Path(f"{out_dir}/{subject}/dwi_space_masks/{subject}_{ses}_schaefer200_subcortical14_dwi_space.nii.gz")
 
         if schaefer_subcort_atlas.exists() and eddy_corrected.exists() and not dwi_mask_output.exists():
             subjects_to_process.append(subject)
+        elif dwi_mask_output.exists():
+            already_processed.append(subject)
 
-    print(f"Number of subjects to process: {len(subjects_to_process)}")
-    return subjects_to_process
+    return subjects_to_process, already_processed
 
 
 def extract_b0(input_path, output_path):
@@ -156,7 +166,7 @@ def process_subject(subject, dwi_root_dir, bold_root_dir, out_dir, ses, cohort):
     out_bold_masks =  out_subject_dir / f"bold_space_masks"
     
     # Define paths for this subject
-    eddy_corrected = Path(f"{dwi_root_dir}/{subject}/eddy_corrected_data.nii.gz")
+    eddy_corrected = Path(f"{dwi_root_dir}/eddy_corrected_data.nii.gz")
     
     # Define output paths and file names
     b0_output = out_b0 / f"{subject}_{ses}_b0.nii.gz"
@@ -203,18 +213,8 @@ def main():
     ses = "ses-01"
     cohort = "bbhi senior"
 
-    # Set up paths
-    # Set paths based on cohort
-    if cohort == "bbhi":
-        # BBHI paths
-        dwi_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp{timepoint}")
-        if timepoint == "2":
-            bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp{timepoint}")
-        else:  # timepoint == "1"
-            bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed")
-    else:  # cohort == "bbhi senior"
-        dwi_root_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP{timepoint}")
-        bold_root_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed")
+    sys.stdout.flush() 
+    print("-----------------------Running 04_t1_to_dwi_bold.py-----------------------")
 
     out_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
 
@@ -226,8 +226,11 @@ def main():
     # Set FSL to output compressed NIFTI files
     os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
 
+    dwi_bbhi_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp{timepoint}")
+    dwi_bbhi_senior_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP{timepoint}")
+
     # Generate the list of subjects to process
-    subjects = get_subjects_to_process(dwi_root_dir, out_dir, ses)
+    subjects, already_processed = get_subjects_to_process(dwi_bbhi_dir, dwi_bbhi_senior_dir, out_dir, ses, cohort)
 
     # Uncomment the following line to process one subject
     # subjects = ["sub-1014"] 
@@ -235,8 +238,28 @@ def main():
     # Process each subject
     results = []
     print(f"Number of subjects to process: {len(subjects)}")
+    print(f"Already processed subjects: {len(already_processed)}")
+    sys.stdout.flush() 
+
+    # Check if there are subjects to process
+    if not subjects:
+        print("No subjects found that need processing.")
+        return []
 
     for subject in subjects:
+
+        # Set paths based on cohort
+        if cohort == "bbhi":
+            # BBHI paths
+            dwi_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp{timepoint}/{subject}_{ses}")
+            if timepoint == "2":
+                bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp{timepoint}")
+            else:  # timepoint == "1"
+                bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed")
+        else:  # cohort == "bbhi senior"
+            dwi_root_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP{timepoint}/{subject}")
+            bold_root_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed")
+        
         result = process_subject(subject, dwi_root_dir, bold_root_dir, out_dir, ses, cohort)
 
         if result:

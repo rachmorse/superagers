@@ -35,6 +35,7 @@ def get_subjects_to_process(reconall_dir, out_dir, ses):
         list: List of subject IDs to process.
     """
     subjects_to_process = []
+    already_processed = []
 
     # Iterate over all possible subject directories
     for subject_dir in os.listdir(reconall_dir):
@@ -62,13 +63,16 @@ def get_subjects_to_process(reconall_dir, out_dir, ses):
         output_subject_dir = out_dir_t1 
         
         # Just checks left hemisphere 
-        output_file_path = output_subject_dir / f"{subject_id}_schaefer_volumetric_t1_lh.nii.gz"
+        output_lh_path = output_subject_dir / f"{subject_id}_schaefer_volumetric_t1_lh.nii.gz"
+        output_rh_path = output_subject_dir / f"{subject_id}_schaefer_volumetric_t1_rh.nii.gz"
 
-        if subject_recon_dir.exists() and not output_file_path.exists():
+        if subject_recon_dir.exists() and not output_lh_path.exists() and not output_rh_path.exists():
             subjects_to_process.append((subject_id, subject_dir))
+        elif output_lh_path.exists() and output_rh_path.exists():
+            already_processed.append((subject_id))
 
     print(f"Number of subjects to process: {len(subjects_to_process)}")
-    return subjects_to_process
+    return subjects_to_process, already_processed
 
 
 def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
@@ -186,12 +190,14 @@ def main():
     # Set up logging level based on verbose flag
     logger.setLevel(logging.DEBUG)
 
+    print("-----------------------Running 01_fsaverage_to_t1.py-----------------------")
+
+    # Check if FreeSurfer is set up
     # Set up parameters
     cohort = "bbhi senior" 
     session = 'ses-01'
     if not session.startswith('ses-'):
         session = f'ses-{session}'
-    logger.info(f"Processing for session: {session}")
 
     output_folder = Path(f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}')
 
@@ -202,16 +208,14 @@ def main():
     else:  # cohort == "bbhi senior"
         reconall_dir = Path('/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall')
 
-    # Log execution info
-    logger.info(f"Script executed by: {os.environ.get('USER', 'rachel')}")
-    logger.info(f"Date and time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")    
     
     # Set environment variables
     os.environ['SUBJECTS_DIR'] = str(reconall_dir)
     
     # Determine subjects to process
-    subject_data = get_subjects_to_process(reconall_dir, output_folder, session)
-    
+    subject_data, already_processed = get_subjects_to_process(reconall_dir, output_folder, session)
+    print(f"Number of subjects already processed: {len(already_processed)}")
+
     if not subject_data:
         logger.info("No subjects found that need processing.")
         return

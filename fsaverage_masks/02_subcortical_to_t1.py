@@ -31,6 +31,7 @@ def get_subjects_to_process(output_folder):
         list: List of subject IDs to process.
     """
     subjects_to_process = []
+    already_processed = []
 
     # Iterate over all possible subject directories
     for subject in os.listdir(output_folder):
@@ -42,13 +43,15 @@ def get_subjects_to_process(output_folder):
       
         t1_left_path = subject_folder / f"t1_masks/{subject}_schaefer_volumetric_t1_lh.nii.gz"
         t1_right_path = subject_folder / f"t1_masks/{subject}_schaefer_volumetric_t1_rh.nii.gz"
-        output_file_path = subject_folder / f"{subject}_left_subcortical14_t1.nii.gz"
+        output_file_path = subject_folder / f"subcortical_t1_masks/{subject}_left_subcortical14_t1.nii.gz"
 
         if t1_left_path.exists() and t1_right_path.exists() and not output_file_path.exists():
             subjects_to_process.append(subject)
+        elif output_file_path.exists():
+            already_processed.append(subject)
 
     print(f"Number of subjects to process: {len(subjects_to_process)}")
-    return subjects_to_process
+    return subjects_to_process, already_processed
 
 
 def process_subcortical_regions(aseg_file, subject, reference_file, output_folder_sub, region='left'):
@@ -163,7 +166,6 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
                     logger.error(f"Error in addition step: {e}")
                     return False
                 
-        logger.info(f"Successfully processed {subject}")
         return True
         
     except Exception as e:
@@ -197,10 +199,11 @@ def main():
     ses = "ses-01"
     output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
 
+    print("-----------------------Running 02_subcortical_to_t1.py-----------------------")
+
     # Determine subjects to process
-    subject_list = get_subjects_to_process(output_folder)
-    print(f"Number of subjects to process: {len(subject_list)}")
-    print(subject_list)
+    subject_list, already_processed = get_subjects_to_process(output_folder)
+    print(f"Number of subjects already processed subjects: {len(already_processed)}")
     
     if not subject_list:
         logger.info("No subjects found that need processing.")
@@ -214,6 +217,12 @@ def main():
     # Log execution info
     logger.info(f"Script executed by: {os.environ.get('USER', 'unknown')}")
     logger.info(f"Date and time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
+
+    # Initialize lists to track successful and failed subjects
+    successful_subjects = []
+    failed_subjects = []
+
+    print(f"Number of subjects to process: {len(subjects)}")
 
     for subject in subjects:
         output_folder_sub = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}/{subject}/subcortical_t1_masks")
@@ -230,11 +239,8 @@ def main():
             aseg_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")
             reference_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed/{subject}/{ses}/native_T1/{subject}_{ses}_run-01_rest_sbref_ap_T1-space.nii.gz") 
 
-        successful_subjects = []
-        failed_subjects = []
-
-        print(f"Number of subjects to process: {len(subjects)}")
         logger.info(f"Processing subject {subject}...")
+
         # Process left subcortical regions
         left_success = process_subcortical_regions(
             aseg_file,

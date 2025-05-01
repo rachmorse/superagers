@@ -33,6 +33,7 @@ def get_subjects_to_process(output_folder, ses):
         list: List of subject IDs to process.
     """
     subjects_to_process = []
+    already_processed = []
 
     # Iterate over all possible subject directories
     for subject in os.listdir(output_folder):
@@ -51,9 +52,10 @@ def get_subjects_to_process(output_folder, ses):
 
         if left_t1_file_path.exists() and right_t1_file_path.exists() and subcort_left_file_path.exists() and subcort_right_file_path.exists() and not output_file_path.exists():
             subjects_to_process.append(subject)
+        elif output_file_path.exists():
+            already_processed.append(subject)
 
-    print(f"Number of subjects to process: {len(subjects_to_process)}")
-    return subjects_to_process
+    return subjects_to_process, already_processed
 
 
 def process_subject(output_folder, subject, ses):
@@ -190,15 +192,18 @@ def main():
     
     # Set up logging level
     logger.setLevel(logging.INFO)
+
+    print("-----------------------Running 03_combine_t1_altases.py-----------------------")
     
     # Log execution info
     start_time = datetime.now(timezone.utc)
-    logger.info(f"Script executed by: {os.environ.get('USER', 'rachel')}")
-    logger.info(f"Date and time: {start_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
     
     # Get subjects to process
-    subjects = get_subjects_to_process(output_folder, ses)
+    subjects, already_processed = get_subjects_to_process(output_folder, ses)
     
+    print(f"Number of subjects to process: {len(subjects)}")
+    print(f"Number of subjects already processed: {len(already_processed)}")
+
     if not subjects:
         logger.info("No subjects found that need processing.")
         return
@@ -206,7 +211,6 @@ def main():
     # Create tracking lists
     successful_subjects = []
     failed_subjects = []
-    print(f"Number of subjects to process: {len(subjects)}")
 
     # Process each subject
     for i, subject in enumerate(subjects, 1):
