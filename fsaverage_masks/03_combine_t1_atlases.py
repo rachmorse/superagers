@@ -187,19 +187,21 @@ def process_subject(output_folder, subject, ses):
 
 def main():
     # Define paths
-    ses = "ses-02"
+    ses = "ses-01"
     output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
+    cohort = "bbhi"
     
     # Set up logging level
     logger.setLevel(logging.INFO)
 
     print("-----------------------Running 03_combine_t1_altases.py-----------------------")
-    
-    # Log execution info
-    start_time = datetime.now(timezone.utc)
-    
+        
     # Get subjects to process
     subjects, already_processed = get_subjects_to_process(output_folder, ses)
+
+    # If cohort is BBHI, filter subject ids to only include those > 6000
+    if cohort == "bbhi":
+        subjects = [subject for subject in subjects if int(subject.split("-")[1]) > 6000]
     
     print(f"Number of subjects to process: {len(subjects)}")
     print(f"Number of subjects already processed: {len(already_processed)}")

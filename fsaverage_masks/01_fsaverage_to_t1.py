@@ -6,13 +6,14 @@ Python script to transform the Schaefer 200 atlas from fsaverage (surface) to na
 of a given subject in SUBJECTS_DIR
 """
 
+import pandas as pd
 import os
 import numpy as np
 import subprocess
 import logging
 from datetime import datetime, timezone
 import nibabel as nib
-from pathlib import Path        
+from pathlib import Path    
 
 # Set up logging
 logging.basicConfig(
@@ -22,7 +23,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def get_subjects_to_process(reconall_dir, out_dir, ses):
+def get_subjects_to_process(reconall_dir, out_dir, ses, cohort):
     """Generate a list of subjects to process based on whether they have
     recon-all done for the specified timepoint.
 
@@ -30,12 +31,20 @@ def get_subjects_to_process(reconall_dir, out_dir, ses):
         reconall_dir (Path): Path to the directory containing the recon-all results.
         out_dir (Path): Path to the output directory where the results will be saved.
         ses (str): Session (e.g., ses-01).
+        cohort (str): Cohort name (e.g., 'bbhi', 'bbhi senior').
         
     Returns:
         list: List of subject IDs to process.
     """
     subjects_to_process = []
     already_processed = []
+
+    # If cohort is 'bbhi', read the CSV file to filter valid IDs
+    valid_ids = None
+    if cohort == 'bbhi':
+        df_bbhi = pd.read_csv('/home/rachel/Desktop/data/clean_bbhi.csv')
+        # Convert ID column to string in case file has numeric IDs
+        valid_ids = set(df_bbhi['id'].astype(str).tolist())
 
     # Iterate over all possible subject directories
     for subject_dir in os.listdir(reconall_dir):
@@ -57,22 +66,25 @@ def get_subjects_to_process(reconall_dir, out_dir, ses):
         else:
             # Format is just sub-xxx
             subject_id = subject_dir
+            out_dir_t1 = out_dir / subject_id / "t1_masks"
+
+        # If cohort is 'bbhi' and valid_ids is set, skip if subject_id not in that set 
+        if valid_ids is not None and subject_id.replace("sub-", "") not in valid_ids:
+            continue
         
         # Check if the required directory exists and hasn't been processed yet
         subject_recon_dir = reconall_dir / subject_dir
-        output_subject_dir = out_dir_t1 
         
-        # Just checks left hemisphere 
-        output_lh_path = output_subject_dir / f"{subject_id}_schaefer_volumetric_t1_lh.nii.gz"
-        output_rh_path = output_subject_dir / f"{subject_id}_schaefer_volumetric_t1_rh.nii.gz"
+        output_lh_path = out_dir_t1 / f"{subject_id}_schaefer_volumetric_t1_lh.nii.gz"
+        output_rh_path = out_dir_t1 / f"{subject_id}_schaefer_volumetric_t1_rh.nii.gz"
 
         if subject_recon_dir.exists() and not output_lh_path.exists() and not output_rh_path.exists():
             subjects_to_process.append((subject_id, subject_dir))
         elif output_lh_path.exists() and output_rh_path.exists():
-            already_processed.append((subject_id))
+            already_processed.append(subject_id)
 
     print(f"Number of subjects to process: {len(subjects_to_process)}")
-    return subjects_to_process, already_processed
+    return subjects_to_process, already_processed   
 
 
 def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
@@ -194,8 +206,8 @@ def main():
 
     # Check if FreeSurfer is set up
     # Set up parameters
-    cohort = "bbhi senior" 
-    session = 'ses-02'
+    cohort = "bbhi" 
+    session = 'ses-01'
     if not session.startswith('ses-'):
         session = f'ses-{session}'
 
@@ -213,7 +225,7 @@ def main():
     os.environ['SUBJECTS_DIR'] = str(reconall_dir)
     
     # Determine subjects to process
-    subject_data, already_processed = get_subjects_to_process(reconall_dir, output_folder, session)
+    subject_data, already_processed = get_subjects_to_process(reconall_dir, output_folder, session, cohort)
     print(f"Number of subjects already processed: {len(already_processed)}")
 
     if not subject_data:
