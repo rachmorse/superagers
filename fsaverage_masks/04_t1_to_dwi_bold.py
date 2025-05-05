@@ -32,10 +32,14 @@ def get_subjects_to_process(dwi_bbhi_dir, dwi_bbhi_senior_dir, out_dir, ses, coh
             continue
         subject = subject_dir
 
+        # Set paths based on cohort and timepoint (as they vary)
         if cohort == "bbhi":
             dwi_root_dir = Path(f"{dwi_bbhi_dir}/{subject}_{ses}")
         else:  # cohort == "bbhi senior"
-            dwi_root_dir = Path(f"{dwi_bbhi_senior_dir}/{subject}")
+            if ses == "ses-01":
+                dwi_root_dir = Path(f"{dwi_bbhi_senior_dir}/{subject}")
+            else:  # ses == "ses-02"
+                dwi_root_dir = Path(f"{dwi_bbhi_senior_dir}/{subject}_{ses}")
 
         # Check if the required files exist
         schaefer_subcort_atlas = Path(f"{out_dir}/{subject}/subcortical_t1_masks/{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz")
@@ -209,8 +213,8 @@ def main():
     """
     
     # Set up parameters
-    timepoint = "1"
-    ses = "ses-01"
+    timepoint = "2"
+    ses = "ses-02"
     cohort = "bbhi senior"
 
     sys.stdout.flush() 
@@ -257,8 +261,11 @@ def main():
             else:  # timepoint == "1"
                 bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed")
         else:  # cohort == "bbhi senior"
-            dwi_root_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP{timepoint}/{subject}")
             bold_root_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed")
+            if ses == "ses-01":
+                dwi_root_dir = Path(f"{dwi_bbhi_senior_dir}/{subject}")
+            else:  # ses == "ses-02"
+                dwi_root_dir = Path(f"{dwi_bbhi_senior_dir}/{subject}_{ses}")
         
         result = process_subject(subject, dwi_root_dir, bold_root_dir, out_dir, ses, cohort)
 

@@ -195,7 +195,7 @@ def main():
     # Check if FreeSurfer is set up
     # Set up parameters
     cohort = "bbhi senior" 
-    session = 'ses-01'
+    session = 'ses-02'
     if not session.startswith('ses-'):
         session = f'ses-{session}'
 

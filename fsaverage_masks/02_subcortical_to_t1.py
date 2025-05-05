@@ -196,7 +196,7 @@ def main():
     logger.setLevel(logging.DEBUG)
 
     cohort = "bbhi senior"
-    ses = "ses-01"
+    ses = "ses-02"
     output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
 
     print("-----------------------Running 02_subcortical_to_t1.py-----------------------")
@@ -214,10 +214,6 @@ def main():
     # Uncomment this line to run the script with one subject
     # subjects = ["sub-1014"]
    
-    # Log execution info
-    logger.info(f"Script executed by: {os.environ.get('USER', 'unknown')}")
-    logger.info(f"Date and time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
-
     # Initialize lists to track successful and failed subjects
     successful_subjects = []
     failed_subjects = []
