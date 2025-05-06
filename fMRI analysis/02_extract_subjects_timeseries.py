@@ -11,8 +11,7 @@ from nilearn.image import load_img, new_img_like, resample_to_img
 import nibabel as nib
 
 ####################################################################################
-# NEED TO UPDATE SCRUBBING PATHS IF USING THIS SCRIPT (THEY WERE MOVED TO INSTITUTE)
-#  /pool/...institut/...Superagers/...resting-preprocessed/sub-xxx/ses-0y/MNI_2mm
+# NEED TO MAKE SURE THIS RUNS< MIGHT BE A BIT MESSY ATM 
 ####################################################################################
 
 def process_subject_extract(args):
@@ -61,7 +60,7 @@ def process_subject_extract(args):
     os.makedirs(output_subdir, exist_ok=True)
 
     # Save the extracted timeseries
-    timeseries_output_path = output_dir / f"ses-{ses}/{subject_id}_ses-{ses}_schaefer200_timeseries.csv"
+    timeseries_output_path = output_dir / f"ses-{ses}/{subject_id}_ses-{ses}_subcortical_schaefer200_timeseries.csv"
     print(f"Saving extracted timeseries to {timeseries_output_path}")
     np.savetxt(timeseries_output_path, timeseries, delimiter=",")
 
@@ -89,7 +88,7 @@ def get_subjects_to_process(root_directory, output_directory, ses):
         subject = subject_dir
 
         # Check if the session exists
-        scrubbed_data = Path(f"{root_directory}/{subject}/ses-{ses}")
+        scrubbed_data = Path(f"{root_directory}/{subject}/ses-{ses}") or Path(f"{root_directory}/{subject}/ses-{ses}/native_T1")
         output_data = Path(f"{output_directory}/ses-{ses}")
 
         if scrubbed_data.exists() and any(scrubbed_data.iterdir()):
@@ -102,75 +101,6 @@ def get_subjects_to_process(root_directory, output_directory, ses):
     print(f"Number of subjects to process: {len(subjects_to_process)}")
     return subjects_to_process
 
-def create_schaefer_plus_subcortical_atlas(n_rois=200, yeo_networks=7, resolution_mm=2):
-    """
-    Combine Schaefer (cortical) and Harvard–Oxford (subcortical) atlases
-    into a single 3D volume atlas, with subcortical labels shifted so
-    that they do not overlap with the Schaefer labels.
-    """
-    # 1) Fetch the Schaefer Atlas (cortical)
-    schaefer_atlas = fetch_atlas_schaefer_2018(
-        n_rois=n_rois, 
-        yeo_networks=yeo_networks, 
-        resolution_mm=resolution_mm
-    )
-    schaefer_atlas_img = load_img(schaefer_atlas["maps"])
-    schaefer_data = schaefer_atlas_img.get_fdata()
-
-    # 2) Fetch the Harvard–Oxford subcortical atlas
-    ho_sub = fetch_atlas_harvard_oxford("sub-maxprob-thr25-2mm")
-    ho_sub_img = load_img(ho_sub["maps"])
-    ho_data = ho_sub_img.get_fdata()
-
-    # 3) Define which Harvard–Oxford labels to keep, and how to re-label them
-    rename_map = {
-        4:  1, 5:  2, 6:  3, 7:  4,
-        9:  5, 10: 6, 11: 7, 15: 8,
-        16: 9, 17:10, 18:11,19:12,
-        20:13, 21:14
-    }
-
-    # 4) Keep only the above subcortical labels → everything else zero
-    filtered_data = np.zeros_like(ho_data, dtype=np.int32)
-    for old_id, new_id in rename_map.items():
-        filtered_data[ho_data == old_id] = new_id
-    filtered_subcortical_img = new_img_like(ho_sub_img, filtered_data)
-
-    # 5) Resample subcortical to match Schaefer’s resolution/affine
-    filtered_subcortical_img = resample_to_img(
-        filtered_subcortical_img,
-        schaefer_atlas_img,
-        interpolation="nearest",
-        force_resample=True,
-        copy_header=True
-    )
-
-    # 6) Shift subcortical labels so they do not overlap Schaefer’s IDs
-    subcort_data = filtered_subcortical_img.get_fdata()
-    max_schaefer_label = int(schaefer_data.max())  # e.g., 200 for 200-ROI atlas
-    subcort_data[subcort_data > 0] += max_schaefer_label
-
-    # 7) Merge cortical + subcortical data into one array
-    combined_data = np.where(subcort_data > 0, subcort_data, schaefer_data).astype(np.int32)
-    combined_atlas_img = new_img_like(schaefer_atlas_img, combined_data)
-
-    # Decode Schaefer labels from bytes to Python strings
-    schaefer_labels = [lbl.decode("utf-8") for lbl in schaefer_atlas["labels"]]
-
-    # Create subcortical label list
-    subcortical_labels = [
-        "Left Thalamus", "Left Caudate", "Left Putamen", "Left Pallidum",
-        "Left Hippocampus", "Left Amygdala", "Left Accumbens",
-        "Right Thalamus", "Right Caudate", "Right Putamen", "Right Pallidum",
-        "Right Hippocampus", "Right Amygdala", "Right Accumbens"
-    ]
-    combined_labels = schaefer_labels + [
-        f"Subcortical {i}: {label}"
-        for i, label in enumerate(subcortical_labels, start=max_schaefer_label + 1)
-    ]
-
-    return combined_atlas_img, combined_labels
-
 def main(
     ses: str,
     threshold: float,
@@ -178,6 +108,8 @@ def main(
     output_dir: Union[str, Path],
     bold_template: str,
     roi_indices: List[int],
+    combined_labels_csv: str,
+    atlas_file_template: str,
     multi: bool = False,
 ):
     """Main function to run the script.
@@ -193,40 +125,31 @@ def main(
         bold_template (str): Path / template for the location of BOLD data.
         roi_indices (List[int]): ROI indices for timeseries visualization (e.g. add the index for the ROI/s you want to visualize).
         multi (bool): If True, enables parallel processing using multiprocessing. Defaults to False.
+        combined_labels_csv (str): Path to the CSV file containing the combined labels.
+        atlas_file_template (str): Template string for the atlas file path.
     """
     output_dir = Path(output_dir)
-    error_log_path = output_dir / "error_log.txt"  # Define error log path
+    error_log_path = Path(output_dir)
 
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Call combined atlas for use and save the atlas image
-    combined_atlas_img, combined_labels = create_schaefer_plus_subcortical_atlas(
-        n_rois=200, yeo_networks=7, resolution_mm=2
-    )
-    atlas_file_path = output_dir / "combined_schaefer_harvard_subcortical_atlas.nii.gz"
-    nib.save(combined_atlas_img, str(atlas_file_path))
+    # Read the ROI labels from the CSV
+    with open(combined_labels_csv, "r", encoding="utf-8") as f:
+        combined_labels = [line.strip() for line in f.readlines()]
 
-    # Write labels to a CSV:
-    labels_csv_path = output_dir / "schaefer_and_subcortical_labels.csv"
-    with open(labels_csv_path, "w", encoding="utf-8") as f:
-        for label in combined_labels:
-            f.write(label + "\n")
-
-    # Save the image path as the atlas file for it to work with extract_timeseries
-    atlas_file = str(atlas_file_path)
-    
-    # Pass atlas_files 
+    # Pass atlas template and labels to the processing function
     args = [
         (
             subject,
             ses,
             threshold,
             bold_template,
-            atlas_file,
+            atlas_file_template, 
             output_dir,
             roi_indices,
             error_log_path,
+            combined_labels,  # Add labels to the arguments
         )
         for subject in subjects
     ]
@@ -242,8 +165,13 @@ def main(
 if __name__ == "__main__":
     ses = "02"
     threshold = "0.5"
-    output_directory = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data")
-    root_directory = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
+    root = Path("/home/rachel/Desktop/schaefer_analysis/") 
+    output_directory = Path(f"{root}/timeseries_data/fsaverage")
+    combined_labels_csv = f"{root}/timeseries_data/fsaverage/combined_labels.csv" # Path to labels for each of the ROIs
+    root_directories = [
+        Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data"),
+        Path("/pool/guttmann/institut/UB/Superagers/MRI/resting-preprocessed")
+    ]
     error_log_path = output_directory / "error_log.txt"
 
     # Create the output directory if it does not exist
@@ -251,16 +179,81 @@ if __name__ == "__main__":
 
     roi_indices = [0]  # ROIs to visualize
 
-    # Generate a list of subjects to process
-    subjects = get_subjects_to_process(root_directory, output_directory, ses)
+    # Generate a list of subjects to process using multiple root directories
+    def get_subjects_from_multiple_roots(root_dirs, output_dir, ses):
+        all_subjects = []
+        for root_dir in root_dirs:
+            subjects = get_subjects_to_process(root_dir, output_dir, ses)
+            all_subjects.extend(subjects)
+        # Remove duplicates while preserving order
+        unique_subjects = []
+        for subject in all_subjects:
+            if subject not in unique_subjects:
+                unique_subjects.append(subject)
+        return unique_subjects
+    
+    subjects = get_subjects_from_multiple_roots(root_directories, output_directory, ses)
 
+    atlas_file_template = f"{root}/fsaverage/ses-{ses}/{{subject}}/bold_space_masks/{{subject}}_ses-{ses}_schaefer200_subcortical14_bold_space.nii.gz"
+
+    # Since data can be in either directory, check both
+    def find_bold_file_path(subject, ses, threshold):
+        # Try the first root directory
+        path1 = os.path.join(
+            root_directories[0],
+            subject,
+            f"ses-{ses}",
+            "native_T1",
+            f"{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold}.nii.gz",
+        )
+        
+        # Try the second root directory
+        path2 = os.path.join(
+            root_directories[1],
+            subject,
+            f"ses-{ses}",
+            "native_T1",
+            f"{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold}.nii.gz",
+        )
+        
+        # Return the path that exists
+        if os.path.exists(path1):
+            return path1
+        elif os.path.exists(path2):
+            return path2
+        
     bold_template = os.path.join(
-        root_directory,
+        "{root_dir}",
         "{subject}",
         f"ses-{ses}",
-        "MNI_2mm",
-        "{subject}_ses-{ses}_run-01_rest_bold_ap_MNI-space_scrubbed_{threshold}.nii.gz",
+        "native_T1",
+        "{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold}.nii.gz",
     )
+
+    # Modify process_subject_extract to handle checking both root directories
+    def process_subject_extract_wrapper(args):
+        subject, ses, threshold, _, atlas_file, output_dir, roi_indices, error_log_path, combined_labels = args
+        
+        # Find the correct bold file path
+        for root_dir in root_directories:
+            bold_path = bold_template.format(
+                root_dir=root_dir,
+                subject=subject,
+                threshold=threshold
+            )
+            
+            if os.path.exists(bold_path):
+                # Found the file, use this path
+                args_with_correct_path = (
+                    subject, ses, threshold, bold_path, atlas_file,
+                    output_dir, roi_indices, error_log_path, combined_labels
+                )
+                return process_subject_extract(args_with_correct_path)
+        
+        # If file not found in any root directory, log an error
+        with open(error_log_path, "a") as f:
+            f.write(f"Could not find BOLD file for subject {subject}\n")
+        return None
 
     main(
         ses=ses,
@@ -269,6 +262,9 @@ if __name__ == "__main__":
         output_dir=output_directory,
         bold_template=bold_template,
         roi_indices=roi_indices,
+        combined_labels_csv=combined_labels_csv,
+        atlas_file_template=atlas_file_template,
+        subjects=subjects,
         # multi=False,
         multi=True, # Uncomment this line to enable parallel processing
     )

@@ -249,8 +249,8 @@ def main(
     print(f"all_fwd.csv has been created at {all_fwd_path}")
 
     # Visualize what different thresholds would look like in the data
-    analyze_threshold(all_fwd_df, 0.2)
-    analyze_threshold(all_fwd_df, 0.5)
+    # analyze_threshold(all_fwd_df, 0.2)
+    # analyze_threshold(all_fwd_df, 0.5)
 
     # Parallel processing
     if multi:
