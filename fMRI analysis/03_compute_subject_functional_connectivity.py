@@ -29,7 +29,7 @@ def process_subject_functional(args):
     """
     subject_id, ses, output_dir, root_directory, error_log_path, atlas_file_path = args
 
-    timeseries_file = root_directory / f"{subject_id}_ses-{ses}_schaefer200_timeseries.csv"
+    timeseries_file = root_directory / f"{subject_id}_ses-{ses}_subcortical_schaefer200_timeseries.csv"
 
     # Load extracted timeseries
     print(f"--- Processing subject: {subject_id} ---")
@@ -51,9 +51,6 @@ def process_subject_functional(args):
     if timeseries is None or timeseries.size == 0:
         print(f"No valid timeseries loaded for subject {subject_id}")
         return
-    
-    # Load the combined atlas image
-    combined_atlas_img = nib.load(atlas_file_path)
         
     # Compute functional connectivity with the combined atlas
     connectivity_matrix, fisher_z_matrix = compute_functional_connectivity(
@@ -91,7 +88,7 @@ def get_subjects_to_process(root_directory, output_directory, ses):
         processed_subjects = set()
 
     for filename in os.listdir(root_directory):
-        if filename.startswith("sub-") and filename.endswith(f"ses-{ses}_schaefer200_timeseries.csv"):
+        if filename.startswith("sub-") and filename.endswith(f"{subject_id}_ses-{ses}_subcortical_schaefer200_timeseries.csv"):
             subject_id = filename.split("_")[0]
             if subject_id not in processed_subjects:
                 subjects_to_process.append(subject_id)
@@ -122,9 +119,6 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], atlas_f
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save the Schaefer atlas as a Nifti file
-    # combined_atlas_img = nib.load(atlas_file_path)
-
     args = [
         (
             subject_id,
@@ -143,10 +137,10 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], atlas_f
 
 if __name__ == "__main__":
     ses = "02"
-    timeseries_path = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data")
-    atlas_file_path = Path(f"{timeseries_path}/combined_schaefer_harvard_subcortical_atlas.nii.gz")
+    timeseries_path = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data/fsaverage")
+    atlas_file_path = Path(f"/home/rachel/Desktop/schaefer_analysis//fsaverage/ses-{ses}/{{subject}}/bold_space_masks/{{subject}}_ses-{ses}_schaefer200_subcortical14_bold_space.nii.gz")
     root_directory = Path(f"{timeseries_path}/ses-{ses}")
-    output_directory = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity")
+    output_directory = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/fsaverage")
 
     # Create the output directory if it does not exist
     output_directory.mkdir(parents=True, exist_ok=True)
