@@ -289,30 +289,20 @@ if __name__ == "__main__":
     # Change to your paths and settings
     threshold = 0.5
     output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
+    cohort = "bbhi"
+    ses = "01"
 
-    # Use these paths for Superager tp1 data
-    # root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed"
-    # subject_csv = None
-    # ses = "01"
-    # subject_dir_pattern = f"ses-{ses}/MNI_2mm"
-
-    # Use these paths for Superager tp2 data
-    root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
-    subject_csv = None
-    ses = "02"
-    subject_dir_pattern = f"ses-{ses}/MNI_2mm"
-
-    # Use these paths to process BBHI tp1 data
-    # subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
-    # root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed"
-    # subject_dir_pattern = "MNI_2mm"
-    # ses = "01"
-
-    # Use these paths to process BBHI tp2 data
-    # subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
-    # root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp2"
-    # subject_dir_pattern = "MNI_2mm"
-    # ses = "02"
+    if cohort == "bbhi":
+        subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
+        subject_dir_pattern = "native_T1"
+        if ses == "01":
+            root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed"
+        else:
+            root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp2"
+    else:  
+        root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed" 
+        subject_csv = None
+        subject_dir_pattern = f"ses-{ses}/native_T1"
 
     # Create the output directory if it does not exist
     output_data.mkdir(parents=True, exist_ok=True)
@@ -322,14 +312,14 @@ if __name__ == "__main__":
         root,
         "{subject}",
         subject_dir_pattern,
-        "{subject}_ses-{ses}_run-01_rest_bold_ap_MNI-space.nii.gz",
+        "{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz",
     )
     scrubbed_pattern = os.path.join(
         "{output_data}",
         "{subject}",
         f"ses-{ses}",
-        "MNI_2mm",
-        "{subject}_ses-{ses}_run-01_rest_bold_ap_MNI-space_scrubbed_{threshold}.nii.gz",
+        "native_T1",
+        "{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold}.nii.gz",
     )
 
     main(

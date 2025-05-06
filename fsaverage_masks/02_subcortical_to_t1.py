@@ -196,7 +196,7 @@ def main():
     logger.setLevel(logging.DEBUG)
 
     cohort = "bbhi"
-    ses = "ses-01"
+    ses = "ses-02"
     output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
 
     print("-----------------------Running 02_subcortical_to_t1.py-----------------------")

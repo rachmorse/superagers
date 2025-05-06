@@ -216,8 +216,8 @@ def main():
     """
     
     # Set up parameters
-    timepoint = "1"
-    ses = "ses-01"
+    timepoint = "2"
+    ses = "ses-02"
     cohort = "bbhi"
 
     sys.stdout.flush() 
