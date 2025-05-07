@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import scipy.interpolate
 
-# This script is only to run on the BBHI senior data because the BBHI data has already been scrubbed.
+# This script is only to run on the BBHI senior tp2 data because the BBHI and BBHI senior tp1 data has already been scrubbed.
 
 def analyze_threshold(data, threshold, total_scans=740, affected_percentage=0.5):
     """Analyze and visualize subjects with a high amount of movement using a given FWD threshold (e.g. subjects with > X FWD in > Y% of scans).
@@ -229,7 +229,23 @@ def main(
     all_fwd_df = pd.DataFrame()
 
     # Determine subjects list 
-    subjects = os.listdir(root)
+    potential_subjects = os.listdir(root)
+    subjects = []
+
+    # Filter subjects based on whether they have the required session directory
+    for subject in potential_subjects:
+        if not subject.startswith("sub-"):
+            continue
+            
+        # Check if the specified session directory exists
+        if ses == "01":
+            session_path = Path(f"{root}/{subject}/ses-01")
+            if session_path.exists() and session_path.is_dir():
+                subjects.append(subject)
+        elif ses == "02":
+            session_path = Path(f"{root}/{subject}/ses-02") 
+            if session_path.exists() and session_path.is_dir():
+                subjects.append(subject)
 
     # Iterate over all subjects in the root directory
     for subject in subjects:
@@ -297,9 +313,8 @@ if __name__ == "__main__":
     # Change to your paths and settings
     threshold = 0.5
     output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
-    ses = "01"
+    ses = "02"
     root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed" 
-    subject_csv = None
     subject_dir_pattern = f"ses-{ses}/native_T1"
 
     # Create the output directory if it does not exist
