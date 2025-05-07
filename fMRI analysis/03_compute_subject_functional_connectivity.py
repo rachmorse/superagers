@@ -62,7 +62,7 @@ def process_subject_functional(args):
     )
 
     # Visualize data if you would like by uncommenting the line below
-    visualize_fc_data(subject_id, fisher_z_matrix, output_dir, ses, True)
+    # visualize_fc_data(subject_id, fisher_z_matrix, output_dir, ses, True)
 
     print(f"Processing completed for subject: {subject_id}")
 

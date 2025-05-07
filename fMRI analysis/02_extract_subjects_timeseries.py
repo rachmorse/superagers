@@ -99,10 +99,12 @@ def get_subjects_to_process(root_directory, local_root_directory, output_directo
             subjects = []
     else:
         # Read from directory
+        ses_root_dir = Path(f"{root_directory}/ses-{ses}")
         for subject_dir in os.listdir(root_directory):
-            if subject_dir.startswith("sub-"):
+            # This checks whether they have data for the correct timepoint 
+            if subject_dir.startswith("sub-") and ses_root_dir.is_dir():
                 subjects.append(subject_dir)
-    
+
     # Now process each subject
     for subject in subjects:
         # Initialize scrubbed_data to None
@@ -270,10 +272,10 @@ def main(
 
 
 if __name__ == "__main__":
-    ses = "02"
-    timepoint = "2"
+    ses = "01"
+    timepoint = "1"
     threshold = "0.5"
-    cohort = "bbhi senior"  
+    cohort = "bbhi"  
     root = Path("/home/rachel/Desktop/schaefer_analysis/") 
     output_directory = Path(f"{root}/timeseries_data/native_space")
     local_root_directory = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data") # Only relevant for BBHI senior cohort
@@ -295,18 +297,23 @@ if __name__ == "__main__":
     roi_indices = [0]  # ROIs to visualize
 
     # Generate a list of subjects to process
-    # subjects = get_subjects_to_process(root_directory, local_root_directory, output_directory, ses, cohort) 
+    subjects = get_subjects_to_process(root_directory, local_root_directory, output_directory, ses, cohort) 
 
     # Run the code on a sample subject
-    subjects = ["sub-1023"]
+    # subjects = ["sub-1023"]
 
     atlas_file_template = Path(f"{root}/fsaverage/ses-{ses}/{{subject}}/bold_space_masks/{{subject}}_ses-{ses}_schaefer200_subcortical14_bold_space.nii.gz")
 
     if cohort == "bbhi":
         bold_template = Path(f"{root_directory}/{{subject}}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
+        # This is because Maria did not create a new file for subjects who did not have any frames scrubbed
+        if not bold_template.exists():
+            bold_template = Path(f"{root_directory}/{{subject}}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
     else:
         if ses == "01":
             bold_template = Path(f"{root_directory}/{{subject}}/ses-{ses}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
+            if not bold_template.exists():
+                bold_template = Path(f"{root_directory}/{{subject}}/ses-{ses}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
         else:
             bold_template = Path(f"{root_directory}/{{subject}}/ses-{ses}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
             if not bold_template.exists():
