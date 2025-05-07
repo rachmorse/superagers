@@ -173,17 +173,15 @@ def process_subject(
 
         print(f"Processing subject: {subject}")
 
-        if not os.path.exists(scrubbed_file):
-            scrub(
-                subject,    
-                bold_file,
-                fwd_file,
-                scrubbed_file,
-                threshold=threshold,
-                method="interpolate",
-            )
-        else:
-            print(f"{subject} already scrubbed at {scrubbed_file}")
+        scrub(
+            subject,    
+            bold_file,
+            fwd_file,
+            scrubbed_file,
+            threshold=threshold,
+            method="interpolate",
+        )
+
     except Exception as e:
         print(f"Error processing subject {subject}: {e}")
         with open(error_log, "a") as f:
@@ -232,7 +230,12 @@ def main(
     potential_subjects = os.listdir(root)
     subjects = []
 
+    # Determine subjects list 
+    potential_subjects = os.listdir(root)
+    subjects = []
+
     # Filter subjects based on whether they have the required session directory
+    # and don't already have scrubbed data
     for subject in potential_subjects:
         if not subject.startswith("sub-"):
             continue
@@ -240,12 +243,29 @@ def main(
         # Check if the specified session directory exists
         if ses == "01":
             session_path = Path(f"{root}/{subject}/ses-01")
-            if session_path.exists() and session_path.is_dir():
-                subjects.append(subject)
+            session_exists = session_path.exists() and session_path.is_dir()
         elif ses == "02":
             session_path = Path(f"{root}/{subject}/ses-02") 
-            if session_path.exists() and session_path.is_dir():
-                subjects.append(subject)
+            session_exists = session_path.exists() and session_path.is_dir()
+        else:
+            session_exists = False
+            
+        if not session_exists:
+            continue
+            
+        # Check if scrubbed data already exists in either location
+        local_scrubbed_file = Path(f"{output_data}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
+        remote_scrubbed_file = Path(f"{root}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
+        
+        # Only add subject if scrubbed data doesn't exist in either location
+        if not local_scrubbed_file.exists() and not remote_scrubbed_file.exists():
+            subjects.append(subject)
+        else:
+            if local_scrubbed_file.exists():
+                location = "local"
+            else:
+                location = "remote"
+            print(f"Skipping {subject} - scrubbed data already exists in {location} directory")
 
     # Iterate over all subjects in the root directory
     for subject in subjects:
