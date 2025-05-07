@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import scipy.interpolate
 
+# This script is only to run on the BBHI senior data because the BBHI data has already been scrubbed.
 
 def analyze_threshold(data, threshold, total_scans=740, affected_percentage=0.5):
     """Analyze and visualize subjects with a high amount of movement using a given FWD threshold (e.g. subjects with > X FWD in > Y% of scans).
@@ -31,7 +32,7 @@ def analyze_threshold(data, threshold, total_scans=740, affected_percentage=0.5)
     plt.show()
 
 
-def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="interpolate"):
+def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="interpolate", max_scrub_percent=50):
     """Scrub the BOLD fMRI images by either removing or interpolating scans based on FWD threshold.
 
     Args:
@@ -41,6 +42,10 @@ def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="in
         scrubbed_file (str): Path to save the scrubbed BOLD image file (NIfTI format).
         threshold (float, optional): Threshold for FWD above which scans are considered moved. Default is 0.5 FWD.
         method (str, optional): Method for handling moved scans. Either 'cut' to remove or 'interpolate' to replace. Default is 'interpolate'.
+        max_scrub_percent (float, optional): Maximum percentage of timepoints that can be scrubbed before the subject is skipped. Default is 50%.
+
+    Returns:
+        bool: True if scrubbing was performed, False if subject was skipped due to too many timepoints exceeding threshold.
 
     Raises:
         Exception: If an unknown method is specified.
@@ -61,11 +66,22 @@ def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="in
     all_tps = np.arange(bold_data.shape[3])
     correct_tps = all_tps[[False] + list(fwd < threshold)]
     incorrect_tps = all_tps[[False] + list(fwd >= threshold)]
-    correct_bold = bold_data[:, :, :, correct_tps]
-
+    
+    # Calculate percentage of timepoints that would be scrubbed
+    scrub_percent = (len(incorrect_tps) * 100) / bold_data.shape[3]
+    
     print(
-        f"{len(incorrect_tps)} out of {bold_data.shape[3]} scans ({round(len(incorrect_tps) * 100 / bold_data.shape[3], 2)}%) exceed the motion threshold (FWD > {threshold})."
+        f"{len(incorrect_tps)} out of {bold_data.shape[3]} scans ({round(scrub_percent, 2)}%) exceed the motion threshold (FWD > {threshold})."
     )
+    
+    # Check if percentage exceeds maximum allowed
+    if scrub_percent > max_scrub_percent:
+        print(f"WARNING: More than {max_scrub_percent}% of timepoints would be scrubbed for subject {subject}.")
+        print(f"Subject {subject} has been skipped. Data will not be scrubbed.")
+        return False
+    
+    # Extract only the correct timepoints for interpolation
+    correct_bold = bold_data[:, :, :, correct_tps]
 
     # Start scrubbing based on the method
     if method == "cut":
@@ -121,6 +137,7 @@ def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="in
     nib.save(scrubbed_image, scrubbed_file)
 
     print(f"Scrubbing complete for subject: {subject}")
+    return True
 
 
 def process_subject(
@@ -211,17 +228,8 @@ def main(
     # Concatenate all framewise_displ.txt files (per subject) into a single DataFrame
     all_fwd_df = pd.DataFrame()
 
-    # Determine subjects list using a csv file for BBHI or a directory for BBHI senior
-    if subject_csv:
-        subjects_df = pd.read_csv(subject_csv)
-
-        if "id" in subjects_df.columns:
-            subjects = [f"sub-{subject}" for subject in subjects_df["id"].tolist()]
-        else:
-            print("Error: 'id' column not found in CSV file.")
-            subjects = []
-    else:
-        subjects = os.listdir(root)
+    # Determine subjects list 
+    subjects = os.listdir(root)
 
     # Iterate over all subjects in the root directory
     for subject in subjects:
@@ -289,20 +297,10 @@ if __name__ == "__main__":
     # Change to your paths and settings
     threshold = 0.5
     output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
-    cohort = "bbhi"
     ses = "01"
-
-    if cohort == "bbhi":
-        subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
-        subject_dir_pattern = "native_T1"
-        if ses == "01":
-            root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed"
-        else:
-            root = "/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp2"
-    else:  
-        root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed" 
-        subject_csv = None
-        subject_dir_pattern = f"ses-{ses}/native_T1"
+    root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed" 
+    subject_csv = None
+    subject_dir_pattern = f"ses-{ses}/native_T1"
 
     # Create the output directory if it does not exist
     output_data.mkdir(parents=True, exist_ok=True)

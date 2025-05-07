@@ -4,15 +4,12 @@ from pathlib import Path
 from typing import List, Union
 
 import numpy as np
+import pandas as pd
 from extract_timeseries import extract_timeseries
 from nilearn import datasets
 from nilearn.datasets import fetch_atlas_schaefer_2018, fetch_atlas_harvard_oxford
 from nilearn.image import load_img, new_img_like, resample_to_img
 import nibabel as nib
-
-####################################################################################
-# NEED TO MAKE SURE THIS RUNS< MIGHT BE A BIT MESSY ATM 
-####################################################################################
 
 def process_subject_extract(args):
     """Processes a single subject: extracts timeseries and saves it.
@@ -70,28 +67,139 @@ def process_subject_extract(args):
     print(f"Processing completed for subject: {subject_id}")
 
 
-def get_subjects_to_process(root_directory, output_directory, ses):
+def get_subjects_to_process(root_directory, local_root_directory, output_directory, ses, cohort):
     """Generate a list of subjects to process based on whether they have
-    scrubbed data and a timeseries file already generated.
+    scrubbed data and a timeseries file already generated. Then exclude subjects    
+    with excessive motion (>50% of frames exceeding 0.5 mm).
 
     Args:
         root_directory (Path): Path to the root directory containing the scrubbed data.
+        local_root_directory (Path): Path to the local root directory containing the scrubbed data (eg. Desktop).
         output_directory (Path): Path to the output directory where timeseries data is saved.
         ses (str): Session / timepoint.
+        cohort (str): Cohort name (e.g., 'bbhi', 'superagers').
     """
     subjects_to_process = []
+    subjects_excluded_motion = []
+    subjects_excluded_no_bold = []
+    subjects = []
 
     # Iterate over all possible subject directories
-    for subject_dir in os.listdir(root_directory):
-        if not subject_dir.startswith("sub-"):
-            continue
-        subject = subject_dir
+    if cohort == "bbhi":
+        subjects_df = pd.read_csv(subject_csv)
 
-        # Check if the session exists
-        scrubbed_data = Path(f"{root_directory}/{subject}/ses-{ses}") or Path(f"{root_directory}/{subject}/ses-{ses}/native_T1")
+        if "id" in subjects_df.columns:
+            subjects = [f"sub-{subject}" for subject in subjects_df["id"].tolist()]
+        else:
+            print("Error: 'id' column not found in CSV file.")
+            subjects = []
+    else:
+        # Read from directory
+        for subject_dir in os.listdir(root_directory):
+            if subject_dir.startswith("sub-"):
+                subjects.append(subject_dir)
+    
+    # Now process each subject
+    for subject in subjects:
+        # Initialize scrubbed_data to None
+        scrubbed_data = None
+        
+        if cohort == "bbhi":
+            # Check for either scrubbed or non-scrubbed data
+            scrubbed_data = Path(f"{root_directory}/{subject}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
+            unscrubbed_file = Path(f"{root_directory}/{subject}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
+            fd_file = Path(f"{root_directory}/{subject}/native_T1/framewise_displ.txt")
+
+            # Check if either scrubbed or unscrubbed data exists
+            bold_file_exists = scrubbed_data.exists() or unscrubbed_file.exists()
+
+            # Track subjects with no bold file
+            if not bold_file_exists:
+                subjects_excluded_no_bold.append(subject)
+                continue  # Skip this subject
+
+            # If FD file exists, check motion criteria
+            if fd_file.exists() and bold_file_exists:
+                # Read FD values and check if >50% exceed 0.5 mm threshold
+                try:
+                    fd_values = pd.read_csv(fd_file, header=None).iloc[:, 0]
+                    fd_values = pd.to_numeric(fd_values, errors='coerce').fillna(0)
+                    high_motion_percentage = (fd_values > 0.5).mean() * 100
+                    
+                    if high_motion_percentage > 50:
+                        print(f"Excluding {subject} due to excessive motion: {high_motion_percentage:.2f}% of frames > 0.5mm")
+                        subjects_excluded_motion.append(subject)
+                        continue  # Skip this subject
+                except Exception as e:
+                    print(f"Error reading FD file for {subject}: {str(e)}")
+        else:
+            # For BBHI senior cohorts, use original logic
+            if ses == "01":
+                scrubbed_data = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz") 
+                unscrubbed_file = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
+                fd_file = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/framewise_displ.txt")
+
+                # Check if either scrubbed or unscrubbed data exists
+                bold_file_exists = scrubbed_data.exists() or unscrubbed_file.exists()
+
+                # Track subjects with no bold file
+                if not bold_file_exists:
+                    subjects_excluded_no_bold.append(subject)
+                    continue 
+
+                # If FD file exists, check motion criteria
+                if fd_file.exists() and bold_file_exists:
+                    # Read FD values and check if >50% exceed 0.5 mm threshold
+                    try:
+                        fd_values = pd.read_csv(fd_file, header=None).iloc[:, 0]
+                        fd_values = pd.to_numeric(fd_values, errors='coerce').fillna(0)
+                        high_motion_percentage = (fd_values > 0.5).mean() * 100
+                        
+                        if high_motion_percentage > 50:
+                            print(f"Excluding {subject} due to excessive motion: {high_motion_percentage:.2f}% of frames > 0.5mm")
+                            subjects_excluded_motion.append(subject)
+                            continue  # Skip this subject
+                    except Exception as e:
+                        print(f"Error reading FD file for {subject}: {str(e)}")
+            else:
+                scrubbed_data = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
+                fd_file = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/framewise_displ.txt")
+                unscrubbed_file = None
+
+                if scrubbed_data.exists() and fd_file.exists():
+                    try:
+                        fd_values = pd.read_csv(fd_file, header=None).iloc[:, 0]
+                        fd_values = pd.to_numeric(fd_values, errors='coerce').fillna(0)
+                        high_motion_percentage = (fd_values > 0.5).mean() * 100
+                        
+                        if high_motion_percentage > 50:
+                            print(f"Excluding {subject} due to excessive motion: {high_motion_percentage:.2f}% of frames > 0.5mm")
+                            subjects_excluded_motion.append(subject)
+                            continue  # Skip this subject
+                    except Exception as e:
+                        print(f"Error reading FD file for {subject}: {str(e)}")
+                elif not scrubbed_data.exists(): 
+                    # Note these no ses logic because this only exists for tp2
+                    scrubbed_data = Path(f"{local_root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
+                    if scrubbed_data.exists() and fd_file.exists():
+                        try:
+                            fd_values = pd.read_csv(fd_file, header=None).iloc[:, 0]
+                            fd_values = pd.to_numeric(fd_values, errors='coerce').fillna(0)
+                            high_motion_percentage = (fd_values > 0.5).mean() * 100
+                            
+                            if high_motion_percentage > 50:
+                                print(f"Excluding {subject} due to excessive motion: {high_motion_percentage:.2f}% of frames > 0.5mm")
+                                subjects_excluded_motion.append(subject)
+                                continue  # Skip this subject
+                        except Exception as e:
+                            print(f"Error reading FD file for {subject}: {str(e)}")
+                else:
+                    print(f"Scrubbed data not found for {subject}. Skipping this subject.")
+                    continue
+                
         output_data = Path(f"{output_directory}/ses-{ses}")
 
-        if scrubbed_data.exists() and any(scrubbed_data.iterdir()):
+        if scrubbed_data.exists() or unscrubbed_file and unscrubbed_file.exists():
             expected_output_filename = f"{subject}_ses-{ses}_schaefer200_timeseries.csv"
             output_file_path = output_data / expected_output_filename
 
@@ -99,6 +207,8 @@ def get_subjects_to_process(root_directory, output_directory, ses):
                 subjects_to_process.append(subject)
 
     print(f"Number of subjects to process: {len(subjects_to_process)}")
+    print(f"Number of subjects excluded due to no bold file: {len(subjects_excluded_no_bold)}")
+    print(f"Number of subjects excluded due to excessive motion: {len(subjects_excluded_motion)}")
     return subjects_to_process
 
 def main(
@@ -163,15 +273,24 @@ def main(
 
 
 if __name__ == "__main__":
-    ses = "02"
+    ses = "01"
+    timepoint = "1"
     threshold = "0.5"
+    cohort = "bbhi senior"  
     root = Path("/home/rachel/Desktop/schaefer_analysis/") 
     output_directory = Path(f"{root}/timeseries_data/fsaverage")
     combined_labels_csv = f"{root}/timeseries_data/fsaverage/combined_labels.csv" # Path to labels for each of the ROIs
-    root_directories = [
-        Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data"),
-        Path("/pool/guttmann/institut/UB/Superagers/MRI/resting-preprocessed")
-    ]
+    local_root_directory = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data") # Only relevant for BBHI senior cohort
+
+    if cohort == "bbhi":
+        subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
+        if timepoint == "1":
+            root_directory = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed")
+        else:
+            root_directory = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp2")
+    else:
+        subject_csv = None
+        root_directory = Path("/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed")
     error_log_path = output_directory / "error_log.txt"
 
     # Create the output directory if it does not exist
@@ -179,49 +298,11 @@ if __name__ == "__main__":
 
     roi_indices = [0]  # ROIs to visualize
 
-    # Generate a list of subjects to process using multiple root directories
-    def get_subjects_from_multiple_roots(root_dirs, output_dir, ses):
-        all_subjects = []
-        for root_dir in root_dirs:
-            subjects = get_subjects_to_process(root_dir, output_dir, ses)
-            all_subjects.extend(subjects)
-        # Remove duplicates while preserving order
-        unique_subjects = []
-        for subject in all_subjects:
-            if subject not in unique_subjects:
-                unique_subjects.append(subject)
-        return unique_subjects
-    
-    subjects = get_subjects_from_multiple_roots(root_directories, output_directory, ses)
+    # Generate a list of subjects to process
+    subjects = get_subjects_to_process(root_directory, local_root_directory, output_directory, ses, cohort) 
 
     atlas_file_template = f"{root}/fsaverage/ses-{ses}/{{subject}}/bold_space_masks/{{subject}}_ses-{ses}_schaefer200_subcortical14_bold_space.nii.gz"
 
-    # Since data can be in either directory, check both
-    def find_bold_file_path(subject, ses, threshold):
-        # Try the first root directory
-        path1 = os.path.join(
-            root_directories[0],
-            subject,
-            f"ses-{ses}",
-            "native_T1",
-            f"{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold}.nii.gz",
-        )
-        
-        # Try the second root directory
-        path2 = os.path.join(
-            root_directories[1],
-            subject,
-            f"ses-{ses}",
-            "native_T1",
-            f"{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold}.nii.gz",
-        )
-        
-        # Return the path that exists
-        if os.path.exists(path1):
-            return path1
-        elif os.path.exists(path2):
-            return path2
-        
     bold_template = os.path.join(
         "{root_dir}",
         "{subject}",
@@ -229,31 +310,6 @@ if __name__ == "__main__":
         "native_T1",
         "{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold}.nii.gz",
     )
-
-    # Modify process_subject_extract to handle checking both root directories
-    def process_subject_extract_wrapper(args):
-        subject, ses, threshold, _, atlas_file, output_dir, roi_indices, error_log_path, combined_labels = args
-        
-        # Find the correct bold file path
-        for root_dir in root_directories:
-            bold_path = bold_template.format(
-                root_dir=root_dir,
-                subject=subject,
-                threshold=threshold
-            )
-            
-            if os.path.exists(bold_path):
-                # Found the file, use this path
-                args_with_correct_path = (
-                    subject, ses, threshold, bold_path, atlas_file,
-                    output_dir, roi_indices, error_log_path, combined_labels
-                )
-                return process_subject_extract(args_with_correct_path)
-        
-        # If file not found in any root directory, log an error
-        with open(error_log_path, "a") as f:
-            f.write(f"Could not find BOLD file for subject {subject}\n")
-        return None
 
     main(
         ses=ses,
@@ -264,7 +320,6 @@ if __name__ == "__main__":
         roi_indices=roi_indices,
         combined_labels_csv=combined_labels_csv,
         atlas_file_template=atlas_file_template,
-        subjects=subjects,
         # multi=False,
         multi=True, # Uncomment this line to enable parallel processing
     )

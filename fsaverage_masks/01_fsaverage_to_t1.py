@@ -161,7 +161,7 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
             "--annot", str(lh_annotation),
             "--temp", f"{reconall_dir}/{subject_dir}/mri/T1.mgz",
             "--identity",
-            "--fillthresh", "0.3",
+            "--fillthresh", "0.0",
             "--proj", "frac", "0", "1", "0.1",
             "--subject", subject_dir,
             "--o", f"{output_folder}/{subject_id}_schaefer_volumetric_t1_lh.nii.gz",

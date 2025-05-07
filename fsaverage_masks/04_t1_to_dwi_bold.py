@@ -34,10 +34,7 @@ def get_subjects_to_process(dwi_bbhi_dir, dwi_bbhi_senior_dir, out_dir, ses, coh
 
         # Set paths based on cohort and timepoint (as they vary)
         if cohort == "bbhi":
-            if ses == "ses-01":
-                dwi_root_dir = Path(f"{dwi_bbhi_dir}/{subject}")
-            else:  # ses == "ses-02"
-                dwi_root_dir = Path(f"{dwi_bbhi_dir}/{subject}_{ses}")
+            dwi_root_dir = Path(f"{dwi_bbhi_dir}/{subject}")
         else:  # cohort == "bbhi senior"
             if ses == "ses-01":
                 dwi_root_dir = Path(f"{dwi_bbhi_senior_dir}/{subject}")
@@ -257,13 +254,11 @@ def main():
 
         # Set paths based on cohort
         if cohort == "bbhi":
-            # BBHI paths
+            dwi_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp{timepoint}/{subject}")
             if timepoint == "2":
-                dwi_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp{timepoint}/{subject}_{ses}")
                 bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp{timepoint}")
             else:  # timepoint == "1"
                 bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed")
-                dwi_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp{timepoint}/{subject}")
         else:  # cohort == "bbhi senior"
             bold_root_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed")
             if ses == "ses-01":
