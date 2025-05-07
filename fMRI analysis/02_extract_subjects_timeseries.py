@@ -2,12 +2,9 @@ import os
 from multiprocessing import Pool
 from pathlib import Path
 from typing import List, Union
-
 import numpy as np
 import pandas as pd
 from extract_timeseries import extract_timeseries, visualize_timeseries
-# from nilearn.image import load_img, new_img_like, resample_to_img
-# import nibabel as nib
 
 def process_subject_extract(args):
     """Processes a single subject: extracts timeseries and saves it.
@@ -69,7 +66,7 @@ def process_subject_extract(args):
     np.savetxt(timeseries_output_path, timeseries, delimiter=",")
 
     # Run this line if you want to visualize the data
-    visualize_timeseries(subject_id, timeseries, roi_indices)
+    # visualize_timeseries(subject_id, timeseries, roi_indices)
 
     print(f"Processing completed for subject: {subject_id}")
 
@@ -225,7 +222,6 @@ def main(
     output_dir: Union[str, Path],
     bold_template: str,
     roi_indices: List[int],
-    combined_labels_csv: str,
     atlas_file_template: str,
     multi: bool = False,
 ):
@@ -242,7 +238,6 @@ def main(
         bold_template (str): Path / template for the location of BOLD data.
         roi_indices (List[int]): ROI indices for timeseries visualization (e.g. add the index for the ROI/s you want to visualize).
         multi (bool): If True, enables parallel processing using multiprocessing. Defaults to False.
-        combined_labels_csv (str): Path to the CSV file containing the combined labels.
         atlas_file_template (str): Template string for the atlas file path.
     """
     output_dir = Path(output_dir)
@@ -250,10 +245,6 @@ def main(
 
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Read the ROI labels from the CSV
-    with open(combined_labels_csv, "r", encoding="utf-8") as f:
-        combined_labels = [line.strip() for line in f.readlines()]
 
     # Pass atlas template and labels to the processing function
     args = [
@@ -285,7 +276,6 @@ if __name__ == "__main__":
     cohort = "bbhi senior"  
     root = Path("/home/rachel/Desktop/schaefer_analysis/") 
     output_directory = Path(f"{root}/timeseries_data/native_space")
-    combined_labels_csv = f"{root}/timeseries_data/native_space/combined_labels.csv" # Path to labels for each of the ROIs
     local_root_directory = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data") # Only relevant for BBHI senior cohort
 
     if cohort == "bbhi":
@@ -329,7 +319,6 @@ if __name__ == "__main__":
         output_dir=output_directory,
         bold_template=bold_template,
         roi_indices=roi_indices,
-        combined_labels_csv=combined_labels_csv,
         atlas_file_template=atlas_file_template,
         # multi=False,
         multi=True, # Uncomment this line to enable parallel processing

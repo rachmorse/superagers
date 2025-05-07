@@ -7,7 +7,7 @@ import nibabel as nib
 import numpy as np
 import pandas as pd
 from compute_functional_connectivity import compute_functional_connectivity, visualize_fc_data
-from nilearn import datasets
+# from nilearn import datasets
 
 
 def process_subject_functional(args):
@@ -27,7 +27,7 @@ def process_subject_functional(args):
         FileNotFoundError: If the timeseries file is not found.
         Exception: If an error occurs while loading the timeseries data
     """
-    subject_id, ses, output_dir, root_directory, error_log_path, atlas_file_path = args
+    subject_id, ses, output_dir, root_directory, error_log_path = args
 
     timeseries_file = root_directory / f"{subject_id}_ses-{ses}_subcortical_schaefer200_timeseries.csv"
 
@@ -62,7 +62,7 @@ def process_subject_functional(args):
     )
 
     # Visualize data if you would like by uncommenting the line below
-    # visualize_fc_data(subject_id, fisher_z_matrix, output_dir, ses, True)
+    visualize_fc_data(subject_id, fisher_z_matrix, output_dir, ses, True)
 
     print(f"Processing completed for subject: {subject_id}")
 
@@ -88,7 +88,7 @@ def get_subjects_to_process(root_directory, output_directory, ses):
         processed_subjects = set()
 
     for filename in os.listdir(root_directory):
-        if filename.startswith("sub-") and filename.endswith(f"{subject_id}_ses-{ses}_subcortical_schaefer200_timeseries.csv"):
+        if filename.startswith("sub-") and filename.endswith(f"_ses-{ses}_subcortical_schaefer200_timeseries.csv"):
             subject_id = filename.split("_")[0]
             if subject_id not in processed_subjects:
                 subjects_to_process.append(subject_id)
@@ -96,7 +96,7 @@ def get_subjects_to_process(root_directory, output_directory, ses):
     return subjects_to_process
 
 
-def main(output_dir: Union[str, Path], root_directory: Union[str, Path], atlas_file_path: str, ses: str):
+def main(output_dir: Union[str, Path], root_directory: Union[str, Path], ses: str):
     """Main function to run the script.
 
     This function reads the pre-extracted timeseries data for each subject,
@@ -105,7 +105,6 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], atlas_f
     Args:
         output_dir (Union[str, Path]): Path where processed data will be output.
         root_directory (Union[str, Path]): Root directory for the timeseries data.
-        atlas_file_path (str): Path to the combined atlas file.
         ses (str): Session / timepoint.
 
     Raises:
@@ -126,7 +125,6 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], atlas_f
             output_dir,
             root_directory,
             error_log_path,
-            atlas_file_path,
         )
         for subject_id in subjects
     ]
@@ -137,10 +135,9 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], atlas_f
 
 if __name__ == "__main__":
     ses = "02"
-    timeseries_path = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data/fsaverage")
-    atlas_file_path = Path(f"/home/rachel/Desktop/schaefer_analysis//fsaverage/ses-{ses}/{{subject}}/bold_space_masks/{{subject}}_ses-{ses}_schaefer200_subcortical14_bold_space.nii.gz")
+    timeseries_path = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data/native_space")
     root_directory = Path(f"{timeseries_path}/ses-{ses}")
-    output_directory = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/fsaverage")
+    output_directory = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
 
     # Create the output directory if it does not exist
     output_directory.mkdir(parents=True, exist_ok=True)
@@ -153,5 +150,4 @@ if __name__ == "__main__":
         output_dir=output_directory,
         root_directory=root_directory,
         ses=ses,
-        atlas_file_path=atlas_file_path,
     )

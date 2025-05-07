@@ -26,10 +26,10 @@ def extract_timeseries(atlas_file: str, fmri_file: str, error_log_path: Path) ->
     """
     try:
         if not os.path.exists(fmri_file):
-            raise FileNotFoundError(f"fMRI file {fmri_file} not found.")
+            raise FileNotFoundError(f"BOLD file {fmri_file} not found.")
 
         if not os.path.exists(atlas_file):
-            raise FileNotFoundError(f"Scaeffer atlas file {atlas_file} not found.")
+            raise FileNotFoundError(f"Schaefer atlas file {atlas_file} not found.")
 
         # Load the atlas file
         atlas_img = nib.load(atlas_file)
