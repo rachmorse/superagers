@@ -284,8 +284,8 @@ if __name__ == "__main__":
     threshold = "0.5"
     cohort = "bbhi senior"  
     root = Path("/home/rachel/Desktop/schaefer_analysis/") 
-    output_directory = Path(f"{root}/timeseries_data/fsaverage")
-    combined_labels_csv = f"{root}/timeseries_data/fsaverage/combined_labels.csv" # Path to labels for each of the ROIs
+    output_directory = Path(f"{root}/timeseries_data/native_space")
+    combined_labels_csv = f"{root}/timeseries_data/native_space/combined_labels.csv" # Path to labels for each of the ROIs
     local_root_directory = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data") # Only relevant for BBHI senior cohort
 
     if cohort == "bbhi":
