@@ -5,11 +5,9 @@ from typing import List, Union
 
 import numpy as np
 import pandas as pd
-from extract_timeseries import extract_timeseries
-from nilearn import datasets
-from nilearn.datasets import fetch_atlas_schaefer_2018, fetch_atlas_harvard_oxford
-from nilearn.image import load_img, new_img_like, resample_to_img
-import nibabel as nib
+from extract_timeseries import extract_timeseries, visualize_timeseries
+# from nilearn.image import load_img, new_img_like, resample_to_img
+# import nibabel as nib
 
 def process_subject_extract(args):
     """Processes a single subject: extracts timeseries and saves it.
@@ -39,8 +37,17 @@ def process_subject_extract(args):
         error_log_path,
     ) = args
 
-    bold_path_template = bold_template.format(subject=subject_id, ses=ses, threshold=threshold)
+    if isinstance(bold_template, Path):
+        bold_path_template = str(bold_template).format(subject=subject_id, ses=ses, threshold=threshold)
+    else:
+        bold_path_template = bold_template.format(subject=subject_id, ses=ses, threshold=threshold)
 
+    if isinstance(atlas_file, Path):
+        atlas_path = str(atlas_file).format(subject=subject_id, ses=ses)
+        atlas_file = Path(atlas_path)
+    else:
+        atlas_file = Path(atlas_file.format(subject=subject_id, ses=ses))
+        
     fmri_file = Path(bold_path_template)
 
     print(f"--- Processing subject: {subject_id} ---")
@@ -62,7 +69,7 @@ def process_subject_extract(args):
     np.savetxt(timeseries_output_path, timeseries, delimiter=",")
 
     # Run this line if you want to visualize the data
-    # visualize_timeseries(subject_id, timeseries, roi_indices)
+    visualize_timeseries(subject_id, timeseries, roi_indices)
 
     print(f"Processing completed for subject: {subject_id}")
 
@@ -259,7 +266,6 @@ def main(
             output_dir,
             roi_indices,
             error_log_path,
-            combined_labels,  # Add labels to the arguments
         )
         for subject in subjects
     ]
@@ -273,8 +279,8 @@ def main(
 
 
 if __name__ == "__main__":
-    ses = "01"
-    timepoint = "1"
+    ses = "02"
+    timepoint = "2"
     threshold = "0.5"
     cohort = "bbhi senior"  
     root = Path("/home/rachel/Desktop/schaefer_analysis/") 
@@ -299,17 +305,22 @@ if __name__ == "__main__":
     roi_indices = [0]  # ROIs to visualize
 
     # Generate a list of subjects to process
-    subjects = get_subjects_to_process(root_directory, local_root_directory, output_directory, ses, cohort) 
+    # subjects = get_subjects_to_process(root_directory, local_root_directory, output_directory, ses, cohort) 
 
-    atlas_file_template = f"{root}/fsaverage/ses-{ses}/{{subject}}/bold_space_masks/{{subject}}_ses-{ses}_schaefer200_subcortical14_bold_space.nii.gz"
+    # Run the code on a sample subject
+    subjects = ["sub-1023"]
 
-    bold_template = os.path.join(
-        "{root_dir}",
-        "{subject}",
-        f"ses-{ses}",
-        "native_T1",
-        "{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold}.nii.gz",
-    )
+    atlas_file_template = Path(f"{root}/fsaverage/ses-{ses}/{{subject}}/bold_space_masks/{{subject}}_ses-{ses}_schaefer200_subcortical14_bold_space.nii.gz")
+
+    if cohort == "bbhi":
+        bold_template = Path(f"{root_directory}/{{subject}}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
+    else:
+        if ses == "01":
+            bold_template = Path(f"{root_directory}/{{subject}}/ses-{ses}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
+        else:
+            bold_template = Path(f"{root_directory}/{{subject}}/ses-{ses}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
+            if not bold_template.exists():
+                bold_template = Path(f"{local_root_directory}/{{subject}}/ses-{ses}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
 
     main(
         ses=ses,
