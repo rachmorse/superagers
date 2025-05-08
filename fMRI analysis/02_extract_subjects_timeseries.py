@@ -70,8 +70,35 @@ def process_subject_extract(args):
 
     print(f"Processing completed for subject: {subject_id}")
 
+def exclude_subjects_framewise_displ(subject, ses, root_directory):
+    """Check if the subject has excessive motion (>50% of frames exceeding 0.5 mm).
 
-def get_subjects_to_process(root_directory, local_root_directory, output_directory, ses, cohort):
+    Args:
+        subject (str): Subject ID.
+        ses (str): Session identifier.
+        root_directory (Path): Path to the root directory containing the data.
+
+    Returns:
+        bool: True if the subject should be excluded due to excessive motion, False otherwise.
+    """
+    fd_file = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/framewise_displ.txt")
+    
+    if fd_file.exists():
+        try:
+            fd_values = pd.read_csv(fd_file, header=None).iloc[:, 0]
+            fd_values = pd.to_numeric(fd_values, errors='coerce').fillna(0)
+            high_motion_percentage = (fd_values > 0.5).mean() * 100
+            
+            if high_motion_percentage > 50:
+                print(f"Excluding {subject} due to excessive motion: {high_motion_percentage:.2f}% of frames > 0.5mm")
+                return True
+        except Exception as e:
+            print(f"Error reading FD file for {subject}: {str(e)}")
+    
+    return False
+
+
+def get_subjects_to_process(root_directory, local_root_directory, atlas_file_template, output_directory, ses, cohort):
     """Generate a list of subjects to process based on whether they have
     scrubbed data and a timeseries file already generated. Then exclude subjects    
     with excessive motion (>50% of frames exceeding 0.5 mm).
@@ -79,6 +106,7 @@ def get_subjects_to_process(root_directory, local_root_directory, output_directo
     Args:
         root_directory (Path): Path to the root directory containing the scrubbed data.
         local_root_directory (Path): Path to the local root directory containing the scrubbed data (eg. Desktop).
+        atlas_file_template (Path): Path to the Schaefer atlas mask.
         output_directory (Path): Path to the output directory where timeseries data is saved.
         ses (str): Session / timepoint.
         cohort (str): Cohort name (e.g., 'bbhi', 'superagers').
@@ -86,6 +114,7 @@ def get_subjects_to_process(root_directory, local_root_directory, output_directo
     subjects_to_process = []
     subjects_excluded_motion = []
     subjects_excluded_no_bold = []
+    subjects_without_atlas_file = []
     subjects = []
 
     # Iterate over all possible subject directories
@@ -99,10 +128,22 @@ def get_subjects_to_process(root_directory, local_root_directory, output_directo
             subjects = []
     else:
         # Read from directory
-        ses_root_dir = Path(f"{root_directory}/ses-{ses}")
         for subject_dir in os.listdir(root_directory):
             # This checks whether they have data for the correct timepoint 
-            if subject_dir.startswith("sub-") and ses_root_dir.is_dir():
+            if subject_dir.startswith("sub-"):
+                if ses == "01":
+                    # Use subject_dir, not subject
+                    session_path = Path(f"{root_directory}/{subject_dir}/ses-01")
+                    session_exists = session_path.exists() and session_path.is_dir()
+                elif ses == "02":
+                    # Use subject_dir, not subject
+                    session_path = Path(f"{root_directory}/{subject_dir}/ses-02") 
+                    session_exists = session_path.exists() and session_path.is_dir()
+                else:
+                    session_exists = False
+                    
+                if not session_exists:
+                    continue
                 subjects.append(subject_dir)
 
     # Now process each subject
@@ -126,18 +167,9 @@ def get_subjects_to_process(root_directory, local_root_directory, output_directo
 
             # If FD file exists, check motion criteria
             if fd_file.exists() and bold_file_exists:
-                # Read FD values and check if >50% exceed 0.5 mm threshold
-                try:
-                    fd_values = pd.read_csv(fd_file, header=None).iloc[:, 0]
-                    fd_values = pd.to_numeric(fd_values, errors='coerce').fillna(0)
-                    high_motion_percentage = (fd_values > 0.5).mean() * 100
-                    
-                    if high_motion_percentage > 50:
-                        print(f"Excluding {subject} due to excessive motion: {high_motion_percentage:.2f}% of frames > 0.5mm")
-                        subjects_excluded_motion.append(subject)
-                        continue  # Skip this subject
-                except Exception as e:
-                    print(f"Error reading FD file for {subject}: {str(e)}")
+                if exclude_subjects_framewise_displ(subject, ses, root_directory):
+                    subjects_excluded_motion.append(subject)
+                    continue 
         else:
             # For BBHI senior cohorts, use original logic
             if ses == "01":
@@ -155,57 +187,51 @@ def get_subjects_to_process(root_directory, local_root_directory, output_directo
 
                 # If FD file exists, check motion criteria
                 if fd_file.exists() and bold_file_exists:
-                    # Read FD values and check if >50% exceed 0.5 mm threshold
-                    try:
-                        fd_values = pd.read_csv(fd_file, header=None).iloc[:, 0]
-                        fd_values = pd.to_numeric(fd_values, errors='coerce').fillna(0)
-                        high_motion_percentage = (fd_values > 0.5).mean() * 100
-                        
-                        if high_motion_percentage > 50:
-                            print(f"Excluding {subject} due to excessive motion: {high_motion_percentage:.2f}% of frames > 0.5mm")
-                            subjects_excluded_motion.append(subject)
-                            continue  # Skip this subject
-                    except Exception as e:
-                        print(f"Error reading FD file for {subject}: {str(e)}")
+                    if exclude_subjects_framewise_displ(subject, ses, root_directory):
+                        subjects_excluded_motion.append(subject)
+                        continue 
             else:
                 scrubbed_data = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
                 fd_file = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/framewise_displ.txt")
                 unscrubbed_file = None
 
                 if scrubbed_data.exists() and fd_file.exists():
-                    try:
-                        fd_values = pd.read_csv(fd_file, header=None).iloc[:, 0]
-                        fd_values = pd.to_numeric(fd_values, errors='coerce').fillna(0)
-                        high_motion_percentage = (fd_values > 0.5).mean() * 100
-                        
-                        if high_motion_percentage > 50:
-                            print(f"Excluding {subject} due to excessive motion: {high_motion_percentage:.2f}% of frames > 0.5mm")
-                            subjects_excluded_motion.append(subject)
-                            continue  # Skip this subject
-                    except Exception as e:
-                        print(f"Error reading FD file for {subject}: {str(e)}")
+                    if exclude_subjects_framewise_displ(subject, ses, root_directory):
+                        subjects_excluded_motion.append(subject)
+                        continue 
                 elif not scrubbed_data.exists(): 
                     # Note these no ses logic because this only exists for tp2
                     scrubbed_data = Path(f"{local_root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
                     if scrubbed_data.exists() and fd_file.exists():
-                        try:
-                            fd_values = pd.read_csv(fd_file, header=None).iloc[:, 0]
-                            fd_values = pd.to_numeric(fd_values, errors='coerce').fillna(0)
-                            high_motion_percentage = (fd_values > 0.5).mean() * 100
-                            
-                            if high_motion_percentage > 50:
-                                print(f"Excluding {subject} due to excessive motion: {high_motion_percentage:.2f}% of frames > 0.5mm")
-                                subjects_excluded_motion.append(subject)
-                                continue  # Skip this subject
-                        except Exception as e:
-                            print(f"Error reading FD file for {subject}: {str(e)}")
+                        if exclude_subjects_framewise_displ(subject, ses, root_directory):
+                            subjects_excluded_motion.append(subject)
+                            continue 
                 else:
                     print(f"Scrubbed data not found for {subject}. Skipping this subject.")
                     continue
                 
         output_data = Path(f"{output_directory}/ses-{ses}")
 
-        if scrubbed_data.exists() or unscrubbed_file and unscrubbed_file.exists():
+        # Format the atlas file path for this specific subject
+        if isinstance(atlas_file_template, Path):
+            atlas_path = str(atlas_file_template).format(subject=subject, ses=ses)
+            subject_atlas_file = Path(atlas_path)
+        else:
+            subject_atlas_file = Path(atlas_file_template.format(subject=subject, ses=ses))
+
+        # Check if either scrubbed or unscrubbed data exists and the atlas file exists
+        bold_file_exists = scrubbed_data.exists() or (unscrubbed_file is not None and unscrubbed_file.exists())
+        atlas_file_exists = subject_atlas_file.exists()
+
+        if bold_file_exists:
+            if not atlas_file_exists:
+                # Track subjects with no atlas file
+                print(f"Atlas file not found for {subject}: {subject_atlas_file}")
+                subjects_without_atlas_file.append(subject)
+                continue
+                
+            # Now create the output directory and check if output file exists
+            output_data.mkdir(parents=True, exist_ok=True)
             expected_output_filename = f"{subject}_ses-{ses}_subcortical_schaefer200_timeseries.csv"
             output_file_path = output_data / expected_output_filename
 
@@ -215,6 +241,7 @@ def get_subjects_to_process(root_directory, local_root_directory, output_directo
     print(f"Number of subjects to process: {len(subjects_to_process)}")
     print(f"Number of subjects excluded due to no bold file: {len(subjects_excluded_no_bold)}")
     print(f"Number of subjects excluded due to excessive motion: {len(subjects_excluded_motion)}")
+    print(f"Number of subjects excluded due to no atlas file: {len(subjects_without_atlas_file)}")
     return subjects_to_process
 
 def main(
@@ -272,10 +299,10 @@ def main(
 
 
 if __name__ == "__main__":
-    ses = "02"
-    timepoint = "2"
+    ses = "01"
+    timepoint = "1"
     threshold = "0.5"
-    cohort = "bbhi"  
+    cohort = "bbhi senior"  
     root = Path("/home/rachel/Desktop/schaefer_analysis/") 
     output_directory = Path(f"{root}/timeseries_data/native_space")
     local_root_directory = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data") # Only relevant for BBHI senior cohort
@@ -296,13 +323,13 @@ if __name__ == "__main__":
 
     roi_indices = [0]  # ROIs to visualize
 
+    atlas_file_template = Path(f"{root}/fsaverage/ses-{ses}/{{subject}}/bold_space_masks/{{subject}}_ses-{ses}_schaefer200_subcortical14_bold_space.nii.gz")
+
     # Generate a list of subjects to process
-    subjects = get_subjects_to_process(root_directory, local_root_directory, output_directory, ses, cohort) 
+    subjects = get_subjects_to_process(root_directory, local_root_directory, atlas_file_template, output_directory, ses, cohort) 
 
     # Run the code on a sample subject
     # subjects = ["sub-1023"]
-
-    atlas_file_template = Path(f"{root}/fsaverage/ses-{ses}/{{subject}}/bold_space_masks/{{subject}}_ses-{ses}_schaefer200_subcortical14_bold_space.nii.gz")
 
     if cohort == "bbhi":
         bold_template = Path(f"{root_directory}/{{subject}}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
