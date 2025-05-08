@@ -53,7 +53,6 @@ The folders, listed in their intended order of use, are described below along wi
 - **Purpose:** These scripts extract the structural data using FreeSurfer. 
 - **Scripts:**
     - `extract_freesurfer_stats.py`: Extracts the structural data following the recon-all processing including hippocampal volumes and white matter hypointensities.
-    - `transform_mni_to_native.py`: Transforms the Schaefer/Harvard-Oxford atlas that is used for the functional analyses (see `02_extract_subjects_timeseries.py`) from MNI space to each participant's native space. 
     - `generate_structural_matrices.py`: Computes various structural connectivity matrices from the MRTrix data include all-to-all ROI and network specific matrices. Also, visualizes the matrices. 
         - Uses functions from the script `compute_functional_connectivity.py`.
 - **Notes:**

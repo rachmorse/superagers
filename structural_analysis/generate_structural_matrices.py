@@ -45,16 +45,10 @@ def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
         list: List of subject IDs to process.
     """
     subjects_to_process = []
-
-    # Determine which session-specific tractogram directory to use
-    if ses == "01":
-        tract_path = Path(f"{tractogram_dir}/tracto_MSMTCSD_TP1")
-    else:  # ses-02
-        tract_path = Path(f"{tractogram_dir}/tracto_MSMTCSD_TP2")
     
     # Get all subjects with tractogram files
     tractogram_subjects = []
-    for file in os.listdir(tract_path):
+    for file in os.listdir(tractogram_dir):
         if file.endswith("_dwi_tractogram_1M_SIFT.tck"):
             subject_id = file.split("_")[0]
             tractogram_subjects.append(subject_id)
@@ -74,8 +68,7 @@ def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
     # Iterate through subjects with tractograms
     for subject in tractogram_subjects:
         # Check if native space mask exists
-        mask_file = Path(f"{mask_dir}/ses-{ses}/native_space_masks/{subject}_ses-{ses}_schaefer_oxford_native_space_mask.nii.gz")
-        
+        mask_file = Path(f"{mask_dir}/{ses}/{subject}/dwi_space_masks/{subject}_{ses}_schaefer200_subcortical14_dwi_space.nii.gz")
         # Check if subject already processed (in the CSV)
         if mask_file.exists() and subject not in existing_subjects:
             subjects_to_process.append(subject)
@@ -189,14 +182,8 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
     Returns:
         np.ndarray: The generated connectivity matrix.
     """
-    # Set up file paths based on the session
-    if ses == "01":
-        tract_path = Path(f"{tractogram_dir}/tracto_MSMTCSD_TP1")
-    else:  # ses-02
-        tract_path = Path(f"{tractogram_dir}/tracto_MSMTCSD_TP2")
-    
-    tractogram_file = tract_path / f"{subject}_dwi_tractogram_1M_SIFT.tck"
-    mask_file = Path(f"{mask_dir}/ses-{ses}/native_space_masks/{subject}_ses-{ses}_schaefer_oxford_native_space_mask.nii.gz")
+    tractogram_file = tractogram_dir / f"{subject}_dwi_tractogram_1M_SIFT.tck"
+    mask_file = Path(f"{mask_dir}/{ses}/{subject}/dwi_space_masks/{subject}_{ses}_schaefer200_subcortical14_dwi_space.nii.gz")
     
     # Create output directories
     prepare_directories(output_dir, ses, ["all_to_all_roi_matrices", "within_network_matrices", "subcortical_matrices", "visualization"])
@@ -355,10 +342,21 @@ def main():
     """Main function to process structural connectivity for subjects."""
     # Set parameters
     ses = "01"  
-    tractogram_dir = Path("/pool/guttmann/institut/BBHI/MRI/processed_data")
-    mask_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_masks")
+    cohort = "bbhi"
+    mask_dir = Path("/home/rachel/Desktop/schaefer_analysis/fsaverage")
     output_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
-    labels_csv_path = "/home/rachel/Desktop/schaefer_analysis/timeseries_data/combined_labels.csv"
+    labels_csv_path = "/home/rachel/Desktop/schaefer_analysis/timeseries_data/native_space/combined_labels.csv"
+
+    if cohort == "bbhi":
+        if ses == "01":
+            tractogram_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_MSMTCSD_TP1")
+        else:  # ses-02
+            tractogram_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_MSMTCSD_TP2")
+    else:
+        if ses == "01":
+            tractogram_dir = Path("/pool/guttmann/institut/UB/Superagers/MRI/tracto_MSMTCSD_TP1")
+        else:  
+            tractogram_dir = Path("/pool/guttmann/institut/UB/Superagers/MRI/tracto_MSMTCSD_TP2")
 
     # Setup MRTrix 
     os.environ["PATH"] = f"/home/rachel/miniconda3/bin:{os.environ['PATH']}"
@@ -376,7 +374,7 @@ def main():
     # For testing with a single subject
     # subjects = ["sub-44010"]
 
-        # Track both failed and successful subjects
+    # Track both failed and successful subjects
     successful_subjects = []
     failed_subjects = []
     
