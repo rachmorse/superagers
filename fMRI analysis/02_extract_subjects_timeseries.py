@@ -206,7 +206,7 @@ def get_subjects_to_process(root_directory, local_root_directory, output_directo
         output_data = Path(f"{output_directory}/ses-{ses}")
 
         if scrubbed_data.exists() or unscrubbed_file and unscrubbed_file.exists():
-            expected_output_filename = f"{subject}_ses-{ses}_schaefer200_timeseries.csv"
+            expected_output_filename = f"{subject}_ses-{ses}_subcortical_schaefer200_timeseries.csv"
             output_file_path = output_data / expected_output_filename
 
             if not output_file_path.exists():
@@ -272,8 +272,8 @@ def main(
 
 
 if __name__ == "__main__":
-    ses = "01"
-    timepoint = "1"
+    ses = "02"
+    timepoint = "2"
     threshold = "0.5"
     cohort = "bbhi"  
     root = Path("/home/rachel/Desktop/schaefer_analysis/") 
