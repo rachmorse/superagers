@@ -230,10 +230,6 @@ def main(
     potential_subjects = os.listdir(root)
     subjects = []
 
-    # Determine subjects list 
-    potential_subjects = os.listdir(root)
-    subjects = []
-
     # Filter subjects based on whether they have the required session directory
     # and don't already have scrubbed data
     for subject in potential_subjects:
