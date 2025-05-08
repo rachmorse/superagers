@@ -330,7 +330,9 @@ if __name__ == "__main__":
     threshold = 0.5
     output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
     ses = "02"
-    root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed" 
+    # Temporarily add local root 
+    root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
+    # root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed" 
     subject_dir_pattern = f"ses-{ses}/native_T1"
 
     # Create the output directory if it does not exist
