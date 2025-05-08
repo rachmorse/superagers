@@ -42,7 +42,7 @@ def get_subjects_to_process(reconall_dir, out_dir, ses, cohort):
     # If cohort is 'bbhi', read the CSV file to filter valid IDs
     valid_ids = None
     if cohort == 'bbhi':
-        df_bbhi = pd.read_csv('/home/rachel/Desktop/data/clean_bbhi.csv')
+        df_bbhi = pd.read_csv('/home/rachel/Desktop/data/bbhi_ids_tp1.csv')
         # Convert ID column to string in case file has numeric IDs
         valid_ids = set(df_bbhi['id'].astype(str).tolist())
 
