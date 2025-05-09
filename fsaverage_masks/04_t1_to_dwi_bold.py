@@ -293,7 +293,7 @@ def main():
     # Set up parameters
     timepoint = "1"
     ses = "ses-01"
-    cohort = "bbhi"
+    cohort = "bbhi senior"
 
     sys.stdout.flush() 
     print("-----------------------Running 04_t1_to_dwi_bold.py-----------------------")

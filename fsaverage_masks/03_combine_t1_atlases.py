@@ -187,9 +187,9 @@ def process_subject(output_folder, subject, ses):
 
 def main():
     # Define paths
-    ses = "ses-01"
+    ses = "ses-02"
     output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
-    cohort = "bbhi"
+    cohort = "bbhi senior"
     
     # Set up logging level
     logger.setLevel(logging.INFO)

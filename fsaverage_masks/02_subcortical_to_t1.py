@@ -195,8 +195,8 @@ def main():
     # Set up logging level based on verbose flag
     logger.setLevel(logging.DEBUG)
 
-    cohort = "bbhi"
-    ses = "ses-01"
+    cohort = "bbhi senior"
+    ses = "ses-02"
     output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
 
     print("-----------------------Running 02_subcortical_to_t1.py-----------------------")
