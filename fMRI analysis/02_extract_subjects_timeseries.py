@@ -271,7 +271,7 @@ def main(
         atlas_file_template (str): Template string for the atlas file path.
     """
     output_dir = Path(output_dir)
-    error_log_path = Path(output_dir)
+    error_log_path = Path(f"{output_dir}/error_log.txt")
 
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -304,7 +304,7 @@ if __name__ == "__main__":
     timepoint = "1"
     threshold = "0.5"
     cohort = "bbhi senior"  
-    root = Path("/home/rachel/Desktop/schaefer_analysis/") 
+    root = Path("/home/rachel/Desktop/schaefer_analysis") 
     output_directory = Path(f"{root}/timeseries_data/native_space")
 
     if cohort == "bbhi":
@@ -328,23 +328,21 @@ if __name__ == "__main__":
     # Generate a list of subjects to process
     subjects = get_subjects_to_process(root_directory, atlas_file_template, output_directory, ses, cohort) 
 
-    # Run the code on a sample subject
-    # subjects = ["sub-1023"]
-
-    if cohort == "bbhi":
-        bold_template = Path(f"{root_directory}/{{subject}}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
-        # This is because Maria did not create a new file for subjects who did not have any frames scrubbed
-        if not bold_template.exists():
-            bold_template = Path(f"{root_directory}/{{subject}}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
-    else:
-        if ses == "01":
-            bold_template = Path(f"{root_directory}/{{subject}}/ses-{ses}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
+    for subject in subjects:
+        if cohort == "bbhi":
+            bold_template = Path(f"{root_directory}/{subject}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
+            # This is because Maria did not create a new file for subjects who did not have any frames scrubbed
             if not bold_template.exists():
-                bold_template = Path(f"{root_directory}/{{subject}}/ses-{ses}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
+                bold_template = Path(f"{root_directory}/{subject}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
         else:
-            bold_template = Path(f"{root_directory}/{{subject}}/ses-{ses}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
-            if not bold_template.exists():
-                bold_template = Path(f"{root_directory}/{{subject}}/ses-{ses}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
+            if ses == "01":
+                bold_template = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
+                if not bold_template.exists():
+                    bold_template = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
+            else:
+                bold_template = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
+                if not bold_template.exists():
+                    bold_template = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
 
     main(
         ses=ses,
