@@ -187,7 +187,7 @@ def process_subject(output_folder, subject, ses):
 
 def main():
     # Define paths
-    ses = "ses-02"
+    ses = "ses-01"
     output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
     cohort = "bbhi"
     

@@ -299,16 +299,16 @@ def main(
 
 
 if __name__ == "__main__":
-    ses = "02"
-    timepoint = "2"
+    ses = "01"
+    timepoint = "1"
     threshold = "0.5"
-    cohort = "bbhi senior"  
+    cohort = "bbhi"  
     root = Path("/home/rachel/Desktop/schaefer_analysis/") 
     output_directory = Path(f"{root}/timeseries_data/native_space")
     local_root_directory = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data") # Only relevant for BBHI senior cohort
 
     if cohort == "bbhi":
-        subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
+        subject_csv = "/home/rachel/Desktop/data/bbhi_ids_tp1.csv"
         if timepoint == "1":
             root_directory = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed")
         else:

@@ -66,6 +66,11 @@ def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="in
     all_tps = np.arange(bold_data.shape[3])
     correct_tps = all_tps[[False] + list(fwd < threshold)]
     incorrect_tps = all_tps[[False] + list(fwd >= threshold)]
+
+    # If there are 0 frames above the threshold, skip scrubbing
+    if len(incorrect_tps) == 0:
+        print(f"No frames exceed the threshold for subject {subject}. Skipping scrubbing.")
+        return False
     
     # Calculate percentage of timepoints that would be scrubbed
     scrub_percent = (len(incorrect_tps) * 100) / bold_data.shape[3]
@@ -226,42 +231,44 @@ def main(
     # Concatenate all framewise_displ.txt files (per subject) into a single DataFrame
     all_fwd_df = pd.DataFrame()
 
-    # Determine subjects list 
-    potential_subjects = os.listdir(root)
-    subjects = []
+    # # Determine subjects list 
+    # potential_subjects = os.listdir(root)
+    # subjects = []
 
-    # Filter subjects based on whether they have the required session directory
-    # and don't already have scrubbed data
-    for subject in potential_subjects:
-        if not subject.startswith("sub-"):
-            continue
+    # # Filter subjects based on whether they have the required session directory
+    # # and don't already have scrubbed data
+    # for subject in potential_subjects:
+    #     if not subject.startswith("sub-"):
+    #         continue
             
-        # Check if the specified session directory exists
-        if ses == "01":
-            session_path = Path(f"{root}/{subject}/ses-01")
-            session_exists = session_path.exists() and session_path.is_dir()
-        elif ses == "02":
-            session_path = Path(f"{root}/{subject}/ses-02") 
-            session_exists = session_path.exists() and session_path.is_dir()
-        else:
-            session_exists = False
+    #     # Check if the specified session directory exists
+    #     if ses == "01":
+    #         session_path = Path(f"{root}/{subject}/ses-01")
+    #         session_exists = session_path.exists() and session_path.is_dir()
+    #     elif ses == "02":
+    #         session_path = Path(f"{root}/{subject}/ses-02") 
+    #         session_exists = session_path.exists() and session_path.is_dir()
+    #     else:
+    #         session_exists = False
             
-        if not session_exists:
-            continue
+    #     if not session_exists:
+    #         continue
             
-        # Check if scrubbed data already exists in either location
-        local_scrubbed_file = Path(f"{output_data}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
-        remote_scrubbed_file = Path(f"{root}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
+    #     # Check if scrubbed data already exists in either location
+    #     local_scrubbed_file = Path(f"{output_data}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
+    #     remote_scrubbed_file = Path(f"{root}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
         
-        # Only add subject if scrubbed data doesn't exist in either location
-        if not local_scrubbed_file.exists() and not remote_scrubbed_file.exists():
-            subjects.append(subject)
-        else:
-            if local_scrubbed_file.exists():
-                location = "local"
-            else:
-                location = "remote"
-            print(f"Skipping {subject} - scrubbed data already exists in {location} directory")
+    #     # Only add subject if scrubbed data doesn't exist in either location
+    #     if not local_scrubbed_file.exists() and not remote_scrubbed_file.exists():
+    #         subjects.append(subject)
+    #     else:
+    #         if local_scrubbed_file.exists():
+    #             location = "local"
+    #         else:
+    #             location = "remote"
+    #         print(f"Skipping {subject} - scrubbed data already exists in {location} directory")
+
+    subjects = ["sub-1057"]
 
     # Iterate over all subjects in the root directory
     for subject in subjects:
@@ -331,8 +338,8 @@ if __name__ == "__main__":
     output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
     ses = "02"
     # Temporarily add local root 
-    root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
-    # root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed" 
+    # root = "/home/rachel/Desktop/Preprocessing/resting_preprocessed"
+    root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed" 
     subject_dir_pattern = f"ses-{ses}/native_T1"
 
     # Create the output directory if it does not exist
