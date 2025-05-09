@@ -98,14 +98,13 @@ def exclude_subjects_framewise_displ(subject, ses, root_directory):
     return False
 
 
-def get_subjects_to_process(root_directory, local_root_directory, atlas_file_template, output_directory, ses, cohort):
+def get_subjects_to_process(root_directory, atlas_file_template, output_directory, ses, cohort):
     """Generate a list of subjects to process based on whether they have
     scrubbed data and a timeseries file already generated. Then exclude subjects    
     with excessive motion (>50% of frames exceeding 0.5 mm).
 
     Args:
         root_directory (Path): Path to the root directory containing the scrubbed data.
-        local_root_directory (Path): Path to the local root directory containing the scrubbed data (eg. Desktop).
         atlas_file_template (Path): Path to the Schaefer atlas mask.
         output_directory (Path): Path to the output directory where timeseries data is saved.
         ses (str): Session / timepoint.
@@ -171,11 +170,12 @@ def get_subjects_to_process(root_directory, local_root_directory, atlas_file_tem
                     subjects_excluded_motion.append(subject)
                     continue 
         else:
+            unscrubbed_file = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
+            fd_file = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/framewise_displ.txt")
+            
             # For BBHI senior cohorts, use original logic
             if ses == "01":
                 scrubbed_data = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz") 
-                unscrubbed_file = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
-                fd_file = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/framewise_displ.txt")
 
                 # Check if either scrubbed or unscrubbed data exists
                 bold_file_exists = scrubbed_data.exists() or unscrubbed_file.exists()
@@ -192,21 +192,22 @@ def get_subjects_to_process(root_directory, local_root_directory, atlas_file_tem
                         continue 
             else:
                 scrubbed_data = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
-                fd_file = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/framewise_displ.txt")
-                unscrubbed_file = None
 
-                if scrubbed_data.exists() and fd_file.exists():
+                # Check if either scrubbed or unscrubbed data exists
+                bold_file_exists = scrubbed_data.exists() or unscrubbed_file.exists()
+
+                # Track subjects with no bold file
+                if not bold_file_exists:
+                    subjects_excluded_no_bold.append(subject)
+                    continue 
+
+                # If FD file exists, check motion criteria
+                if fd_file.exists() and bold_file_exists:
                     if exclude_subjects_framewise_displ(subject, ses, root_directory):
                         subjects_excluded_motion.append(subject)
                         continue 
-                elif not scrubbed_data.exists(): 
-                    # Note these no ses logic because this only exists for tp2
-                    scrubbed_data = Path(f"{local_root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
-                    if scrubbed_data.exists() and fd_file.exists():
-                        if exclude_subjects_framewise_displ(subject, ses, root_directory):
-                            subjects_excluded_motion.append(subject)
-                            continue 
                 else:
+                    # If scrubbed data is not found, 
                     print(f"Scrubbed data not found for {subject}. Skipping this subject.")
                     continue
                 
@@ -302,10 +303,9 @@ if __name__ == "__main__":
     ses = "01"
     timepoint = "1"
     threshold = "0.5"
-    cohort = "bbhi"  
+    cohort = "bbhi senior"  
     root = Path("/home/rachel/Desktop/schaefer_analysis/") 
     output_directory = Path(f"{root}/timeseries_data/native_space")
-    local_root_directory = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data") # Only relevant for BBHI senior cohort
 
     if cohort == "bbhi":
         subject_csv = "/home/rachel/Desktop/data/bbhi_ids_tp1.csv"
@@ -326,7 +326,7 @@ if __name__ == "__main__":
     atlas_file_template = Path(f"{root}/fsaverage/ses-{ses}/{{subject}}/bold_space_masks/{{subject}}_ses-{ses}_schaefer200_subcortical14_bold_space.nii.gz")
 
     # Generate a list of subjects to process
-    subjects = get_subjects_to_process(root_directory, local_root_directory, atlas_file_template, output_directory, ses, cohort) 
+    subjects = get_subjects_to_process(root_directory, atlas_file_template, output_directory, ses, cohort) 
 
     # Run the code on a sample subject
     # subjects = ["sub-1023"]
@@ -344,7 +344,7 @@ if __name__ == "__main__":
         else:
             bold_template = Path(f"{root_directory}/{{subject}}/ses-{ses}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
             if not bold_template.exists():
-                bold_template = Path(f"{local_root_directory}/{{subject}}/ses-{ses}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
+                bold_template = Path(f"{root_directory}/{{subject}}/ses-{ses}/native_T1/{{subject}}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
 
     main(
         ses=ses,
