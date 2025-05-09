@@ -303,7 +303,7 @@ if __name__ == "__main__":
     ses = "01"
     timepoint = "1"
     threshold = "0.5"
-    cohort = "bbhi senior"  
+    cohort = "bbhi"  
     root = Path("/home/rachel/Desktop/schaefer_analysis") 
     output_directory = Path(f"{root}/timeseries_data/native_space")
 
@@ -331,7 +331,7 @@ if __name__ == "__main__":
     for subject in subjects:
         if cohort == "bbhi":
             bold_template = Path(f"{root_directory}/{subject}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
-            # This is because Maria did not create a new file for subjects who did not have any frames scrubbed
+            # This is because subjects who did not need any scrubbing do not have a seperate scrubbed file
             if not bold_template.exists():
                 bold_template = Path(f"{root_directory}/{subject}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
         else:
