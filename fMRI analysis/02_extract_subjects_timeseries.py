@@ -51,7 +51,7 @@ def process_subject_extract(args):
     print(f"--- Processing subject: {subject_id} ---")
 
     # Process masks and extract timeseries
-    timeseries = extract_timeseries(atlas_file, fmri_file, error_log_path)
+    # timeseries = extract_timeseries(atlas_file, fmri_file, error_log_path)
 
     # Adding a warning filter to catch issues with processing all subjects at once
     # It is unclear why this warning is happening, and the subs likely just need to be run again 
@@ -338,7 +338,12 @@ if __name__ == "__main__":
     # subjects = get_subjects_to_process(root_directory, atlas_file_template, output_directory, ses, cohort) 
 
     # Optionally, manually specify subjects to process
-    subjects = ["sub-3054"]
+    subjects = [
+        "sub-1026", "sub-1143", "sub-4064", "sub-4024",
+        "sub-2007", "sub-4120", "sub-4008", "sub-3030",
+        "sub-3070", "sub-4005", "sub-4045", "sub-1237",
+        "sub-1091", "sub-1024", "sub-1157", "sub-2008"
+    ]
 
     for subject in subjects:
         if cohort == "bbhi":

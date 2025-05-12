@@ -31,14 +31,22 @@ def extract_timeseries(atlas_file: str, fmri_file: str, error_log_path: Path) ->
         if not os.path.exists(atlas_file):
             raise FileNotFoundError(f"Schaefer atlas file {atlas_file} not found.")
 
-        # Load the atlas file
+        # Load the atlas and BOLD file
         atlas_img = nib.load(atlas_file)
+        fmri_img = nib.load(fmri_file)
+
+        # Check whether the atlas and BOLD files have the same shape
+        if atlas_img.shape[:3] != fmri_img.shape[:3]:
+            raise ValueError(f"Atlas and fMRI images must have the same spatial dimensions. "
+                           f"Atlas shape: {atlas_img.shape}, fMRI shape: {fmri_img.shape}")
 
         # Use NiftiLabelsMasker to extract the timeseries
         masker = NiftiLabelsMasker(labels_img=atlas_img, standardize=False)
+        
         print("Extracting timeseries...")
         timeseries = masker.fit_transform(fmri_file)
 
+        print("Timeseries extraction complete.")
         return timeseries
 
     except Exception as e:
