@@ -78,7 +78,7 @@ def process_subject_extract(args):
     print(f"Saving extracted timeseries to {timeseries_output_path}")
     np.savetxt(timeseries_output_path, timeseries, delimiter=",")
 
-    # Run this line if you want to visualize the data
+    # Run this to visualize the data
     # visualize_timeseries(subject_id, timeseries, roi_indices)
 
     print(f"Processing completed for subject: {subject_id}")
@@ -144,11 +144,9 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
             # This checks whether they have data for the correct timepoint 
             if subject_dir.startswith("sub-"):
                 if ses == "01":
-                    # Use subject_dir, not subject
                     session_path = Path(f"{root_directory}/{subject_dir}/ses-01")
                     session_exists = session_path.exists() and session_path.is_dir()
                 elif ses == "02":
-                    # Use subject_dir, not subject
                     session_path = Path(f"{root_directory}/{subject_dir}/ses-02") 
                     session_exists = session_path.exists() and session_path.is_dir()
                 else:
@@ -160,16 +158,15 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
 
     # Now process each subject
     for subject in subjects:
-        # Initialize scrubbed_data to None
         scrubbed_data = None
         
         if cohort == "bbhi":
-            # Check for either scrubbed or non-scrubbed data
+            # Check for either scrubbed or original data
             scrubbed_data = Path(f"{root_directory}/{subject}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
             unscrubbed_file = Path(f"{root_directory}/{subject}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
             fd_file = Path(f"{root_directory}/{subject}/native_T1/framewise_displ.txt")
 
-            # Check if either scrubbed or unscrubbed data exists
+            # Check if either scrubbed or original data exists
             bold_file_exists = scrubbed_data.exists() or unscrubbed_file.exists()
 
             # Track subjects with no bold file
@@ -177,7 +174,7 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
                 subjects_excluded_no_bold.append(subject)
                 continue  # Skip this subject
 
-            # If FD file exists, check motion criteria
+            # If FWD file exists, check motion criteria
             if fd_file.exists() and bold_file_exists:
                 if exclude_subjects_framewise_displ(subject, ses, root_directory):
                     subjects_excluded_motion.append(subject)
@@ -186,11 +183,11 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
             unscrubbed_file = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
             fd_file = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/framewise_displ.txt")
             
-            # For BBHI senior cohorts, use original logic
+            # For BBHI senior cohorts
             if ses == "01":
                 scrubbed_data = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz") 
 
-                # Check if either scrubbed or unscrubbed data exists
+                # Check if either scrubbed or original data exists
                 bold_file_exists = scrubbed_data.exists() or unscrubbed_file.exists()
 
                 # Track subjects with no bold file
@@ -198,7 +195,6 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
                     subjects_excluded_no_bold.append(subject)
                     continue 
 
-                # If FD file exists, check motion criteria
                 if fd_file.exists() and bold_file_exists:
                     if exclude_subjects_framewise_displ(subject, ses, root_directory):
                         subjects_excluded_motion.append(subject)
@@ -214,7 +210,6 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
                     subjects_excluded_no_bold.append(subject)
                     continue 
 
-                # If FD file exists, check motion criteria
                 if fd_file.exists() and bold_file_exists:
                     if exclude_subjects_framewise_displ(subject, ses, root_directory):
                         subjects_excluded_motion.append(subject)
@@ -226,14 +221,14 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
                 
         output_data = Path(f"{output_directory}/ses-{ses}")
 
-        # Format the atlas file path for this specific subject
+        # Format the atlas file path for the specific subject
         if isinstance(atlas_file_template, Path):
             atlas_path = str(atlas_file_template).format(subject=subject, ses=ses)
             subject_atlas_file = Path(atlas_path)
         else:
             subject_atlas_file = Path(atlas_file_template.format(subject=subject, ses=ses))
 
-        # Check if either scrubbed or unscrubbed data exists and the atlas file exists
+        # Check if either scrubbed or original data exists and the atlas file exists
         bold_file_exists = scrubbed_data.exists() or (unscrubbed_file is not None and unscrubbed_file.exists())
         atlas_file_exists = subject_atlas_file.exists()
 
@@ -342,6 +337,7 @@ if __name__ == "__main__":
     # Generate a list of subjects to process
     subjects = get_subjects_to_process(root_directory, atlas_file_template, output_directory, ses, cohort) 
 
+    # Optionally, manually specify subjects to process
     # subjects = ["sub-1157", "sub-3054", "sub-3085", "sub-4062"]
 
     for subject in subjects:

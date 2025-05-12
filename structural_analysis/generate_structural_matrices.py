@@ -341,8 +341,8 @@ def process_network_matrices(subject_id, full_matrix, combined_labels, output_di
 def main():
     """Main function to process structural connectivity for subjects."""
     # Set parameters
-    ses = "01"  
-    cohort = "bbhi senior"
+    ses = "02"  
+    cohort = "bbhi"
     mask_dir = Path("/home/rachel/Desktop/schaefer_analysis/fsaverage")
     output_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
     labels_csv_path = "/home/rachel/Desktop/schaefer_analysis/timeseries_data/native_space/combined_labels.csv"
