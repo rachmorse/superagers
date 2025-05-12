@@ -68,7 +68,7 @@ def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
     # Iterate through subjects with tractograms
     for subject in tractogram_subjects:
         # Check if native space mask exists
-        mask_file = Path(f"{mask_dir}/{ses}/{subject}/dwi_space_masks/{subject}_{ses}_schaefer200_subcortical14_dwi_space.nii.gz")
+        mask_file = Path(f"{mask_dir}/ses-{ses}/{subject}/dwi_space_masks/{subject}_ses-{ses}_schaefer200_subcortical14_dwi_space.nii.gz")
         # Check if subject already processed (in the CSV)
         if mask_file.exists() and subject not in existing_subjects:
             subjects_to_process.append(subject)
@@ -183,7 +183,7 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
         np.ndarray: The generated connectivity matrix.
     """
     tractogram_file = tractogram_dir / f"{subject}_dwi_tractogram_1M_SIFT.tck"
-    mask_file = Path(f"{mask_dir}/{ses}/{subject}/dwi_space_masks/{subject}_{ses}_schaefer200_subcortical14_dwi_space.nii.gz")
+    mask_file = Path(f"{mask_dir}/ses-{ses}/{subject}/dwi_space_masks/{subject}_ses-{ses}_schaefer200_subcortical14_dwi_space.nii.gz")
     
     # Create output directories
     prepare_directories(output_dir, ses, ["all_to_all_roi_matrices", "within_network_matrices", "subcortical_matrices", "visualization"])
@@ -191,7 +191,7 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
     # Create a temporary file for the matrix
     import tempfile
     temp_dir = tempfile.gettempdir()
-    temp_matrix_file = Path(temp_dir) / f"{subject}_{ses}_temp_matrix.csv"
+    temp_matrix_file = Path(temp_dir) / f"{subject}_ses-{ses}_temp_matrix.csv"
     
     # Run tck2connectome to generate the connectivity matrix
     cmd = [
@@ -342,7 +342,7 @@ def main():
     """Main function to process structural connectivity for subjects."""
     # Set parameters
     ses = "01"  
-    cohort = "bbhi"
+    cohort = "bbhi senior"
     mask_dir = Path("/home/rachel/Desktop/schaefer_analysis/fsaverage")
     output_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
     labels_csv_path = "/home/rachel/Desktop/schaefer_analysis/timeseries_data/native_space/combined_labels.csv"
@@ -372,7 +372,7 @@ def main():
     subjects = get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses)
     
     # For testing with a single subject
-    # subjects = ["sub-44010"]
+    # subjects = ["sub-1191"]
 
     # Track both failed and successful subjects
     successful_subjects = []

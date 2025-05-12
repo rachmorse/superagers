@@ -93,6 +93,7 @@ def get_subjects_to_process(dwi_bbhi_dir, dwi_bbhi_senior_dir, out_dir, ses, tim
         elif not has_eddy or not has_bold:
             missing_files.append(subject)
             print(f"Subject {subject} missing both eddy and BOLD data")
+            print(f"{bold_data} or {eddy_corrected} not found")
         elif not has_eddy:
             print(f"Subject {subject} missing eddy data")
         elif not has_bold:
@@ -291,8 +292,8 @@ def main():
     """
     
     # Set up parameters
-    timepoint = "1"
-    ses = "ses-01"
+    timepoint = "2"
+    ses = "ses-02"
     cohort = "bbhi senior"
 
     sys.stdout.flush() 

@@ -1,4 +1,5 @@
 import os
+import warnings
 from multiprocessing import Pool
 from pathlib import Path
 from typing import List, Union
@@ -52,6 +53,18 @@ def process_subject_extract(args):
     # Process masks and extract timeseries
     timeseries = extract_timeseries(atlas_file, fmri_file, error_log_path)
 
+    # Adding a warning filter to catch issues with processing all subjects at once
+    # It is unclear why this warning is happening, and the subs likely just need to be run again 
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always", UserWarning)
+        timeseries = extract_timeseries(atlas_file, fmri_file, error_log_path)
+
+        for captured_warning in w:
+            if "After resampling the label image to the data image, the following labels were removed" in str(captured_warning.message):
+                print(f"Error in processing {subject_id}: some ROIs were unable to be identified.")
+                return
+
+    # Check if there is no valid timeseries
     if timeseries is None or timeseries.size == 0:
         print(f"No valid timeseries extracted for subject {subject_id}")
         return
@@ -292,7 +305,7 @@ def main(
     ]
 
     if multi:
-        with Pool(4) as pool:
+        with Pool(3) as pool:
             pool.map(process_subject_extract, args)
     else:
         for arg in args:
@@ -303,7 +316,7 @@ if __name__ == "__main__":
     ses = "02"
     timepoint = "2"
     threshold = "0.5"
-    cohort = "bbhi senior"  
+    cohort = "bbhi senior"   
     root = Path("/home/rachel/Desktop/schaefer_analysis") 
     output_directory = Path(f"{root}/timeseries_data/native_space")
 
@@ -328,6 +341,8 @@ if __name__ == "__main__":
 
     # Generate a list of subjects to process
     subjects = get_subjects_to_process(root_directory, atlas_file_template, output_directory, ses, cohort) 
+
+    # subjects = ["sub-1157", "sub-3054", "sub-3085", "sub-4062"]
 
     for subject in subjects:
         if cohort == "bbhi":

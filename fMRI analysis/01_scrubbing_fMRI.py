@@ -299,7 +299,7 @@ def main(
 
     # Parallel processing
     if multi:
-        with Pool(2) as pool:
+        with Pool(4) as pool:
             pool.starmap(
                 process_subject,
                 [
