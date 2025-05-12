@@ -335,10 +335,10 @@ if __name__ == "__main__":
     atlas_file_template = Path(f"{root}/fsaverage/ses-{ses}/{{subject}}/bold_space_masks/{{subject}}_ses-{ses}_schaefer200_subcortical14_bold_space.nii.gz")
 
     # Generate a list of subjects to process
-    subjects = get_subjects_to_process(root_directory, atlas_file_template, output_directory, ses, cohort) 
+    # subjects = get_subjects_to_process(root_directory, atlas_file_template, output_directory, ses, cohort) 
 
     # Optionally, manually specify subjects to process
-    # subjects = ["sub-1157", "sub-3054", "sub-3085", "sub-4062"]
+    subjects = ["sub-3054"]
 
     for subject in subjects:
         if cohort == "bbhi":
