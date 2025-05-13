@@ -53,15 +53,11 @@ def process_subject_extract(args):
 
     bold_path_template = str(bold_template).format(subject=subject, ses=ses)
 
-    print(f"BOLD path: {bold_path_template}")
-
     if isinstance(atlas_file, Path):
         atlas_path = str(atlas_file).format(subject=subject, ses=ses)
         atlas_file = Path(atlas_path)
     else:
         atlas_file = Path(atlas_file.format(subject=subject, ses=ses))
-
-    print(f"Atlas path: {atlas_file}")
         
     fmri_file = Path(bold_path_template)
 
@@ -316,10 +312,10 @@ def main(
 
 
 if __name__ == "__main__":
-    ses = "02"
-    timepoint = "2"
+    ses = "01"
+    timepoint = "1"
     threshold = "0.5"
-    cohort = "bbhi senior"   
+    cohort = "bbhi"   
     root = Path("/home/rachel/Desktop/schaefer_analysis") 
     output_directory = Path(f"{root}/timeseries_data/native_space")
 
@@ -343,15 +339,10 @@ if __name__ == "__main__":
     atlas_file_template = Path(f"{root}/fsaverage/ses-{ses}/{{subject}}/bold_space_masks/{{subject}}_ses-{ses}_schaefer200_subcortical14_bold_space.nii.gz")
                 
     # Generate a list of subjects to process
-    # subjects = get_subjects_to_process(root_directory, atlas_file_template, output_directory, ses, cohort) 
+    subjects = get_subjects_to_process(root_directory, atlas_file_template, output_directory, ses, cohort) 
 
     # Optionally, manually specify subjects to process
-    subjects = [
-        "sub-4045", "sub-1143", "sub-4064", "sub-4024",
-        "sub-2007", "sub-4120", "sub-4008", "sub-3030",
-        "sub-3070", "sub-4005", "sub-1237", "sub-1026", 
-        "sub-1091", "sub-1024", "sub-1157", "sub-2008"
-    ]
+    # subjects = ["sub-4045"]
 
     main(
         ses=ses,
