@@ -12,7 +12,7 @@ def process_subject_extract(args):
     Optionally, visualizes the timeseries data.
 
     Args:
-        subject_id (str): Identifier for the subject whose data is processed.
+        subject (str): Identifier for the subject whose data is processed.
         ses (str): Session identifier for the specific data collection session.
         threshold (float): Threshold value used for data processing, e.g., for filtering.
         bold_template (str): File path template for the BOLD timeseries data.
@@ -25,48 +25,59 @@ def process_subject_extract(args):
         Exception: If no valid timeseries is extracted for a subject.
     """
     (
-        subject_id,
+        subject,
         ses,
         threshold,
-        bold_template,
         atlas_file,
         output_dir,
         roi_indices,
         error_log_path,
     ) = args
 
-    if isinstance(bold_template, Path):
-        bold_path_template = str(bold_template).format(subject=subject_id, ses=ses, threshold=threshold)
+    if cohort == "bbhi":
+        bold_template = Path(f"{root_directory}/{subject}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
+        # This is because subjects who did not need any scrubbing do not have a seperate scrubbed file
+        if not bold_template.exists():
+            bold_template = Path(f"{root_directory}/{subject}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
     else:
-        bold_path_template = bold_template.format(subject=subject_id, ses=ses, threshold=threshold)
+        if ses == "01":
+            bold_template = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
+            if not bold_template.exists():
+                bold_template = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
+        else:
+            bold_template = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
+            if not bold_template.exists():
+                bold_template = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
+
+    print(f"--- Processing subject: {subject} ---")
+
+    bold_path_template = str(bold_template).format(subject=subject, ses=ses)
+
+    print(f"BOLD path: {bold_path_template}")
 
     if isinstance(atlas_file, Path):
-        atlas_path = str(atlas_file).format(subject=subject_id, ses=ses)
+        atlas_path = str(atlas_file).format(subject=subject, ses=ses)
         atlas_file = Path(atlas_path)
     else:
-        atlas_file = Path(atlas_file.format(subject=subject_id, ses=ses))
+        atlas_file = Path(atlas_file.format(subject=subject, ses=ses))
+
+    print(f"Atlas path: {atlas_file}")
         
     fmri_file = Path(bold_path_template)
 
-    print(f"--- Processing subject: {subject_id} ---")
-
-    # Process masks and extract timeseries
-    # timeseries = extract_timeseries(atlas_file, fmri_file, error_log_path)
-
-    # Adding a warning filter to catch issues with processing all subjects at once
-    # It is unclear why this warning is happening, and the subs likely just need to be run again 
+    # Adding a warning filter to catch issues that likely indicate the wrong atlas or BOLD file is being used
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always", UserWarning)
         timeseries = extract_timeseries(atlas_file, fmri_file, error_log_path)
 
         for captured_warning in w:
             if "After resampling the label image to the data image, the following labels were removed" in str(captured_warning.message):
-                print(f"Error in processing {subject_id}: some ROIs were unable to be identified.")
+                print(f"Error in processing {subject}: some ROIs were unable to be identified.")
                 return
 
     # Check if there is no valid timeseries
     if timeseries is None or timeseries.size == 0:
-        print(f"No valid timeseries extracted for subject {subject_id}")
+        print(f"No valid timeseries extracted for subject {subject}")
         return
 
     # Ensure the directory exists
@@ -74,14 +85,14 @@ def process_subject_extract(args):
     os.makedirs(output_subdir, exist_ok=True)
 
     # Save the extracted timeseries
-    timeseries_output_path = output_dir / f"ses-{ses}/{subject_id}_ses-{ses}_subcortical_schaefer200_timeseries.csv"
+    timeseries_output_path = output_dir / f"ses-{ses}/{subject}_ses-{ses}_subcortical_schaefer200_timeseries.csv"
     print(f"Saving extracted timeseries to {timeseries_output_path}")
     np.savetxt(timeseries_output_path, timeseries, delimiter=",")
 
     # Run this to visualize the data
     # visualize_timeseries(subject_id, timeseries, roi_indices)
 
-    print(f"Processing completed for subject: {subject_id}")
+    print(f"Processing completed for subject: {subject}")
 
 def exclude_subjects_framewise_displ(subject, ses, root_directory):
     """Check if the subject has excessive motion (>50% of frames exceeding 0.5 mm).
@@ -258,7 +269,6 @@ def main(
     threshold: float,
     error_log_path: Union[str, Path],
     output_dir: Union[str, Path],
-    bold_template: str,
     roi_indices: List[int],
     atlas_file_template: str,
     multi: bool = False,
@@ -273,7 +283,6 @@ def main(
         threshold (float): Threshold value for scrubbing.
         error_log_path (Union[str, Path]): Path to log the error file.
         output_dir (Union[str, Path]): Path where processed data will be output.
-        bold_template (str): Path / template for the location of BOLD data.
         roi_indices (List[int]): ROI indices for timeseries visualization (e.g. add the index for the ROI/s you want to visualize).
         multi (bool): If True, enables parallel processing using multiprocessing. Defaults to False.
         atlas_file_template (str): Template string for the atlas file path.
@@ -290,7 +299,6 @@ def main(
             subject,
             ses,
             threshold,
-            bold_template,
             atlas_file_template, 
             output_dir,
             roi_indices,
@@ -300,7 +308,7 @@ def main(
     ]
 
     if multi:
-        with Pool(3) as pool:
+        with Pool(4) as pool:
             pool.map(process_subject_extract, args)
     else:
         for arg in args:
@@ -333,40 +341,23 @@ if __name__ == "__main__":
     roi_indices = [0]  # ROIs to visualize
 
     atlas_file_template = Path(f"{root}/fsaverage/ses-{ses}/{{subject}}/bold_space_masks/{{subject}}_ses-{ses}_schaefer200_subcortical14_bold_space.nii.gz")
-
+                
     # Generate a list of subjects to process
     # subjects = get_subjects_to_process(root_directory, atlas_file_template, output_directory, ses, cohort) 
 
     # Optionally, manually specify subjects to process
     subjects = [
-        "sub-1026", "sub-1143", "sub-4064", "sub-4024",
+        "sub-4045", "sub-1143", "sub-4064", "sub-4024",
         "sub-2007", "sub-4120", "sub-4008", "sub-3030",
-        "sub-3070", "sub-4005", "sub-4045", "sub-1237",
+        "sub-3070", "sub-4005", "sub-1237", "sub-1026", 
         "sub-1091", "sub-1024", "sub-1157", "sub-2008"
     ]
-
-    for subject in subjects:
-        if cohort == "bbhi":
-            bold_template = Path(f"{root_directory}/{subject}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
-            # This is because subjects who did not need any scrubbing do not have a seperate scrubbed file
-            if not bold_template.exists():
-                bold_template = Path(f"{root_directory}/{subject}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
-        else:
-            if ses == "01":
-                bold_template = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
-                if not bold_template.exists():
-                    bold_template = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
-            else:
-                bold_template = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
-                if not bold_template.exists():
-                    bold_template = Path(f"{root_directory}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
 
     main(
         ses=ses,
         threshold=threshold,
         error_log_path=error_log_path,
         output_dir=output_directory,
-        bold_template=bold_template,
         roi_indices=roi_indices,
         atlas_file_template=atlas_file_template,
         # multi=False,
