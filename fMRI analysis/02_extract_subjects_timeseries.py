@@ -315,7 +315,7 @@ if __name__ == "__main__":
     ses = "01"
     timepoint = "1"
     threshold = "0.5"
-    cohort = "bbhi"   
+    cohort = "bbhi senior"   
     root = Path("/home/rachel/Desktop/schaefer_analysis") 
     output_directory = Path(f"{root}/timeseries_data/native_space")
 
