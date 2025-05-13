@@ -1,140 +1,205 @@
 import numpy as np
 import pandas as pd
 from scipy import stats
-import glob
 from pathlib import Path
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os 
 
-def load_connectivity_matrix(filepath):
-    """Load a connectivity matrix from a CSV file.
+def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, structural_dir):
+    """Generate a list of subjects to process based on whether they have
+    a structural and functional martix and do not have coupling for the
+    specified timepoint.
+
+    Args:
+        output_folder (Path): Path to the directory coupling results
+        ses (str): Session ID (format: ses-01).
+        functional_dir (Path): Path to the directory containing functional connectivity matrices.
+        structural_dir (Path): Path to the directory containing structural connectivity matrices.
+        mask_dir (Path): Path to the directory containing the mask files to use to check which subjects to process.
+
+    Returns:
+        list: List of subject IDs to process.
+    """
+    subjects_to_process = []
+    already_processed = []
+
+    # Iterate over all possible subject directories
+    for subject in os.listdir(mask_dir):
+        if not subject.startswith("sub-"):
+            continue
+        
+        # Check if the required directory exists and hasn't been processed yet  
+        func_conn_path = functional_dir / f"{subject}_{ses}_functional_connectivity_matrix.csv"
+        struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix.csv"
+        output_file_path = output_folder / f"{subject}_{ses}_structure_function_coupling.csv"
+
+        if func_conn_path.exists() and struct_conn_path.exists() and not output_file_path.exists():
+            subjects_to_process.append(subject)
+        elif output_file_path.exists():
+            already_processed.append(subject)
+
+    return subjects_to_process, already_processed
+
+def calculate_structure_function_coupling(structural_dir, functional_dir, subject, ses):
+    """
+    Calculate structure-function coupling for each ROI
     
     Args:
-        filepath (str or Path): Path to the CSV file containing the connectivity matrix.
-        
+        subject (str): Subject identifier
+        ses (str): Timepoint 
+        structural_dir (str or Path): Directory containing structural connectivity matrices
+        functional_dir (str or Path): Directory containing functional connectivity matrices
+    
     Returns:
-        numpy.ndarray or None: The loaded connectivity matrix or None if loading failed.
+        dict: Dictionary containing coupling results
     """
-    try:
-        return pd.read_csv(filepath, header=None).values
-    except Exception as e:
-        print(f"Error loading file {filepath}: {e}")
-        return None
+    
+    # Define paths using specific directory structure
+    func_conn_path = functional_dir / f"{subject}_{ses}_functional_connectivity_matrix.csv"
+    struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix.csv"
 
-def calculate_structure_function_coupling(structural_dir, functional_dir, output_dir, ses):
-    """Calculate the structure-function coupling for each brain region.
+    # Load connectivity matrices
+    func_conn_df = pd.read_csv(func_conn_path)
+    struct_conn_df = pd.read_csv(struct_conn_path)
+
+    # Extract region names from the first column (excluding the header row)
+    roi_names = func_conn_df.iloc[1:, 0].tolist()
     
-    Args:
-        structural_dir (str or Path): Directory containing structural connectivity matrices.
-        functional_dir (str or Path): Directory containing functional connectivity matrices.
-        output_dir (str or Path): Directory to save the results.
-        ses (str): Session identifier (e.g., "ses-02").
-        
-    Returns:
-        dict: Dictionary containing the coupling results for the session.
-    """
-    # Convert input paths to Path objects
-    structural_dir = Path(structural_dir)
-    functional_dir = Path(functional_dir)
-    output_dir = Path(output_dir)
+    # Drop the first row and column to get the numeric data only
+    func_conn_matrix = func_conn_df.iloc[0:, 1:].to_numpy()
+    struct_conn_matrix = struct_conn_df.iloc[0:, 1:].to_numpy()
+
+    # Check matrix dimensions match
+    if func_conn_matrix.shape != struct_conn_matrix.shape:
+        raise ValueError(f"Matrix dimensions don't match: "
+                       f"functional {func_conn_matrix.shape} vs structural {struct_conn_matrix.shape}")
     
-    # Create output directory if it doesn't exist
-    output_dir.mkdir(parents=True, exist_ok=True)
+    n_rois = 214
     
-    results = {}
-    
-    print(f"Processing session: {ses}")
-    
-    # Find structural connectivity matrix
-    structural_files = list(Path(structural_dir / ses).glob("*.csv"))
-    if not structural_files:
-        print(f"No structural connectivity files found for session {ses}")
-        return None
-    
-    # Load structural connectivity matrix
-    str_conn_matrix = load_connectivity_matrix(structural_files[0])
-    if str_conn_matrix is None:
-        return None
-    
-    # Find functional connectivity matrix
-    func_path = functional_dir / ses / "all_to_all_roi_matrices" / "all_to_all_roi matrix.csv"
-    if not func_path.exists():
-        print(f"Functional connectivity file not found: {func_path}")
-        return None
-    
-    # Load functional connectivity matrix
-    func_conn_matrix = load_connectivity_matrix(func_path)
-    if func_conn_matrix is None:
-        return None
-        
-    # Replace negative functional connectivity values with 0
-    func_conn_matrix[func_conn_matrix < 0] = 0
-    
-    # Initialize arrays for storing coupling metrics
-    num_regions = str_conn_matrix.shape[0]
-    coupling_rho = np.zeros(num_regions)
-    coupling_pvalue = np.zeros(num_regions)
-    
-    # Calculate structure-function coupling for each brain region
-    for m in range(num_regions):
-        # Define structural and functional connectivity for region m
-        X = str_conn_matrix[:, m]
-        Y = func_conn_matrix[:, m]
-        
-        # Select elements where both structural and functional connectivities are non-zero
-        idx_both_nonzero = (X != 0) & (Y != 0)
-        idx_both_nonzero[m] = False  # Set diagonal to False to exclude it
-        
-        X_nonzero = X[idx_both_nonzero]
-        Y_nonzero = Y[idx_both_nonzero]
-        
-        # Calculate coupling using Pearson correlation
-        if len(X_nonzero) == 0 or len(Y_nonzero) == 0:
-            coupling_rho[m] = np.nan
-            coupling_pvalue[m] = np.nan
-        else:
-            corr_result = stats.pearsonr(X_nonzero, Y_nonzero)
-            coupling_rho[m] = corr_result[0]
-            coupling_pvalue[m] = corr_result[1]
-    
-    # Store results for this session
-    results[ses] = {
-        'coupling_rho': coupling_rho,
-        'coupling_pvalue': coupling_pvalue
+    # Initialize coupling data structures
+    coupling = {
+        "subject": subject,
+        "ses": ses,
+        "rho": np.zeros((n_rois, 1)),
+        "roi_names": roi_names
     }
     
-    # Save results for this session - include {ses} in the output directory
-    ses_output_dir = output_dir / f"{ses}"
-    ses_output_dir.mkdir(parents=True, exist_ok=True)
+    # Calculate structure-function coupling for each ROI
+    for m in range(n_rois):
+        # Get structural and functional connectivity for this region
+        X = struct_conn_matrix[:, m]
+        Y = func_conn_matrix[:, m]
+        
+        # Find indices where both are non-zero
+        idx_both_non_zero = (X != 0) & (Y != 0)
+        idx_both_non_zero[m] = False  # Set diagonal to False
+        
+        X_filtered = X[idx_both_non_zero]
+        Y_filtered = Y[idx_both_non_zero]
+        
+        if len(X_filtered) == 0 or len(Y_filtered) == 0:
+            coupling["rho"][m,0] = np.nan
+        else:
+            rho = stats.pearsonr(X_filtered, Y_filtered)[0]
+            coupling["rho"][m,0] = rho
     
-    # Save as CSV - include {ses} in the filename
-    results_df = pd.DataFrame({
-        'region_index': np.arange(num_regions),
-        'pearson_rho': coupling_rho,
-        'pearson_pvalue': coupling_pvalue
-    })
-    results_df.to_csv(ses_output_dir / f"structure_function_coupling_{ses}.csv", index=False)
-    
-    # Save as NPY for easy loading in Python - include {ses} in the filename
-    np.savez(
-        ses_output_dir / f"structure_function_coupling_{ses}.npz",
-        coupling_rho=coupling_rho,
-        coupling_pvalue=coupling_pvalue
-    )
-    
-    return results
+    return coupling
 
-if __name__ == "__main__":
+
+def visualize_coupling(coupling_dict, output_dir, cmap='coolwarm'):
+    """
+    Visualize the coupling results as a heatmap and bar plot
+    
+    Args:
+        coupling_dict (dict): The coupling dictionary returned by calculate_structure_function_coupling
+        cmap (str): Matplotlib colormap name
+        output_dir (str or Path): Directory to save the visualization
+    """
+    rho_values = coupling_dict["rho"]
+    
+    # Create the figure and axis
+    fig, ax = plt.subplots(figsize=(5, 10))
+    
+    # Create the heatmap
+    im = ax.imshow(rho_values.reshape(-1, 1), cmap=cmap, aspect='auto')
+    
+    # Set title and y-axis label
+    ax.set_title(f"Structure-Function Coupling\n{coupling_dict['subject']} - {coupling_dict['ses']}")
+    ax.set_ylabel("ROI")
+    
+    # Remove x-axis ticks and labels
+    ax.set_xticks([])
+    ax.set_xticklabels([])
+    
+    # Add colorbar
+    cbar = fig.colorbar(im, ax=ax)
+    cbar.set_label("Correlation")
+    
+    plt.tight_layout()
+
+    # Save the figure
+    output_path = Path(output_dir) / "visualizations"
+    output_path.mkdir(parents=True, exist_ok=True)
+    subject = coupling_dict["subject"]
+    ses = coupling_dict["ses"]
+    fig_path = output_path / f"{subject}_{ses}_coupling_visualization.png"
+    fig.savefig(fig_path, dpi=300, bbox_inches='tight')
+    
+    return fig
+
+
+def save_coupling_results(coupling_dict, output_path):
+    """
+    Save coupling results to CSV files
+    
+    Args:
+        coupling_dict (dict): The coupling dictionary returned by calculate_structure_function_coupling
+        output_path (str or Path): Directory to save results
+    """
+    output_path = Path(output_path)
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    subject = coupling_dict["subject"]
+    ses = coupling_dict["ses"]
+    
+    # Combine ROI index and rho into a single DataFrame
+    results_df = pd.DataFrame({
+        'region_index': range(len(coupling_dict["rho"])),
+        'pearson_rho': coupling_dict["rho"].flatten(),
+    })
+    
+    # Save to CSV
+    output_file = output_path / f"{subject}_{ses}_structure_function_coupling.csv"
+    results_df.to_csv(output_file, index=False)
+    
+    print(f"Completed processing for {subject}: {output_file}")
+    
+    return output_file
+
+def main():
     # Define the directories using Path
-    structural_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
-    functional_dir = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
-    output_dir = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
+    ses = "ses-01"
+    structural_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structural_connectivity/{ses}/individual_connectivity_matrices")
+    functional_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space/{ses}/individual_connectivity_matrices")
+    output_dir = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/individual_coupling_matrices")
+    mask_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
     
-    # Specify the session you want to process
-    ses = "ses-02"
+    # Make sure the output directory exists
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    subjects_to_process, already_processed = get_subjects_to_process(output_dir, ses, mask_dir, functional_dir, structural_dir)
+    print(f"Number of subjects already processed: {len(already_processed)}")
+    print(f"Number of subjects to process: {len(subjects_to_process)}")
     
-    # Calculate structure-function coupling for the specified session
-    results = calculate_structure_function_coupling(structural_dir, functional_dir, output_dir, ses)
+    for subject in subjects_to_process:
+        # Calculate structure-function coupling for the specified ses
+        results = calculate_structure_function_coupling(structural_dir, functional_dir, subject, ses)
+
+        save_coupling_results(results, output_dir)
+
+        visualize_coupling(results, output_dir, cmap='coolwarm')
+        
+if __name__ == "__main__":
+    main()
     
-    if results:
-        print(f"Structure-function coupling analysis completed for {ses}.")
-    else:
-        print(f"Structure-function coupling analysis failed for {ses}.")

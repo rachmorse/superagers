@@ -12,3 +12,4 @@
 *.annot
 *.txt
 *.gcs
+test_diff.py

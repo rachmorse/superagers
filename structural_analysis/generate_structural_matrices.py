@@ -342,7 +342,7 @@ def main():
     """Main function to process structural connectivity for subjects."""
     # Set parameters
     ses = "02"  
-    cohort = "bbhi"
+    cohort = "bbhi senior"
     mask_dir = Path("/home/rachel/Desktop/schaefer_analysis/fsaverage")
     output_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
     labels_csv_path = "/home/rachel/Desktop/schaefer_analysis/timeseries_data/native_space/combined_labels.csv"

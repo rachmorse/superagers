@@ -7,7 +7,6 @@ import nibabel as nib
 import numpy as np
 import pandas as pd
 from compute_functional_connectivity import compute_functional_connectivity, visualize_fc_data
-# from nilearn import datasets
 
 
 def process_subject_functional(args):
