@@ -408,11 +408,12 @@ def main():
     # Make sure the output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # subjects_to_process, already_processed = get_subjects_to_process(output_dir, ses, mask_dir, functional_dir, structural_dir)
-    # print(f"Number of subjects already processed: {len(already_processed)}")
-    # print(f"Number of subjects to process: {len(subjects_to_process)}")
+    subjects_to_process, already_processed = get_subjects_to_process(output_dir, ses, mask_dir, functional_dir, structural_dir)
+    print(f"Number of subjects already processed: {len(already_processed)}")
+    print(f"Number of subjects to process: {len(subjects_to_process)}")
     
-    subjects_to_process = ["sub-134123"]
+    # Uncomment to process manual list
+    # subjects_to_process = ["sub-134123"]
 
     for subject in subjects_to_process:
         # Calculate structure-function coupling for the specified ses
