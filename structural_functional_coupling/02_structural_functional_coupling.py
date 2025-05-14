@@ -399,10 +399,10 @@ def save_coupling_results(coupling_dict, output_path):
 
 def main():
     # Define the directories using Path
-    ses = "ses-01"
+    ses = "ses-02"
     structural_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structural_connectivity/{ses}/individual_connectivity_matrices")
     functional_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space/{ses}/individual_connectivity_matrices")
-    output_dir = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/individual_coupling_matrices")
+    output_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/{ses}/individual_coupling_matrices")
     mask_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
     
     # Make sure the output directory exists
@@ -413,7 +413,7 @@ def main():
     print(f"Number of subjects to process: {len(subjects_to_process)}")
     
     # Uncomment to process manual list
-    # subjects_to_process = ["sub-134123"]
+    # subjects_to_process = ["sub-134084", "sub-132255"]
 
     for subject in subjects_to_process:
         # Calculate structure-function coupling for the specified ses
@@ -421,7 +421,7 @@ def main():
 
         save_coupling_results(results, output_dir)
 
-        visualize_coupling(results, output_dir, cmap='coolwarm')
+        # visualize_coupling(results, output_dir, cmap='coolwarm')
         
 if __name__ == "__main__":
     main()
