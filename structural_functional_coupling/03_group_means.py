@@ -21,7 +21,7 @@ def fisher_transform(connectivity_file, output_directory, ses):
     # Load the correlations from the file
     correlations = pd.read_csv(connectivity_file, index_col=0)
     
-    # Apply arctanh (Fisher z-transform)
+    # Apply arctanh 
     fisher_z = pd.DataFrame(np.arctanh(correlations), 
                            index=correlations.index, 
                            columns=correlations.columns)
@@ -34,7 +34,7 @@ def fisher_transform(connectivity_file, output_directory, ses):
     return fisher_z
 
 
-def consolidate_structural_data(ses, sfc_df):
+def consolidate_sfc_data(ses, sfc_df):
     """
     Creates a single DataFrame with all SFC data, where each row is a participant
     and each column is an ROI.
@@ -73,7 +73,6 @@ def consolidate_structural_data(ses, sfc_df):
         try:
             df = pd.read_csv(subject_file)
 
-            
             # Check the format of the CSV 
             if len(df.columns) == 2:  
                 roi_col = df.columns[0]
@@ -199,6 +198,7 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
         vmin, vmax (float): Min and max values for color scaling
         ses (str): Session identifier
     """
+    from nilearn.datasets import fetch_surf_fsaverage
     from nilearn import datasets, surface
     from nilearn import plotting
     import numpy as np
@@ -208,6 +208,8 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
     import os
 
     coupling_df = pd.read_csv(coupling_file, index_col=0)
+
+    # 
     
     # Extract data - assuming coupling_df has ROI names as index and one column with values
     rho_values = coupling_df.iloc[:, 0].values  # Get the first column's values
@@ -218,10 +220,9 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
     output_path.mkdir(parents=True, exist_ok=True)
     
     # Get fsaverage5 for visualization
-    from nilearn.datasets import fetch_surf_fsaverage
     fsaverage = fetch_surf_fsaverage('fsaverage5')
     
-    # Step 1: Get the Schaefer atlas parcellation
+    # Step 1: Get the Schaefer atlas parcellations
     # Fetch the volumetric Schaefer atlas
     schaefer = datasets.fetch_atlas_schaefer_2018(n_rois=200, yeo_networks=7, resolution_mm=2)
     
@@ -423,7 +424,7 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
     }
 
     # Combine individual data into one df
-    consolidate_structural_data(ses, sfc_df)
+    consolidate_sfc_data(ses, sfc_df)
 
     # Fisher-z transform the connectivity data
     fisher_transform(connectivity_file, output_directory, ses)

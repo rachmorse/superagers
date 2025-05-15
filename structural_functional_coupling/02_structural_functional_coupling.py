@@ -69,18 +69,18 @@ def calculate_structure_function_coupling(structural_dir, functional_dir, subjec
     struct_conn_df = pd.read_csv(struct_conn_path)
 
     # Extract region names from the first column (excluding the header row)
-    roi_names = func_conn_df.iloc[1:, 0].tolist()
+    roi_names = func_conn_df.iloc[:, 0].tolist()
     
     # Drop the first row and column to get the numeric data only
-    func_conn_matrix = func_conn_df.iloc[0:, 1:].to_numpy()
-    struct_conn_matrix = struct_conn_df.iloc[0:, 1:].to_numpy()
+    func_conn_matrix = func_conn_df.iloc[:, 1:].to_numpy()
+    struct_conn_matrix = struct_conn_df.iloc[:, 1:].to_numpy()
 
     # Check matrix dimensions match
     if func_conn_matrix.shape != struct_conn_matrix.shape:
         raise ValueError(f"Matrix dimensions don't match: "
                        f"functional {func_conn_matrix.shape} vs structural {struct_conn_matrix.shape}")
     
-    n_rois = 214
+    n_rois = len(roi_names)
     
     # Initialize coupling data structures
     coupling = {
@@ -111,47 +111,6 @@ def calculate_structure_function_coupling(structural_dir, functional_dir, subjec
     
     return coupling
 
-
-# def visualize_coupling(coupling_dict, output_dir, cmap='coolwarm'):
-#     """
-#     Visualize the coupling results as a heatmap and bar plot
-    
-#     Args:
-#         coupling_dict (dict): The coupling dictionary returned by calculate_structure_function_coupling
-#         cmap (str): Matplotlib colormap name
-#         output_dir (str or Path): Directory to save the visualization
-#     """
-#     rho_values = coupling_dict["rho"]
-    
-#     # Create the figure and axis
-#     fig, ax = plt.subplots(figsize=(5, 10))
-    
-#     # Create the heatmap
-#     im = ax.imshow(rho_values.reshape(-1, 1), cmap=cmap, aspect='auto')
-    
-#     # Set title and y-axis label
-#     ax.set_title(f"Structure-Function Coupling\n{coupling_dict['subject']} - {coupling_dict['ses']}")
-#     ax.set_ylabel("ROI")
-    
-#     # Remove x-axis ticks and labels
-#     ax.set_xticks([])
-#     ax.set_xticklabels([])
-    
-#     # Add colorbar
-#     cbar = fig.colorbar(im, ax=ax)
-#     cbar.set_label("Correlation")
-    
-#     plt.tight_layout()
-
-#     # Save the figure
-#     output_path = Path(output_dir) / "visualizations"
-#     output_path.mkdir(parents=True, exist_ok=True)
-#     subject = coupling_dict["subject"]
-#     ses = coupling_dict["ses"]
-#     fig_path = output_path / f"{subject}_{ses}_coupling_visualization.png"
-#     fig.savefig(fig_path, dpi=300, bbox_inches='tight')
-    
-#     return fig
 
 def visualize_coupling(coupling_dict, output_dir, cmap='cold_hot', vmin=0, vmax=0.5):
     """
@@ -385,7 +344,7 @@ def save_coupling_results(coupling_dict, output_path):
     
     # Combine ROI index and rho into a single DataFrame
     results_df = pd.DataFrame({
-        'region_index': range(len(coupling_dict["rho"])),
+        'ROI_name': coupling_dict["roi_names"],
         'pearson_rho': coupling_dict["rho"].flatten(),
     })
     
@@ -413,7 +372,7 @@ def main():
     print(f"Number of subjects to process: {len(subjects_to_process)}")
     
     # Uncomment to process manual list
-    # subjects_to_process = ["sub-134084", "sub-132255"]
+    # subjects_to_process = ["sub-134084"]
 
     for subject in subjects_to_process:
         # Calculate structure-function coupling for the specified ses

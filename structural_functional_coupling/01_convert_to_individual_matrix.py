@@ -4,9 +4,8 @@ import os
 from pathlib import Path
 import re
 
-# This script generates individual connectivity matrices and removed negative functional connectivity values.
 
-# Paths paths
+# Paths 
 ses = "ses-02"
 structural_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structural_connectivity/{ses}")
 functional_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space/{ses}")
@@ -21,7 +20,7 @@ func_output_dir = functional_dir / "individual_connectivity_matrices"
 os.makedirs(struct_output_dir, exist_ok=True)
 os.makedirs(func_output_dir, exist_ok=True)
 
-# Function to convert the data format
+# Function to convert the data 
 def create_individual_matrices(input_file, output_dir, is_functional=False):
     """
     Convert a CSV file of connectivity matrices into individual matrices for each subject.
@@ -56,11 +55,11 @@ def create_individual_matrices(input_file, output_dir, is_functional=False):
     # Convert to sorted list
     roi_labels = sorted(list(roi_labels))
     
-    # Verify we have the expected number of ROIs
+    # Verify it has the expected number of ROIs
     if len(roi_labels) != num_rois:
         print(f"Warning: Expected {num_rois} ROIs, but found {len(roi_labels)}.")
         print("Using detected ROI labels, but results may be incorrect.")
-        # If we couldn't extract proper labels, create generic ones
+        # If it can't extract proper labels, create generic ones
         if len(roi_labels) == 0:
             roi_labels = [f"ROI_{i+1}" for i in range(num_rois)]
             print("Created generic ROI labels.")
