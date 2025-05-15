@@ -585,7 +585,7 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
     # Visualize SFC in selected groups
     visualize_coupling(
         coupling_file=output_group_connectivity_file,
-        group_name="non superagers",
+        group_name="superagers",
         output_dir=output_directory_group,
         ses=ses)
     
@@ -598,7 +598,7 @@ if __name__ == "__main__":
     output_directory_group = Path(f"{sfc_df}/group_connectivity_matrices")
     connectivity_file = Path(f"{output_directory}/all_sfc_data_ses-{ses}.csv")
     fisher_z_connectivity_file = Path(f"{output_directory}/fisher_z_all_sfc_ses-{ses}.csv")
-    output_group_connectivity_file = Path(f"{output_directory_group}/non_superagers_average.csv")
+    output_group_connectivity_file = Path(f"{output_directory_group}/superagers_average.csv")
 
     # Make sure the output directory exists
     output_directory.mkdir(parents=True, exist_ok=True)

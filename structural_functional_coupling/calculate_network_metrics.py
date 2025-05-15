@@ -60,17 +60,18 @@ def group_rois_by_network(roi_names):
     
     return network_to_rois
 
-def calculate_network_metrics(subject, ses, func_dir, struct_dir, sfc_dir):
+def calculate_network_metrics(subject, ses, timepoint, func_dir, struct_dir, sfc_dir):
     """
     Calculate network connectivity metrics for a single subject.
     
     Args:
         subject (str): Subject ID
         ses (str): Session ID
+        timepoint (str): Timepoint
         func_dir (Path): Directory with functional connectivity matrices
         struct_dir (Path): Directory with structural connectivity matrices
         sfc_dir (Path): Directory with structure-function coupling data
-        
+
     Returns:
         dict: Dictionary with network metrics for the subject
     """
@@ -105,18 +106,18 @@ def calculate_network_metrics(subject, ses, func_dir, struct_dir, sfc_dir):
                     # Calculate within-network connectivity (excluding diagonal)
                     mask = ~np.eye(network_submatrix.shape[0], dtype=bool)
                     within_conn = network_submatrix.values[mask].mean()
-                    metrics[f'func_within_{network}'] = within_conn
+                    metrics[f'w{timepoint}_func_within_{network}'] = within_conn
                     
                     # Calculate between-network connectivity
                     other_rois = [r for r in roi_names if r not in roi_list]
                     if other_rois:
                         between_conn = func_data.loc[roi_list, other_rois].values.mean()
-                        metrics[f'func_between_{network}'] = between_conn
+                        metrics[f'w{timepoint}_func_between_{network}'] = between_conn
                     else:
-                        metrics[f'func_between_{network}'] = np.nan
+                        metrics[f'w{timepoint}_func_between_{network}'] = np.nan
                 else:
-                    metrics[f'func_within_{network}'] = np.nan
-                    metrics[f'func_between_{network}'] = np.nan
+                    metrics[f'w{timepoint}_func_within_{network}'] = np.nan
+                    metrics[f'w{timepoint}_func_between_{network}'] = np.nan
             
         # Load structural connectivity data
         if struct_file.exists():
@@ -138,18 +139,18 @@ def calculate_network_metrics(subject, ses, func_dir, struct_dir, sfc_dir):
                     # Calculate within-network connectivity (excluding diagonal)
                     mask = ~np.eye(network_submatrix.shape[0], dtype=bool)
                     within_conn = network_submatrix.values[mask].mean()
-                    metrics[f'struct_within_{network}'] = within_conn
+                    metrics[f'w{timepoint}_struct_within_{network}'] = within_conn
                     
                     # Calculate between-network connectivity
                     other_rois = [r for r in roi_names if r not in roi_list]
                     if other_rois:
                         between_conn = struct_data.loc[roi_list, other_rois].values.mean()
-                        metrics[f'struct_between_{network}'] = between_conn
+                        metrics[f'w{timepoint}_struct_between_{network}'] = between_conn
                     else:
-                        metrics[f'struct_between_{network}'] = np.nan
+                        metrics[f'w{timepoint}_struct_between_{network}'] = np.nan
                 else:
-                    metrics[f'struct_within_{network}'] = np.nan
-                    metrics[f'struct_between_{network}'] = np.nan
+                    metrics[f'w{timepoint}_struct_within_{network}'] = np.nan
+                    metrics[f'w{timepoint}_struct_between_{network}'] = np.nan
         
         # Load SFC data
         if sfc_file.exists():
@@ -164,7 +165,7 @@ def calculate_network_metrics(subject, ses, func_dir, struct_dir, sfc_dir):
                 sfc_data['z_value'] = np.arctanh(sfc_data[val_col])
                 
                 # Calculate average SFC across all ROIs first
-                metrics['sfc_average_all'] = np.nanmean(sfc_data['z_value'])
+                metrics[f'w{timepoint}_sfc_all'] = np.nanmean(sfc_data['z_value'])
 
                 # Group ROIs by network
                 roi_names = sfc_data[roi_col].tolist()
@@ -179,23 +180,24 @@ def calculate_network_metrics(subject, ses, func_dir, struct_dir, sfc_dir):
                     if network_rois:
                         network_values = sfc_data[sfc_data[roi_col].isin(network_rois)]['z_value'].values
                         if len(network_values) > 0:
-                            metrics[f'sfc_{network}'] = np.nanmean(network_values)
+                            metrics[f'w{timepoint}_sfc_{network}'] = np.nanmean(network_values)
                         else:
-                            metrics[f'sfc_{network}'] = np.nan
+                            metrics[f'w{timepoint}_sfc_{network}'] = np.nan
                     else:
-                        metrics[f'sfc_{network}'] = np.nan
+                        metrics[f'w{timepoint}_sfc_{network}'] = np.nan
             
     except Exception as e:
         print(f"Error processing {subject}: {e}")
     
     return metrics
 
-def main(ses, func_base_dir, struct_base_dir, sfc_base_dir, output_dir):
+def main(ses, timepoint, func_base_dir, struct_base_dir, sfc_base_dir, output_dir):
     """
     Main function to calculate network metrics for all subjects.
     
     Args:
         ses (str): Session ID
+        timepoint (str): Timepoint
         func_base_dir (Path): Base directory for functional connectivity
         struct_base_dir (Path): Base directory for structural connectivity
         sfc_base_dir (Path): Base directory for structure-function coupling
@@ -227,7 +229,7 @@ def main(ses, func_base_dir, struct_base_dir, sfc_base_dir, output_dir):
     
     for subject in sorted(subject_ids):
         print(f"Processing {subject}...")
-        metrics = calculate_network_metrics(subject, ses, func_dir, struct_dir, sfc_dir)
+        metrics = calculate_network_metrics(subject, ses, timepoint, func_dir, struct_dir, sfc_dir)
         all_metrics.append(metrics)
     
     # Convert to DataFrame and save
@@ -249,7 +251,8 @@ def main(ses, func_base_dir, struct_base_dir, sfc_base_dir, output_dir):
 
 if __name__ == "__main__":
     # Define parameters
-    ses = "ses-02" 
+    ses = "ses-01" 
+    timepoint = "1"
     
     # Base directories
     base_dir = Path("/home/rachel/Desktop/schaefer_analysis")
@@ -259,4 +262,4 @@ if __name__ == "__main__":
     output_dir = sfc_base_dir / f"{ses}/network_metrics"
     
     # Run the main function
-    main(ses, func_base_dir, struct_base_dir, sfc_base_dir, output_dir)
+    main(ses, timepoint, func_base_dir, struct_base_dir, sfc_base_dir, output_dir)
