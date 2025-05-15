@@ -188,7 +188,7 @@ def process_connectivity(connectivity_file: Union[str, Path], superager_file: Un
 
     print("CSV files created successfully!")
 
-def visualize_coupling(coupling_file, group_name, output_dir, ses, cmap='cold_hot', vmin=0, vmax=0.5):
+def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=0.5):
     """
     Create multi-view brain surface visualizations of structure-function coupling from a DataFrame
     
@@ -196,7 +196,6 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, cmap='cold_ho
         coupling_file (pd.DataFrame): DataFrame with ROI names as index and coupling values in first column
         group_name (str): Name of the group (e.g., 'superagers', 'maintainers')
         output_dir (str or Path): Directory to save visualizations
-        cmap (str): Colormap to use ('cold_hot' gives blue-red gradient)
         vmin, vmax (float): Min and max values for color scaling
         ses (str): Session identifier
     """
@@ -296,7 +295,7 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, cmap='cold_ho
     temp_output_path = output_path / "temp"
     temp_output_path.mkdir(parents=True, exist_ok=True)
 
-    cold_hot_cmap = plt.cm.get_cmap('coolwarm')  
+    cold_hot_cmap = plt.cm.get_cmap('RdBu_r')  
 
     # Right lateral view
     right_lat_path = temp_output_path / f"{subject}_{ses}_right_lateral.png"
@@ -435,21 +434,20 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
     # Visualize SFC in selected groups
     visualize_coupling(
         coupling_file=output_group_connectivity_file,
-        group_name="decliners",
+        group_name="superagers",
         output_dir=output_directory_group,
-        ses=ses,
-        cmap='cold_hot')
+        ses=ses)
     
 
 if __name__ == "__main__":
-    ses = "01"
+    ses = "02"
     superager_file = "/home/rachel/Desktop/data/maintainer_superager_data.csv"  
     sfc_df = Path(f"/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-{ses}")
     output_directory = Path(f"{sfc_df}/all_to_all_roi_matrices")
     output_directory_group = Path(f"{sfc_df}/group_connectivity_matrices")
     connectivity_file = Path(f"{output_directory}/all_sfc_data_ses-{ses}.csv")
     fisher_z_connectivity_file = Path(f"{output_directory}/fisher_z_all_sfc_ses-{ses}.csv")
-    output_group_connectivity_file = Path(f"{output_directory_group}/decliners_average.csv")
+    output_group_connectivity_file = Path(f"{output_directory_group}/superagers_average.csv")
 
     # Make sure the output directory exists
     output_directory.mkdir(parents=True, exist_ok=True)

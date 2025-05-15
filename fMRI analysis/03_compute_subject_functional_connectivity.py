@@ -19,6 +19,7 @@ def process_subject_functional(args):
             ses (str): Session or timepoint.
             output_dir (Path): Path to the directory where output data is saved.
             root_directory (Path): Root directory for the timeseries data.
+            timeseries_path (Path): Path to the directory containing the timeseries data.
             error_log_path (Path): Path to the error log file.
             schaefer_atlas:
 
@@ -26,7 +27,7 @@ def process_subject_functional(args):
         FileNotFoundError: If the timeseries file is not found.
         Exception: If an error occurs while loading the timeseries data
     """
-    subject_id, ses, output_dir, root_directory, error_log_path = args
+    subject_id, ses, output_dir, root_directory, timeseries_path, error_log_path = args
 
     timeseries_file = root_directory / f"{subject_id}_ses-{ses}_subcortical_schaefer200_timeseries.csv"
 
@@ -95,7 +96,7 @@ def get_subjects_to_process(root_directory, output_directory, ses):
     return subjects_to_process
 
 
-def main(output_dir: Union[str, Path], root_directory: Union[str, Path], ses: str):
+def main(output_dir: Union[str, Path], root_directory: Union[str, Path], timeseries_path: Path, ses: str):
     """Main function to run the script.
 
     This function reads the pre-extracted timeseries data for each subject,
@@ -123,6 +124,7 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], ses: st
             ses,
             output_dir,
             root_directory,
+            timeseries_path,
             error_log_path,
         )
         for subject_id in subjects
@@ -133,7 +135,7 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], ses: st
 
 
 if __name__ == "__main__":
-    ses = "01"
+    ses = "02"
     timeseries_path = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data/native_space")
     root_directory = Path(f"{timeseries_path}/ses-{ses}")
     output_directory = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
