@@ -292,8 +292,8 @@ def main():
     """
     
     # Set up parameters
-    timepoint = "2"
-    ses = "ses-02"
+    timepoint = "1"
+    ses = "ses-01"
     cohort = "bbhi senior"
 
     sys.stdout.flush() 

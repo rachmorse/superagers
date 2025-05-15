@@ -7,6 +7,8 @@ import sys
 from datetime import datetime
 import matplotlib.pyplot as plt
 from pathlib import Path
+import tempfile
+
 
 # Import functions from functional connectivity script
 sys.path.append('/home/rachel/Desktop/superagers/fMRI analysis')
@@ -189,10 +191,12 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
     prepare_directories(output_dir, ses, ["all_to_all_roi_matrices", "within_network_matrices", "subcortical_matrices", "visualization"])
     
     # Create a temporary file for the matrix
-    import tempfile
     temp_dir = tempfile.gettempdir()
     temp_matrix_file = Path(temp_dir) / f"{subject}_ses-{ses}_temp_matrix.csv"
-    
+
+    # Create a temporary file for the output
+    temp_output_file = Path(temp_dir) / f"{subject}_ses-{ses}_temp_output.txt"
+
     # Run tck2connectome to generate the connectivity matrix
     cmd = [
         "tck2connectome", 
@@ -206,8 +210,28 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
 
     try:
         print(f"Processing {subject} for ses-{ses}...")
-        subprocess.run(cmd, check=True)
-        print(f"Successfully created connectivity matrix for {subject}")
+        
+        # Run command and capture both stdout and stderr
+        with open(temp_output_file, 'w') as output_file:
+            process = subprocess.run(cmd, stdout=output_file, stderr=subprocess.STDOUT, text=True)
+        
+        # Check for the warning message about poor registration
+        with open(temp_output_file, 'r') as output_file:
+            output = output_file.read()
+            
+        if "tck2connectome: [WARNING] (This may indicate a poor registration)" in output:
+            print(f"WARNING: Poor registration detected for {subject}. Skipping this subject.")
+            
+            # Clean up temporary files
+            if temp_matrix_file.exists():
+                os.remove(temp_matrix_file)
+            if temp_output_file.exists():
+                os.remove(temp_output_file)
+                
+            return None
+        
+        # If no poor registration warning, proceed normally
+        print(f"Successfully created connectivity matrix for {subject}")    
         
         # Read the generated connectivity matrix
         connectivity_matrix = np.loadtxt(temp_matrix_file, delimiter=',')
@@ -341,7 +365,7 @@ def process_network_matrices(subject_id, full_matrix, combined_labels, output_di
 def main():
     """Main function to process structural connectivity for subjects."""
     # Set parameters
-    ses = "02"  
+    ses = "01"  
     cohort = "bbhi"
     mask_dir = Path("/home/rachel/Desktop/schaefer_analysis/fsaverage")
     output_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")

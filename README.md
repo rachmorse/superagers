@@ -62,7 +62,7 @@ The folders, listed in their intended order of use, are described below along wi
 - **Purpose:** These scripts run prepare and calculate the structural functional coupling (SFC) metrics. To calculate SFC, we use the Pearson correlation coefficient between the row for a given ROI in the structural connectome and the corresponding row in the functional connectome. We exclude self-connections and any connections where either the structural or functional connectivity values equal zero (method from this [paper](https://doi.org/10.1038/s41467-023-41686-9)).
  
 - **Scripts:**
-    - `01_convert_to_individual_matrix.py`: Converts the functional and structural connectivity data from a shared CSV with all participants into individual 214x214 matrices.
+    - `01_convert_to_individual_matrix.py`: Converts the functional and structural connectivity data from a shared CSV with all participants into individual 214x214 matrices. NOTE this remove functional connectivtiy value <0, replacing them with 0. 
     - `02_structural_functional_coupling.py`: Computes and visualizes SFC. 
 
 ## Analysis Scripts
