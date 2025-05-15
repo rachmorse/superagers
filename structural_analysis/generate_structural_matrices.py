@@ -60,7 +60,7 @@ def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
     existing_subjects = set()
     if all_to_all_csv.exists():
         try:
-            existing_df = pd.read_csv(all_to_all_csv, index_col="id")
+            existing_df = pd.read_csv(all_to_all_csv, index_col="Unnamed: 0")
             existing_subjects = set(existing_df.index)
         except Exception as e:
             print(f"Error reading existing CSV: {e}")
@@ -342,7 +342,7 @@ def main():
     """Main function to process structural connectivity for subjects."""
     # Set parameters
     ses = "02"  
-    cohort = "bbhi senior"
+    cohort = "bbhi"
     mask_dir = Path("/home/rachel/Desktop/schaefer_analysis/fsaverage")
     output_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
     labels_csv_path = "/home/rachel/Desktop/schaefer_analysis/timeseries_data/native_space/combined_labels.csv"
