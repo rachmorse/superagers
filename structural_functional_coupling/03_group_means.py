@@ -187,7 +187,7 @@ def process_connectivity(connectivity_file: Union[str, Path], superager_file: Un
 
     print("CSV files created successfully!")
 
-def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=0.5):
+def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=0.45):
     """
     Create multi-view brain surface visualizations of structure-function coupling from a DataFrame
     
@@ -199,6 +199,7 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
         ses (str): Session identifier
     """
     from nilearn.datasets import fetch_surf_fsaverage
+    from matplotlib.image import imread
     from nilearn import datasets, surface
     from nilearn import plotting
     import numpy as np
@@ -209,9 +210,10 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
 
     coupling_df = pd.read_csv(coupling_file, index_col=0)
 
-    # 
+    # Drop the subcoritical ROIs 
+    coupling_df = coupling_df[~coupling_df.index.str.contains('Subcortical')]
     
-    # Extract data - assuming coupling_df has ROI names as index and one column with values
+    # Extract data 
     rho_values = coupling_df.iloc[:, 0].values  # Get the first column's values
     subject = group_name
     
@@ -223,55 +225,54 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
     fsaverage = fetch_surf_fsaverage('fsaverage5')
     
     # Step 1: Get the Schaefer atlas parcellations
-    # Fetch the volumetric Schaefer atlas
     schaefer = datasets.fetch_atlas_schaefer_2018(n_rois=200, yeo_networks=7, resolution_mm=2)
-    
-    # Debug output
-    print(f"Schaefer atlas info: {schaefer.keys()}")
-    print(f"Coupling values shape: {rho_values.shape}, min: {np.min(rho_values)}, max: {np.max(rho_values)}")
-    
-    # Step 2: Project the volumetric atlas to the surface
-    # We'll need to get surface parcellations directly, but for now let's create a workaround
-    
-    # Create a nifti image with our coupling values
+
     # First, create a volume where ROI value = coupling value
     atlas_img = nib.load(schaefer['maps'])
     atlas_data = atlas_img.get_fdata()
-    
-    # Make sure we print some debug info
-    print(f"Atlas data shape: {atlas_data.shape}")
-    print(f"Atlas data unique values: {np.unique(atlas_data)[:10]}...")
-    
-    # Create a volume where each voxel's value is its ROI's coupling value
+    atlas_roi_names = schaefer['labels']
+
+    # Convert to strings
+    if isinstance(atlas_roi_names[0], bytes):
+        atlas_roi_names = [label.decode('utf-8') for label in atlas_roi_names]
+
+    # Create a mapping from the order of SFC ROI names to the Schaefer atlas indices (which is a different order)
+    roi_name_to_atlas_idx = {}
+    for i, atlas_name in enumerate(atlas_roi_names):
+        roi_name_to_atlas_idx[atlas_name] = i
+
+    # Now use this mapping for visualization
     coupling_vol = np.zeros_like(atlas_data)
-    
-    # Map the first 200 ROIs (Schaefer atlas)
-    for roi_idx in range(min(200, len(rho_values))):
-        # Schaefer ROIs are 1-indexed in the volume
-        roi_label = roi_idx + 1
-        coupling_vol[atlas_data == roi_label] = rho_values[roi_idx]
-    
-    # Print some information about the coupling volume
-    print(f"Coupling vol unique values: {np.unique(coupling_vol)[:10]}...")
-    print(f"Coupling vol non-zero count: {np.count_nonzero(coupling_vol)}")
-    
+
+    # Count how many ROIs were successfully mapped
+    mapped_count = 0
+
+    for my_roi_name, value in zip(coupling_df.index, rho_values):
+        if my_roi_name in roi_name_to_atlas_idx:
+            # Get the correct atlas index for this ROI name
+            atlas_idx = roi_name_to_atlas_idx[my_roi_name]
+            # Atlas uses 1-indexed ROIs in the volume
+            coupling_vol[atlas_data == (atlas_idx + 1)] = value
+            mapped_count += 1
+        else:
+            print(f"Warning: Could not find a matching atlas ROI for {my_roi_name}")
+
+    print(f"Successfully mapped {mapped_count} out of {len(coupling_df.index)} ROIs")
+        
+    # Debug output
+    print(f"Coupling values shape: {rho_values.shape}, min: {np.min(rho_values)}, max: {np.max(rho_values)}")
+        
     # Create a nifti image with the coupling values
     coupling_img = nib.Nifti1Image(coupling_vol, atlas_img.affine, atlas_img.header)
-    
-    # Save the coupling volume for inspection
-    # nib.save(coupling_img, os.path.join(output_path, f"{subject}_{ses}_coupling.nii.gz"))
-    
-    # Project the volumetric data to the surface
-    print("Projecting to surface...")
-    
+            
     # Project volume to each surface
     surf_data_left = surface.vol_to_surf(
         coupling_img, 
         fsaverage['pial_left'],
-        radius=3,  # Use a larger radius to ensure mapping
-        n_samples=5  # Sample more points along the normal
+        radius=3,
+        n_samples=5
     )
-    
+
     surf_data_right = surface.vol_to_surf(
         coupling_img, 
         fsaverage['pial_right'],
@@ -279,28 +280,30 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
         n_samples=5
     )
 
-    # Create a mask for values that should be grey (those that are exactly 0 or NaN)
-    mask_left = np.where(np.isclose(surf_data_left, 0) | np.isnan(surf_data_left))
-    mask_right = np.where(np.isclose(surf_data_right, 0) | np.isnan(surf_data_right))
-
-    # Replace those values with NaN which will be rendered as grey
-    surf_data_left[mask_left] = np.nan
-    surf_data_right[mask_right] = np.nan
-    
-    # Print info about surface data
-    print(f"Left surface data shape: {surf_data_left.shape}")
-    print(f"Right surface data shape: {surf_data_right.shape}")
+    # Check that the projected ranges are correct
     print(f"Left surface data range: {np.min(surf_data_left)}-{np.max(surf_data_left)}")
     print(f"Right surface data range: {np.min(surf_data_right)}-{np.max(surf_data_right)}")
+
+    # Create masks for vertices with values of zero
+    mask_left = np.isclose(surf_data_left, 0)
+    mask_right = np.isclose(surf_data_right, 0)
+
+    # Replace zeros with NaN so they appear as grey/transparent in plots
+    surf_data_left[mask_left] = np.nan
+    surf_data_right[mask_right] = np.nan
+
+    # Verify final data
+    print(f"Final left surface data range: {np.nanmin(surf_data_left)}-{np.nanmax(surf_data_left)}")
+    print(f"Final right surface data range: {np.nanmin(surf_data_right)}-{np.nanmax(surf_data_right)}")
     
     temp_output_path = output_path / "temp"
     temp_output_path.mkdir(parents=True, exist_ok=True)
 
-    cold_hot_cmap = plt.cm.get_cmap('RdBu_r')  
+    # Set the colormap
+    cold_hot_cmap = plt.get_cmap('RdBu_r')
 
-    # Right lateral view
+    # Right lateral fig
     right_lat_path = temp_output_path / f"{subject}_{ses}_right_lateral.png"
-    print(f"Creating right lateral view: {right_lat_path}")
     plotting.plot_surf_stat_map(
         fsaverage['pial_right'],
         surf_data_right,
@@ -310,15 +313,14 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
         cmap=cold_hot_cmap,
         vmin=vmin,
         vmax=vmax,
-        threshold=None,  # Make sure we don't threshold any data
+        threshold=None,  
         bg_map=fsaverage['sulc_right'],
         bg_on_data=True,
         output_file=right_lat_path
     )
     
-    # Right medial view
+    # Right medial fig
     right_med_path = temp_output_path / f"{subject}_{ses}_right_medial.png"
-    print(f"Creating right medial view: {right_med_path}")
     plotting.plot_surf_stat_map(
         fsaverage['pial_right'],
         surf_data_right,
@@ -328,15 +330,14 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
         cmap=cold_hot_cmap,
         vmin=vmin,
         vmax=vmax,
-        threshold=None,  # Make sure we don't threshold any data
+        threshold=None,  
         bg_map=fsaverage['sulc_right'],
         bg_on_data=True,
         output_file=right_med_path
     )
     
-    # Left medial view
+    # Left medial fig
     left_med_path = temp_output_path / f"{subject}_{ses}_left_medial.png"
-    print(f"Creating left medial view: {left_med_path}")
     plotting.plot_surf_stat_map(
         fsaverage['pial_left'],
         surf_data_left,
@@ -346,15 +347,14 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
         cmap=cold_hot_cmap,
         vmin=vmin,
         vmax=vmax,
-        threshold=None,  # Make sure we don't threshold any data
+        threshold=None,  
         bg_map=fsaverage['sulc_left'],
         bg_on_data=True,
         output_file=left_med_path
     )
     
-    # Left lateral view
+    # Left lateral fig
     left_lat_path = temp_output_path / f"{subject}_{ses}_left_lateral.png"
-    print(f"Creating left lateral view: {left_lat_path}")
     plotting.plot_surf_stat_map(
         fsaverage['pial_left'],
         surf_data_left,
@@ -364,21 +364,19 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
         cmap=cold_hot_cmap,
         vmin=vmin,
         vmax=vmax,
-        threshold=None,  # Make sure we don't threshold any data
+        threshold=None,  
         bg_map=fsaverage['sulc_left'],
         bg_on_data=True,
         output_file=left_lat_path
     )
     
-    # Now combine the images using matplotlib instead of PIL
-    fig, axes = plt.subplots(1, 4, figsize=(20, 5))
-    plt.subplots_adjust(wspace=-0.8, hspace=0)  # Reduce horizontal and vertical spacing
-    plt.suptitle(f"Structure-Function Coupling\n{subject} - ses-{ses}", fontsize=16, y=0.98)  # Move title up slightly
+    # Now combine the images 
+    fig, axes = plt.subplots(1, 4, figsize=(18, 5))
+    plt.subplots_adjust(wspace=-0.3, hspace=0)  # Reduce horizontal and vertical spacing
+    plt.suptitle(f"Structure-Function Coupling\n{subject} - ses-{ses}", fontsize=16, y=0.98) 
+    # plt.tight_layout()
 
-    
-    # Load and display the images in order: left lateral, left medial, right medial, right lateral
-    from matplotlib.image import imread
-    
+    # Load and display the images in order: left lateral, left medial, right medial, right lateral    
     axes[0].imshow(imread(left_lat_path))
     axes[0].axis('off')
     
@@ -391,12 +389,8 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
     axes[3].imshow(imread(right_lat_path))
     axes[3].axis('off')
     
-    # Add overall title
-    plt.suptitle(f"Structure-Function Coupling\n{subject} - {ses}", fontsize=16)
-    plt.tight_layout()
-    
     # Save the combined figure
-    combined_path = output_path / f"{subject}_ses-{ses}_combined_brain_views.png"
+    combined_path = output_path / f"{subject}_ses-{ses}_sfc.png"
     plt.savefig(combined_path, dpi=300, bbox_inches='tight')
     print(f"Combined visualization saved to {combined_path}")
     
@@ -424,18 +418,18 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
     }
 
     # Combine individual data into one df
-    consolidate_sfc_data(ses, sfc_df)
+    # consolidate_sfc_data(ses, sfc_df)
 
-    # Fisher-z transform the connectivity data
-    fisher_transform(connectivity_file, output_directory, ses)
+    # # Fisher-z transform the connectivity data
+    # fisher_transform(connectivity_file, output_directory, ses)
 
-    # Process the connectivity data and save averages
-    process_connectivity(fisher_z_connectivity_file, superager_file, output_files)
+    # # Process the connectivity data and save averages
+    # process_connectivity(fisher_z_connectivity_file, superager_file, output_files)
 
     # Visualize SFC in selected groups
     visualize_coupling(
         coupling_file=output_group_connectivity_file,
-        group_name="superagers",
+        group_name="non superagers",
         output_dir=output_directory_group,
         ses=ses)
     
@@ -448,7 +442,7 @@ if __name__ == "__main__":
     output_directory_group = Path(f"{sfc_df}/group_connectivity_matrices")
     connectivity_file = Path(f"{output_directory}/all_sfc_data_ses-{ses}.csv")
     fisher_z_connectivity_file = Path(f"{output_directory}/fisher_z_all_sfc_ses-{ses}.csv")
-    output_group_connectivity_file = Path(f"{output_directory_group}/superagers_average.csv")
+    output_group_connectivity_file = Path(f"{output_directory_group}/non_superagers_average.csv")
 
     # Make sure the output directory exists
     output_directory.mkdir(parents=True, exist_ok=True)
