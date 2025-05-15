@@ -289,7 +289,7 @@ def process_network_matrices(subject_id, full_matrix, combined_labels, output_di
     
     # Process each network
     for network, indices in network_mappings.items():
-        # Skip subcortical 'network' to handle separately
+        # Skip subcortical ROIs to handle separately
         if network == "Subcortical":
             continue
         
@@ -407,7 +407,6 @@ def main():
         logging.info(f"Processing {subject} for ses-{ses}...")
         
         try:
-            # Assuming generate_structural_connectivity returns the connectivity matrix if successful, or None if it fails
             result = generate_structural_connectivity(
                 subject=subject,
                 tractogram_dir=tractogram_dir,
@@ -415,7 +414,7 @@ def main():
                 output_dir=output_dir,
                 ses=ses, 
                 labels_csv_path=labels_csv_path,
-                run_visualization=True
+                run_visualization=False
             )
             
             # Check if processing was successful
