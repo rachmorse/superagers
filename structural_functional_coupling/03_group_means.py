@@ -166,6 +166,12 @@ def process_connectivity(connectivity_file: Union[str, Path], superager_file: Un
     # Merge dataframes on 'id'
     df = pd.merge(df_connectivity, df_superager, on='id', how="inner")
 
+    # First, process the "all subjects" group
+    group_name = 'all_subjects'
+    if group_name in output_files:
+        output_file = output_files[group_name]
+        save_group_averages(df, group_name, output_file)
+
     # Process individual groups
     for column, prefix in [('superager', 'superagers'), ('maintainer', 'maintainers')]:
         for label, group_df in df.groupby(column):
@@ -563,6 +569,7 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
 
     # Define output file paths for different categories
     output_files = {
+        'all_subjects': output_directory_group / "all_subjects_average.csv",
         'superagers': output_directory_group / "superagers_average.csv",
         'non_superagers': output_directory_group / "non_superagers_average.csv",
         'maintainers': output_directory_group / "maintainers_average.csv",
@@ -585,20 +592,20 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
     # Visualize SFC in selected groups
     visualize_coupling(
         coupling_file=output_group_connectivity_file,
-        group_name="superagers",
+        group_name="all_subjects",
         output_dir=output_directory_group,
         ses=ses)
     
 
 if __name__ == "__main__":
-    ses = "01"
+    ses = "02"
     superager_file = "/home/rachel/Desktop/data/maintainer_superager_data.csv"  
     sfc_df = Path(f"/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-{ses}")
     output_directory = Path(f"{sfc_df}/all_to_all_roi_matrices")
     output_directory_group = Path(f"{sfc_df}/group_connectivity_matrices")
     connectivity_file = Path(f"{output_directory}/all_sfc_data_ses-{ses}.csv")
     fisher_z_connectivity_file = Path(f"{output_directory}/fisher_z_all_sfc_ses-{ses}.csv")
-    output_group_connectivity_file = Path(f"{output_directory_group}/superagers_average.csv")
+    output_group_connectivity_file = Path(f"{output_directory_group}/all_subjects_average.csv")
 
     # Make sure the output directory exists
     output_directory.mkdir(parents=True, exist_ok=True)
