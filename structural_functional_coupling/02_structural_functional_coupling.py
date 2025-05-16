@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, structural_dir):
     """Generate a list of subjects to process based on whether they have
-    a structural and functional martix and do not have coupling for the
+    a structural and functional matrix and do not have coupling for the
     specified timepoint.
 
     Args:

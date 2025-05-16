@@ -90,6 +90,11 @@ def calculate_network_metrics(subject, ses, timepoint, func_dir, struct_dir, sfc
             # Apply Fisher z-transform to functional connectivity values
             func_data = np.arctanh(func_data)
             
+            # Calculate average FC across all ROIs (excluding diagonal)
+            mask = ~np.eye(func_data.shape[0], dtype=bool)
+            all_fc = func_data.values[mask].mean()
+            metrics[f'w{timepoint}_func_all'] = all_fc
+
             # Group ROIs by network
             roi_names = func_data.index.tolist()
             network_to_rois = group_rois_by_network(roi_names)
@@ -115,6 +120,18 @@ def calculate_network_metrics(subject, ses, timepoint, func_dir, struct_dir, sfc
                         metrics[f'w{timepoint}_func_between_{network}'] = between_conn
                     else:
                         metrics[f'w{timepoint}_func_between_{network}'] = np.nan
+
+                    # Calculate total network connectivity (within + between)
+                    within_matrix = network_submatrix.values
+                    between_matrix = func_data.loc[roi_list, other_rois].values if other_rois else np.array([])
+                    within_vals = within_matrix.flatten()
+                    between_vals = between_matrix.flatten()
+                    
+                    all_vals = np.concatenate([within_vals, between_vals]) if between_vals.size > 0 else within_vals
+                    all_conn = all_vals.mean() if len(all_vals) > 0 else np.nan
+                    metrics[f'w{timepoint}_func_all_{network}'] = all_conn
+
+
                 else:
                     metrics[f'w{timepoint}_func_within_{network}'] = np.nan
                     metrics[f'w{timepoint}_func_between_{network}'] = np.nan
@@ -122,6 +139,11 @@ def calculate_network_metrics(subject, ses, timepoint, func_dir, struct_dir, sfc
         # Load structural connectivity data
         if struct_file.exists():
             struct_data = pd.read_csv(struct_file, index_col=0)
+
+            # Calculate average SC across all ROIs (excluding diagonal)
+            mask = ~np.eye(struct_data.shape[0], dtype=bool)
+            all_sc = struct_data.values[mask].mean()
+            metrics[f'w{timepoint}_struct_all'] = all_sc
             
             # Group ROIs by network
             roi_names = struct_data.index.tolist()
@@ -135,6 +157,7 @@ def calculate_network_metrics(subject, ses, timepoint, func_dir, struct_dir, sfc
                 if len(roi_list) > 1:  
                     # Get the submatrix for this network
                     network_submatrix = struct_data.loc[roi_list, roi_list]
+                    within_matrix = network_submatrix.values
                     
                     # Calculate within-network connectivity (excluding diagonal)
                     mask = ~np.eye(network_submatrix.shape[0], dtype=bool)
@@ -148,6 +171,17 @@ def calculate_network_metrics(subject, ses, timepoint, func_dir, struct_dir, sfc
                         metrics[f'w{timepoint}_struct_between_{network}'] = between_conn
                     else:
                         metrics[f'w{timepoint}_struct_between_{network}'] = np.nan
+                        
+                    # Calculate total network connectivity (within + between)
+                    within_matrix = network_submatrix.values
+                    between_matrix = struct_data.loc[roi_list, other_rois].values if other_rois else np.array([])
+                    within_vals = within_matrix.flatten()
+                    between_vals = between_matrix.flatten()
+                    
+                    all_vals = np.concatenate([within_vals, between_vals]) if between_vals.size > 0 else within_vals
+                    all_conn = all_vals.mean() if len(all_vals) > 0 else np.nan
+                    metrics[f'w{timepoint}_struct_all_{network}'] = all_conn
+
                 else:
                     metrics[f'w{timepoint}_struct_within_{network}'] = np.nan
                     metrics[f'w{timepoint}_struct_between_{network}'] = np.nan
