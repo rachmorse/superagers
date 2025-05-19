@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="Black">
+<<<<<<< HEAD
     <option name="sdkName" value="Python 3.8 (superagers)" />
   </component>
   <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.8 (superagers)" project-jdk-type="Python SDK" />
+=======
+    <option name="sdkName" value="Poetry (superagers)" />
+  </component>
+  <component name="ProjectRootManager" version="2" project-jdk-name="Remote Python 3.8.10 (sftp://rachel@161.116.166.234:22/home/rachel/.virtualenvs/superagers/bin/python)" project-jdk-type="Python SDK" />
+>>>>>>> 4130919e (Added stat analysis for struct, func and sfc data)
 </project>
