@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 from pathlib import Path
+import re
 
 def calculate_annual_change(data, n_timepoints):
     """
@@ -18,19 +19,22 @@ def calculate_annual_change(data, n_timepoints):
     result_df = data.copy()
     
     # Get age columns
-    age_cols = [f"age.{i}" for i in range(1, n_timepoints+1)]
+    age_cols = [f"age_{i}" for i in range(1, n_timepoints+1)]
     
     # Get all variable columns except 'id' and age columns
     variable_cols = {}
     for col in data.columns:
-        if col != 'id' and not col.startswith('age.'):
-            # Extract the base variable name (before the dot)
-            if '.' in col:
-                var_name = col.split('.')[0]
-                timepoint = int(col.split('.')[1])
-                if var_name not in variable_cols:
-                    variable_cols[var_name] = []
-                variable_cols[var_name].append(col)
+        if col != 'id' and not col.startswith('age_'):
+            # Extract the base variable name (before the _)
+            if '_' in col:
+                parts = col.split('_')
+                var_name = parts[0]
+                if parts[1].isdigit():
+                    timepoint = int(parts[1])
+                    # Only add columns with integer timepoints
+                    if var_name not in variable_cols:
+                        variable_cols[var_name] = []
+                    variable_cols[var_name].append(col)
     
     # For each row in the dataframe
     for i in range(len(data)):
@@ -49,7 +53,7 @@ def calculate_annual_change(data, n_timepoints):
                 
                 if np.sum(valid_indices) > 1:
                     # Calculate slope using linear regression
-                    slope, intercept, r_value, p_value, std_err = stats.linregress(
+                    slope = stats.linregress(
                         age_data[valid_indices], 
                         var_data[valid_indices]
                     )
@@ -59,31 +63,40 @@ def calculate_annual_change(data, n_timepoints):
                     
                     # Calculate time difference
                     valid_ages = age_data[valid_indices]
-                    result_df.loc[i, f"{var_name}_time"] = np.max(valid_ages) - np.min(valid_ages)
+                    result_df.loc[i, f"fu_time"] = np.max(valid_ages) - np.min(valid_ages)
                 else:
                     result_df.loc[i, f"{var_name}_slopes"] = np.nan
-                    result_df.loc[i, f"{var_name}_time"] = np.nan
+    
+    print("Slope calculation complete.")
     
     return result_df
 
 def main():
-    # Define parameters
-    ses = "ses-01" 
-    
     # Base directories
     base_dir = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     metric_data_tp1 = base_dir / f"ses-01/network_metrics/network_connectivity_metrics_ses-01.csv"
     metric_data_tp2 = base_dir / f"ses-02/network_metrics/network_connectivity_metrics_ses-02.csv"
+    age_dir = Path("/home/rachel/Desktop/data")
 
     # Merge the two dfs by id and keep id only if it is in both
     metric_data_tp1 = pd.read_csv(metric_data_tp1)
     metric_data_tp2 = pd.read_csv(metric_data_tp2)
+    # Rename subject to id
+    metric_data_tp1.rename(columns={'subject': 'id'}, inplace=True)
+    metric_data_tp2.rename(columns={'subject': 'id'}, inplace=True)
     metric_data = pd.merge(metric_data_tp1, metric_data_tp2, on='id', suffixes=('_1', '_2'))
+
+    # Merge in the age data
+    age_data = pd.read_csv(age_dir / "maintainer_superager_data.csv")
+    age_data.columns = [re.sub(r"^w(\d)_(.*)", r"\2_\1", col) for col in age_data.columns] # Rename the columns
+    age_data = age_data[['id', 'age_1', 'age_2']] # Keep only the relevant columns
+    age_data['id'] = 'sub-' + age_data['id'].astype(str) # Add 'sub-' to the id
+    metric_data = pd.merge(metric_data, age_data, on='id', how='left')
 
     result = calculate_annual_change(metric_data, 2)
 
     # Save the result
-    result.to_csv('data_with_slopes.csv', index=False)
+    result.to_csv(age_dir / 'superager_data_slopes.csv', index=False)
 
 if __name__ == "__main__":
     main()
