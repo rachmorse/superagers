@@ -81,7 +81,7 @@ def create_individual_matrices(input_file, output_dir, is_functional=False):
     for i, subject in enumerate(subjects):
         # Create an empty connectivity matrix
         conn_matrix = np.zeros((num_rois, num_rois))
-        
+            
         # Get the connectivity values for this subject
         row_data = df.iloc[i]
         
@@ -108,6 +108,13 @@ def create_individual_matrices(input_file, output_dir, is_functional=False):
         
         # Zero out the diagonal
         np.fill_diagonal(conn_matrix, 0)
+
+        # Normalize the structural connectivity matrix
+        if not is_functional:
+            mat_min = conn_matrix.min()
+            mat_max = conn_matrix.max()
+            if mat_max > mat_min:
+                conn_matrix = (conn_matrix - mat_min) / (mat_max - mat_min)
         
         # Convert to DataFrame with original ROI labels
         conn_df = pd.DataFrame(conn_matrix, index=roi_labels, columns=roi_labels)
