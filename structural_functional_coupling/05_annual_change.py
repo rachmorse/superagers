@@ -28,9 +28,9 @@ def calculate_annual_change(data, n_timepoints):
             # Extract the base variable name (before the _)
             if '_' in col:
                 parts = col.split('_')
-                var_name = parts[0]
-                if parts[1].isdigit():
-                    timepoint = int(parts[1])
+                var_name = '_'.join(parts[:-1])
+                if parts[-1].isdigit():
+                    # timepoint = int(parts[-1])
                     # Only add columns with integer timepoints
                     if var_name not in variable_cols:
                         variable_cols[var_name] = []
@@ -39,27 +39,26 @@ def calculate_annual_change(data, n_timepoints):
     # For each row in the dataframe
     for i in range(len(data)):
         # Get age data for this subject
-        age_data = data.iloc[i][age_cols].values
-        
+        age_data = pd.to_numeric(data.iloc[i][age_cols], errors='coerce').values
         # For each variable
         for var_name, var_cols in variable_cols.items():
             # Only process variables that have timepoints
             if len(var_cols) > 1:
                 # Get variable data for this subject
-                var_data = data.iloc[i][var_cols].values
+                var_data = pd.to_numeric(data.iloc[i][var_cols], errors='coerce').values        
                 
                 # Get non-NA indices
                 valid_indices = ~np.isnan(var_data) & ~np.isnan(age_data)
                 
                 if np.sum(valid_indices) > 1:
                     # Calculate slope using linear regression
-                    slope = stats.linregress(
-                        age_data[valid_indices], 
+                    lr_result = stats.linregress(
+                        age_data[valid_indices],
                         var_data[valid_indices]
                     )
-                    
+
                     # Store the slope
-                    result_df.loc[i, f"{var_name}_slopes"] = slope
+                    result_df.loc[i, f"{var_name}_slopes"] = lr_result.slope
                     
                     # Calculate time difference
                     valid_ages = age_data[valid_indices]
@@ -68,7 +67,7 @@ def calculate_annual_change(data, n_timepoints):
                     result_df.loc[i, f"{var_name}_slopes"] = np.nan
     
     print("Slope calculation complete.")
-    
+
     return result_df
 
 def main():
@@ -81,7 +80,6 @@ def main():
     # Merge the two dfs by id and keep id only if it is in both
     metric_data_tp1 = pd.read_csv(metric_data_tp1)
     metric_data_tp2 = pd.read_csv(metric_data_tp2)
-    # Rename subject to id
     metric_data_tp1.rename(columns={'subject': 'id'}, inplace=True)
     metric_data_tp2.rename(columns={'subject': 'id'}, inplace=True)
     metric_data = pd.merge(metric_data_tp1, metric_data_tp2, on='id', suffixes=('_1', '_2'))
