@@ -143,7 +143,7 @@ def save_coupling_results(coupling_dict, output_path):
 
 def main():
     # Define the directories using Path
-    ses = "ses-01"
+    ses = "ses-02"
     structural_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structural_connectivity/{ses}/individual_connectivity_matrices")
     functional_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space/{ses}/individual_connectivity_matrices")
     output_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/{ses}/individual_coupling_matrices")

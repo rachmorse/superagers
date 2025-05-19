@@ -198,7 +198,7 @@ def process_connectivity(connectivity_file: Union[str, Path], superager_file: Un
 
     print("CSV files created successfully!")
 
-def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=0.45):
+def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=None):
     """
     Create multi-view brain surface visualizations of structure-function coupling from a DataFrame
     
@@ -210,6 +210,10 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
         ses (str): Session identifier
     """
     coupling_df = pd.read_csv(coupling_file, index_col=0)
+
+    # Set vmax as the maximum value in the DataFrame
+    if vmax is None:
+        vmax = coupling_df.iloc[:, 0].max()
 
     # Drop the subcoritical ROIs 
     coupling_df = coupling_df[~coupling_df.index.str.contains('Subcortical')]

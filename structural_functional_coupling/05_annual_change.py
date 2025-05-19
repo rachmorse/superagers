@@ -87,17 +87,19 @@ def main():
     # Merge in the age data
     age_data = pd.read_csv(age_dir / "maintainer_superager_data.csv")
     age_data.columns = [re.sub(r"^w(\d)_(.*)", r"\2_\1", col) for col in age_data.columns] # Rename the columns
-    age_data = age_data[['id', 'age_1', 'age_2']] # Keep only the relevant columns
     age_data['id'] = 'sub-' + age_data['id'].astype(str) # Add 'sub-' to the id
-    metric_data = pd.merge(metric_data, age_data, on='id', how='left')
+    age_data_filt = age_data[['id', 'age_1', 'age_2']] # Keep only the relevant columns
+    metric_data = pd.merge(metric_data, age_data_filt, on='id', how='left')
 
     result = calculate_annual_change(metric_data, 2)
 
     # Save the result
     result.to_csv(age_dir / 'superager_data_slopes.csv', index=False)
 
-    # Merge the result with the original data
-    
+    # Merge the result with the original data to get a clean output
+    merged_data = pd.merge(age_data, result, on=['id', 'age_1', 'age_2'], how='left')
+    print(merged_data.sample(5))
+    merged_data.to_csv(age_dir / 'clean_data_all.csv', index=False)
 
 if __name__ == "__main__":
     main()
