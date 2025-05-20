@@ -226,14 +226,16 @@ vars_cs_sfc_1 <- c(
   "sfc_Default_1",
   "sfc_Frontoparietal_1",
   "sfc_VentralAttention_1",
-  "sfc_DorsalAttention_1"
+  "sfc_DorsalAttention_1",
+  "sfc_all_1"
 )
 
 vars_cs_sfc_2 <- c(
   "sfc_Default_2",
   "sfc_Frontoparietal_2",
   "sfc_VentralAttention_2",
-  "sfc_DorsalAttention_2"
+  "sfc_DorsalAttention_2",
+  "sfc_all_2"
 )
 
 vars_long_struct <- c(
@@ -435,6 +437,21 @@ run_models(data, "superager_maintainer", vars_long_sfc, "aov")
 run_models(data, "superager_maintainer", vars_cs_sfc_1, "aov")
 run_models(data, "superager_maintainer", vars_cs_sfc_2, "aov")
 
+# Plot 
+ggplot(data, aes(x = maintainer_group, y = sfc_Default_slopes, fill = maintainer_group)) +
+  geom_violin(trim = FALSE, alpha = 0.7) +
+  geom_boxplot(width = 0.2, position = position_dodge(0.9), alpha = 0.6) +
+  geom_jitter(width = 0.1, alpha = 0.5) +  # Add individual data points
+  stat_summary(fun = mean, geom = "point", shape = 18, size = 4, color = "black") +
+  labs(
+    x = "",
+    y = "SFC Slopes"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  stat_compare_means(method = "anova", 
+                     label.y = max(data$func_within_VentralAttention_slopes, na.rm = TRUE) * 1.1)
+
 ##################################
 ########## SFC and age ###########
 ##################################
@@ -561,11 +578,11 @@ summary(lm(scale(memory_slopes) ~ scale(superager) * scale(sfc_DorsalAttention_s
 
 # Create a list to store the models
 models <- list(
-  all = lm(scale(memory_slopes) ~ scale(superager) * scale(sfc_all_slopes) + scale(age_1) + scale(YoE) + sex, data),
-  default = lm(scale(memory_slopes) ~ scale(superager) * scale(sfc_Default_slopes) + scale(age_1) + scale(YoE) + sex, data),
-  frontoparietal = lm(scale(memory_slopes) ~ scale(superager) * scale(sfc_Frontoparietal_slopes) + scale(age_1) + scale(YoE) + sex, data),
-  ventral = lm(scale(memory_slopes) ~ scale(superager) * scale(sfc_VentralAttention_slopes) + scale(age_1) + scale(YoE) + sex, data),
-  dorsal = lm(scale(memory_slopes) ~ scale(superager) * scale(sfc_DorsalAttention_slopes) + scale(age_1) + scale(YoE) + sex, data)
+  all = lm(scale(memory_slopes) ~ scale(maintainer) * scale(sfc_all_slopes) + scale(age_1) + scale(YoE) + sex, data),
+  default = lm(scale(memory_slopes) ~ scale(maintainer) * scale(sfc_Default_slopes) + scale(age_1) + scale(YoE) + sex, data),
+  frontoparietal = lm(scale(memory_slopes) ~ scale(maintainer) * scale(sfc_Frontoparietal_slopes) + scale(age_1) + scale(YoE) + sex, data),
+  ventral = lm(scale(memory_slopes) ~ scale(maintainer) * scale(sfc_VentralAttention_slopes) + scale(age_1) + scale(YoE) + sex, data),
+  dorsal = lm(scale(memory_slopes) ~ scale(maintainer) * scale(sfc_DorsalAttention_slopes) + scale(age_1) + scale(YoE) + sex, data)
 )
 
 # Extract interaction p-values
@@ -699,4 +716,3 @@ results$fdr_significant <- results$fdr_p_value < 0.05
 
 # Display the results with original and FDR-corrected p-values
 print(results[order(results$p_value), c("network", "p_value", "significant", "fdr_p_value", "fdr_significant")])
-
