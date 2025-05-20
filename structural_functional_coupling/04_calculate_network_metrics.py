@@ -285,8 +285,8 @@ def main(ses, timepoint, func_base_dir, struct_base_dir, sfc_base_dir, output_di
 
 if __name__ == "__main__":
     # Define parameters
-    ses = "ses-01" 
-    timepoint = "1"
+    ses = "ses-02" 
+    timepoint = "2"
     
     # Base directories
     base_dir = Path("/home/rachel/Desktop/schaefer_analysis")

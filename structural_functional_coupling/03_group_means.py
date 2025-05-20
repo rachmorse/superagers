@@ -198,7 +198,7 @@ def process_connectivity(connectivity_file: Union[str, Path], superager_file: Un
 
     print("CSV files created successfully!")
 
-def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=None):
+def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=0.47):
     """
     Create multi-view brain surface visualizations of structure-function coupling from a DataFrame
     
@@ -596,7 +596,7 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
     # Visualize SFC in selected groups
     visualize_coupling(
         coupling_file=output_group_connectivity_file,
-        group_name="all_subjects",
+        group_name="decliners",
         output_dir=output_directory_group,
         ses=ses)
     
@@ -609,7 +609,7 @@ if __name__ == "__main__":
     output_directory_group = Path(f"{sfc_df}/group_connectivity_matrices")
     connectivity_file = Path(f"{output_directory}/all_sfc_data_ses-{ses}.csv")
     fisher_z_connectivity_file = Path(f"{output_directory}/fisher_z_all_sfc_ses-{ses}.csv")
-    output_group_connectivity_file = Path(f"{output_directory_group}/all_subjects_average.csv")
+    output_group_connectivity_file = Path(f"{output_directory_group}/decliners_average.csv")
 
     # Make sure the output directory exists
     output_directory.mkdir(parents=True, exist_ok=True)
