@@ -34,6 +34,14 @@ The folders, listed in their intended order of use, are described below along wi
 - **Notes:**
     - This folder also includes Excel files with the published neuronorma data from [Peña-Casanova et al. (2009a)](https://pubmed.ncbi.nlm.nih.gov/19661109/) and [Peña-Casanova et al. (2009b)](https://pubmed.ncbi.nlm.nih.gov/19648583/) that were used to determine participants who were within 1 SD of the norm on the neuropsychological tests. 
 
+### fsaverage_masks
+- **Purpose:** These scripts transform the fsaverage Schaefer atlas and aseg parcellation to T1 space then DWI and BOLD space and combine the two atlases to have native space Schaefer + subcortical atlas for each subject. 
+- **Scripts:**
+    - `01_fsaverage_to_t1.py`: Transforms the Schaefer 200-parcel atlas from FreeSurfer’s ‘fsaverage’ surface space to each subject’s T1 space. It uses FreeSurfer's mri_surf2surf and mri_label2vol.
+    - `02_subcortical_to_t1.py`: Extracts left and right subcortical regions from FreeSurfer's aseg.mgz files for each subject, creating labeled volumetric masks T1 space.
+    - `03_combine_t1_atlases.py`: Merges left and right Schaefer cortical and subcortical masks into a single subject-specific atlas in T1 space, handling overlaps and preserving all 214 brain regions.
+    - `04_t1_to_dwi_bold.py`: Transforms the Schaefer/subcortical atlases from T1 space into native DWI and BOLD spaces, generating native-space masks for downstream structural and functional analyses.
+
 ### fMRI analysis
 - **Purpose:** These scripts scrub the preprocessed fMRI data, extract timeseries data, compute functional connectivity correlations and conduct statistical significance testing on the correlations. 
 - **Scripts:**
