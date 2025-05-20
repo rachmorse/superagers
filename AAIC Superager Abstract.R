@@ -234,7 +234,7 @@ fig1 <- ggplot() +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
   labs(x = "Age", y = "Episodic Memory Composite", color = "Group", fill = "Group") +
   theme_minimal() +
-  theme(legend.position = c(0.8, 0.94))
+  theme(legend.position.inside = c(0.8, 0.94))
 
 # 5) Subset data for each group to run separate scaled models
 superager_df <- long_data %>% filter(superager_factor == "superager")
@@ -305,7 +305,7 @@ fig2 <- ggplot() +
   scale_fill_manual(values = palette) +
   labs(x = "Age", y = "Episodic Memory Composite", color = "Group", fill = "Group") +
   theme_minimal() +
-  theme(legend.position = c(0.72, 0.895))
+  theme(legend.position.inside = c(0.72, 0.895))
 
 # 8) Combine Fig 1 and Fig 2 and save
 combined_plot <- plot_grid(fig1, fig2, ncol = 2)
@@ -401,7 +401,7 @@ ggplot() +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
   labs(x = "Age", y = "Adjusted Hippocampal Volume", color = "Group", fill = "Group") +
   theme_minimal() +
-  theme(legend.position = c(0.8, 0.94))
+  theme(legend.position.inside = c(0.8, 0.94))
 
 ##########################################
 ## Fig 4: Two groups - age, hippocampus ##
@@ -466,7 +466,7 @@ ggplot() +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
   labs(x = "Age", y = "Adjusted Hippocampal Volume", color = "Group", fill = "Group") +
   theme_minimal() +
-  theme(legend.position = c(0.8, 0.94))
+  theme(legend.position.inside = c(0.8, 0.94))
 
 ##################################
 ## Fig 5: Two groups - age, wmh ##
@@ -534,7 +534,7 @@ ggplot() +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
   labs(x = "Age", y = "White Matter Hypointensities", color = "Group", fill = "Group") +
   theme_minimal() +
-  theme(legend.position = c(0.8, 0.94))
+  theme(legend.position.inside = c(0.8, 0.94))
 
 ##################################
 ## Fig 6: Two groups - age, whm ##
@@ -599,7 +599,7 @@ ggplot() +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
   labs(x = "Age", y = "White Matter Hypointensities", color = "Group", fill = "Group") +
   theme_minimal() +
-  theme(legend.position = c(0.8, 0.94))
+  theme(legend.position.inside = c(0.8, 0.94))
 
 ###################################
 ## Fig 7: Four groups - age, wmh ##
@@ -660,7 +660,7 @@ ggplot() +
   scale_fill_manual(values = palette) +
   labs(x = "Age", y = "WMH", color = "Group", fill = "Group") +
   theme_minimal() +
-  theme(legend.position = c(0.72, 0.895))
+  theme(legend.position.inside = c(0.72, 0.895))
 
 ##################################
 ## Fig 8: Four groups - age, hc ##
@@ -721,7 +721,7 @@ ggplot() +
   scale_fill_manual(values = palette) +
   labs(x = "Age", y = "Hippocampal Volume", color = "Group", fill = "Group") +
   theme_minimal() +
-  theme(legend.position = c(0.72, 0.895))
+  theme(legend.position.inside = c(0.72, 0.895))
 
 #################################
 ## Fig 9: Two groups - age, gm ##
@@ -786,7 +786,7 @@ ggplot() +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
   labs(x = "Age", y = "Total Grey Matter", color = "Group", fill = "Group") +
   theme_minimal() +
-  theme(legend.position = c(0.8, 0.94))
+  theme(legend.position.inside = c(0.8, 0.94))
 
 ###################################
 ## Fig 10: Four groups - age, gm ##
@@ -847,7 +847,7 @@ ggplot() +
   scale_fill_manual(values = palette) +
   labs(x = "Age", y = "Total Grey Matter", color = "Group", fill = "Group") +
   theme_minimal() +
-  theme(legend.position = c(0.72, 0.895))
+  theme(legend.position.inside = c(0.72, 0.895))
 
 #################################
 ## Fig 11: Two groups - age, gm ##
@@ -912,4 +912,5 @@ ggplot() +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
   labs(x = "Age", y = "Total Grey Matter", color = "Group", fill = "Group") +
   theme_minimal() +
-  theme(legend.position = c(0.8, 0.94))
+  theme(legend.position.inside = c(0.8, 0.94))
+
