@@ -60,14 +60,14 @@ long_data = pd.concat(timepoint_dfs, ignore_index=True)
 # Prepare to run stats
 # ------------------------------------------------------------------------------
 def run_models(df, independent_vars, dependent_vars, timepoint, model_type="aov"):
-    """Runs a linear model or ANOVA for the given variables and returns 
+    """Runs a linear model or ANOVA for the given variables and returns
     the p-values and F-values.
 
     Args:
         df: dataframe containing the data
         independent_vars: list of columns to treat as grouping or factor
         dependent_vars: list of dependent variables (columns) to loop through
-        timepoint: timepoint 
+        timepoint: timepoint
         model_type: "aov" for ANOVA or "lm" for linear model using statsmodels
     """
     all_results = []
@@ -124,7 +124,7 @@ def run_models(df, independent_vars, dependent_vars, timepoint, model_type="aov"
         rejected, fdr_p, _, _ = multipletests(results_df['p_value'], method='fdr_bh')
         results_df['fdr_p_value'] = fdr_p
         results_df['fdr_significant'] = rejected
-    
+
     return results_df
 
 # Test model
