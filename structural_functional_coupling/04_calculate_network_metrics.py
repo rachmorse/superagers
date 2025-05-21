@@ -40,6 +40,19 @@ def extract_network_from_roi_name(roi_name):
     
     return "Unknown"
 
+def identify_subcortical_rois(roi_names):
+    """
+    Identify ROIs that belong to subcortical regions.
+    
+    Args:
+        roi_names (list): List of ROI names
+        
+    Returns:
+        list: List of ROIs that are subcortical
+    """
+    return [roi for roi in roi_names if "Subcortical" in roi]
+
+
 def group_rois_by_network(roi_names):
     """
     Group ROIs by network based on their names.
@@ -59,6 +72,7 @@ def group_rois_by_network(roi_names):
         network_to_rois[network].append(roi_name)
     
     return network_to_rois
+
 
 def calculate_network_metrics(subject, ses, timepoint, func_dir, struct_dir, sfc_dir):
     """
@@ -98,6 +112,33 @@ def calculate_network_metrics(subject, ses, timepoint, func_dir, struct_dir, sfc
             # Group ROIs by network
             roi_names = func_data.index.tolist()
             network_to_rois = group_rois_by_network(roi_names)
+
+            # Identify subcortical ROIs and hippocampus specifically
+            subcortical_rois = identify_subcortical_rois(roi_names)
+            hipp_rois = [roi for roi in roi_names if "Subcortical" in roi and ("Left Hippocampus" in roi or "Right Hippocampus" in roi)]
+
+            # Calculate subcortical metrics if any subcortical ROIs exist
+            if subcortical_rois:
+                # Calculate within-subcortical connectivity
+                if len(subcortical_rois) > 1:
+                    subcort_submatrix = func_data.loc[subcortical_rois, subcortical_rois]
+                    mask = ~np.eye(subcort_submatrix.shape[0], dtype=bool)
+                    within_subcort = subcort_submatrix.values[mask].mean()
+                    metrics[f'func_within_Subcortical_{timepoint}'] = within_subcort
+                    
+                    # Calculate between subcortical and other regions
+                    other_rois = [r for r in roi_names if r not in subcortical_rois]
+                    if other_rois:
+                        between_subcort = func_data.loc[subcortical_rois, other_rois].values.mean()
+                        metrics[f'func_between_Subcortical_{timepoint}'] = between_subcort
+                    
+                    # Calculate average subcortical connectivity
+                    metrics[f'func_all_Subcortical_{timepoint}'] = func_data.loc[subcortical_rois, :].values.mean()
+
+            # Calculate hippocampus metrics
+            if hipp_rois:
+                hipp_conn = func_data.loc[hipp_rois, :].values.mean()
+                metrics[f'func_Hippocampus_{timepoint}'] = hipp_conn
             
             # Calculate within-network and between-network functional connectivity
             for network, roi_list in network_to_rois.items():
@@ -148,6 +189,33 @@ def calculate_network_metrics(subject, ses, timepoint, func_dir, struct_dir, sfc
             # Group ROIs by network
             roi_names = struct_data.index.tolist()
             network_to_rois = group_rois_by_network(roi_names)
+
+            # Identify subcortical ROIs and hippocampus specifically
+            subcortical_rois = identify_subcortical_rois(roi_names)
+            hipp_rois = [roi for roi in roi_names if "Subcortical" in roi and ("Left Hippocampus" in roi or "Right Hippocampus" in roi)]
+            
+            # Calculate subcortical metrics if any subcortical ROIs exist
+            if subcortical_rois:
+                # Calculate within-subcortical connectivity
+                if len(subcortical_rois) > 1:
+                    subcort_submatrix = struct_data.loc[subcortical_rois, subcortical_rois]
+                    mask = ~np.eye(subcort_submatrix.shape[0], dtype=bool)
+                    within_subcort = subcort_submatrix.values[mask].mean()
+                    metrics[f'struct_within_Subcortical_{timepoint}'] = within_subcort
+                    
+                    # Calculate between subcortical and other regions
+                    other_rois = [r for r in roi_names if r not in subcortical_rois]
+                    if other_rois:
+                        between_subcort = struct_data.loc[subcortical_rois, other_rois].values.mean()
+                        metrics[f'struct_between_Subcortical_{timepoint}'] = between_subcort
+                    
+                    # Calculate average subcortical connectivity
+                    metrics[f'struct_all_Subcortical_{timepoint}'] = struct_data.loc[subcortical_rois, :].values.mean()
+            
+            # Calculate left hippocampus metrics
+            if hipp_rois:
+                hipp_rois = struct_data.loc[hipp_rois, :].values.mean()
+                metrics[f'struct_Hippocampus_{timepoint}'] = hipp_rois
             
             # Calculate within-network and between-network structural connectivity
             for network, roi_list in network_to_rois.items():
@@ -205,6 +273,26 @@ def calculate_network_metrics(subject, ses, timepoint, func_dir, struct_dir, sfc
                 roi_names = sfc_data[roi_col].tolist()
                 roi_to_network = {roi: extract_network_from_roi_name(roi) for roi in roi_names}
                 
+                # Identify subcortical ROIs and hippocampus specifically in SFC data
+                subcortical_rois = [roi for roi in roi_names if "Subcortical" in roi]
+                hipp_rois = [roi for roi in roi_names if "Subcortical" in roi and ("Left Hippocampus" in roi or "Right Hippocampus" in roi)]
+                
+                # Calculate average SFC for subcortical regions
+                if subcortical_rois:
+                    subcort_values = sfc_data[sfc_data[roi_col].isin(subcortical_rois)]['z_value'].values
+                    if len(subcort_values) > 0:
+                        metrics[f'sfc_Subcortical_{timepoint}'] = np.nanmean(subcort_values)
+                    else:
+                        metrics[f'sfc_Subcortical_{timepoint}'] = np.nan
+                
+                # Calculate average SFC for hippocampus
+                if hipp_rois:
+                    hipp_rois = sfc_data[sfc_data[roi_col].isin(hipp_rois)]['z_value'].values
+                    if len(hipp_rois) > 0:
+                        metrics[f'sfc_Hippocampus_{timepoint}'] = np.nanmean(hipp_rois)
+                    else:
+                        metrics[f'sfc_Hippocampus_{timepoint}'] = np.nan
+                        
                 # Calculate average SFC for each network
                 for network in set(roi_to_network.values()):
                     if network == "Unknown":
