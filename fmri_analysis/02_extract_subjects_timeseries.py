@@ -91,7 +91,7 @@ def process_subject_extract(args):
     print(f"Processing completed for subject: {subject}")
 
 def exclude_subjects_framewise_displ(subject, ses, root_directory):
-    """Check if the subject has excessive motion (>50% of frames exceeding 0.5 mm).
+    """Check if the subject has excessive motion (>30% of frames exceeding 0.5 mm).
 
     Args:
         subject (str): Subject ID.
@@ -109,7 +109,7 @@ def exclude_subjects_framewise_displ(subject, ses, root_directory):
             fd_values = pd.to_numeric(fd_values, errors='coerce').fillna(0)
             high_motion_percentage = (fd_values > 0.5).mean() * 100
             
-            if high_motion_percentage > 50:
+            if high_motion_percentage > 30:
                 print(f"Excluding {subject} due to excessive motion: {high_motion_percentage:.2f}% of frames > 0.5mm")
                 return True
         except Exception as e:
@@ -121,7 +121,7 @@ def exclude_subjects_framewise_displ(subject, ses, root_directory):
 def get_subjects_to_process(root_directory, atlas_file_template, output_directory, ses, cohort):
     """Generate a list of subjects to process based on whether they have
     scrubbed data and a timeseries file already generated. Then exclude subjects    
-    with excessive motion (>50% of frames exceeding 0.5 mm).
+    with excessive motion (>30% of frames exceeding 0.5 mm).
 
     Args:
         root_directory (Path): Path to the root directory containing the scrubbed data.
@@ -344,13 +344,13 @@ if __name__ == "__main__":
     # Optionally, manually specify subjects to process
     # subjects = ["sub-4045"]
 
-    main(
-        ses=ses,
-        threshold=threshold,
-        error_log_path=error_log_path,
-        output_dir=output_directory,
-        roi_indices=roi_indices,
-        atlas_file_template=atlas_file_template,
-        # multi=False,
-        multi=True, # Uncomment this line to enable parallel processing
-    )
+    # main(
+    #     ses=ses,
+    #     threshold=threshold,
+    #     error_log_path=error_log_path,
+    #     output_dir=output_directory,
+    #     roi_indices=roi_indices,
+    #     atlas_file_template=atlas_file_template,
+    #     # multi=False,
+    #     multi=True, # Uncomment this line to enable parallel processing
+    # )
