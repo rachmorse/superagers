@@ -41,7 +41,7 @@ This repository contains the analysis scripts for our study on superagers, which
 - **Purpose:** These scripts scrub the preprocessed fMRI data, extract timeseries data, compute functional connectivity correlations and conduct statistical significance testing on the correlations. 
 - **Scripts:**
     - `01_scrubbing_fMRI.py`: Scrubs fMRI BOLD images based on a Framewise Displacement (FWD) threshold to help mitigate motion artifacts. It either removes or interpolates frames where a subject has a high FWD (i.e. 0.5).
-    - `02_extract_subjects_timeseries.py`: Extracts timeseries data from fMRI BOLD images using the Schaefer 200 ROI, 7 network atlas and 14 aseg-derived subcortical regions. NOTE - this script excludes participants who had >50% of their frames scrubbed.
+    - `02_extract_subjects_timeseries.py`: Extracts timeseries data from fMRI BOLD images using the Schaefer 200 ROI, 7 network atlas and 14 aseg-derived subcortical regions. NOTE - this script excludes participants who had >30% of their frames scrubbed.
         - Uses the functions in the script `extract_timeseries.py`.
     - `03_compute_subject_functional_connectivity.py`: Computes various functional connectivity metrics for subjects from the timeseries data. The script processes timeseries data, computes functional connectivity with and without Fisher z-transformation, and saves the results to CSV files.
         - Uses the functions in the script `compute_functional_connectivity.py`.

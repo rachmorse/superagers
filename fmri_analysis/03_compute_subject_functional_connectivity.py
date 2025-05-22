@@ -135,7 +135,7 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], timeser
 
 
 if __name__ == "__main__":
-    ses = "01"
+    ses = "02"
     timeseries_path = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data/native_space")
     root_directory = Path(f"{timeseries_path}/ses-{ses}")
     output_directory = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")

@@ -602,7 +602,7 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
     
 
 if __name__ == "__main__":
-    ses = "02"
+    ses = "01"
     superager_file = "/home/rachel/Desktop/data/maintainer_superager_data.csv"  
     sfc_df = Path(f"/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-{ses}")
     output_directory = Path(f"{sfc_df}/all_to_all_roi_matrices")

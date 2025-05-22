@@ -312,8 +312,8 @@ def main(
 
 
 if __name__ == "__main__":
-    ses = "02"
-    timepoint = "2"
+    ses = "01"
+    timepoint = "1"
     threshold = "0.5"
     cohort = "bbhi senior"   
     root = Path("/home/rachel/Desktop/schaefer_analysis") 
