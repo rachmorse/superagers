@@ -23,14 +23,20 @@ Comment/uncomment the relevant blocks for Superager vs. BBHI data.
 ##############################################################################
 def create_wrapper_script():
     """
-    Create a wrapper script to run asegstats2table with Python 2.
-    Note this is needed because Freesurfer 6 (used for recon-all)
+    Create a wrapper script to run asegstats2table and aparcstats2table with
+    Python 2. Note this is needed because Freesurfer 6 (used for recon-all)
     expects Python 2, not Python 3.
     """
     wrapper_script = """#!/bin/bash
 PYTHON2=/usr/bin/python2
 ASEGSTATS2TABLE=/home/rachel/freesurfer/freesurfer/bin/asegstats2table
-$PYTHON2 $ASEGSTATS2TABLE "$@"
+APARCSTATS2TABLE=/home/rachel/freesurfer/freesurfer/bin/aparcstats2table
+if [[ "$1" == "--aparc" ]]; then
+    shift
+    $PYTHON2 $APARCSTATS2TABLE "$@"
+else
+    $PYTHON2 $ASEGSTATS2TABLE "$@"
+fi
 """
     with open("run_asegstats2table.sh", "w") as f:
         f.write(wrapper_script)
@@ -138,17 +144,12 @@ def main():
     # Create the wrapper script
     create_wrapper_script()
 
-    # ---------------------------------------------------------------------
-    # Switch between Superagers and BBHI by commenting/uncommenting:
-
-    # Superagers:
-    # subject_csv = None
-    # root_path = Path("/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall")
-
-    # BBHI:
-    subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
-    root_path = Path("/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall")
-    # ---------------------------------------------------------------------
+    if cohort == "bbhi":
+        subject_csv = "/home/rachel/Desktop/data/bbhi_ids_tp1.csv"
+        root_path = Path("/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall")
+    else:
+        subject_csv = None
+        root_path = Path("/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall")
 
     # Define session / output directory
     sessions = ["ses-01", "ses-02"]
@@ -233,6 +234,39 @@ def main():
             if temp_csv.exists():
                 temp_csv.unlink()
 
+            # Cortical thickness extraction
+            for hemi in ["lh", "rh"]:
+                temp_thick_csv = output_dir / f"temp_{subj}_{hemi}_thickness.csv"
+                aparc_command = [
+                    "./run_asegstats2table.sh",
+                    "--aparc",                # This tells the wrapper script to run aparcstats2table because both commands are in the same script
+                    "--subjects", subj,
+                    "--hemi", hemi,
+                    "--meas", "thickness",
+                    "--parc", "aparc",
+                    "--delimiter", "comma",
+                    "--tablefile", str(temp_thick_csv)
+                ]
+                try:
+                    subprocess.run(aparc_command, check=True)
+                except subprocess.CalledProcessError as exc:
+                    print(f"Error: aparcstats2table failed for {subj} {hemi}, skipping.\n{exc}")
+                    failed_subjects.append(f"{subj}_{hemi}_aparc")
+                    if temp_thick_csv.exists():
+                        temp_thick_csv.unlink()
+                    continue
+
+                if not temp_thick_csv.exists():
+                    print(f"Error: output CSV for {subj} {hemi} thickness not created, skipping.")
+                    failed_subjects.append(f"{subj}_{hemi}_aparc_output")
+                    continue
+
+                # Append thickness CSV to output 
+                append_csv_files(session_output, temp_thick_csv)
+
+                if temp_thick_csv.exists():
+                    temp_thick_csv.unlink()
+
         print(f"\nFinished session {ses}. Results in {session_output}\n")
 
     # Print a list of subjects that failed
@@ -244,4 +278,7 @@ def main():
         print("All subjects processed successfully.")
 
 if __name__ == "__main__":
+    # Set the cohort variable (already processed tp1 and 2)
+    cohort = "bbhi"  
+
     main()
