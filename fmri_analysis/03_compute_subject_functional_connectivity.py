@@ -135,21 +135,26 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], timeser
 
 
 if __name__ == "__main__":
-    ses = "02"
+    sessions = ["01", "02"]
     timeseries_path = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data/native_space")
-    root_directory = Path(f"{timeseries_path}/ses-{ses}")
     output_directory = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
 
-    # Create the output directory if it does not exist
-    output_directory.mkdir(parents=True, exist_ok=True)
+    for ses in sessions:
+        print("-----------------------")
+        print(f"Processing ses-{ses}")
+        print("-----------------------")
 
-    # Generate a list of subjects to process
-    subjects = get_subjects_to_process(root_directory, output_directory, ses)
-    print(f"Number of subjects to process: {len(subjects)}")
+        # Create the output directory if it does not exist
+        output_directory.mkdir(parents=True, exist_ok=True)
+        root_directory = Path(f"{timeseries_path}/ses-{ses}")
 
-    main(
-        output_dir=output_directory,
-        root_directory=root_directory,
-        ses=ses,
-        timeseries_path=timeseries_path,
-    )
+        # Generate a list of subjects to process
+        subjects = get_subjects_to_process(root_directory, output_directory, ses)
+        print(f"Number of subjects to process: {len(subjects)}")
+
+        main(
+            output_dir=output_directory,
+            root_directory=root_directory,
+            ses=ses,
+            timeseries_path=timeseries_path,
+        )

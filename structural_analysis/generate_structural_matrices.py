@@ -381,7 +381,9 @@ def main():
     
     for cohort in cohorts:
         for ses in sessions:
+            print("------------------------------")
             print(f"Processing {cohort} {ses}...")
+            print("------------------------------")
 
             if cohort == "bbhi":
                 if ses == "01":
@@ -442,6 +444,9 @@ def main():
     successful_count = len(successful_subjects)
     failed_count = len(failed_subjects)
     
+    print("------------------------------")
+    print("Summary")
+    print("------------------------------")
     logging.info(f"Processing complete: {successful_count}/{total_subjects} successful, {failed_count}/{total_subjects} failed")
     if failed_subjects:
         logging.info(f"Failed subjects: {', '.join(failed_subjects)}")
