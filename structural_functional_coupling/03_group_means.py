@@ -209,7 +209,8 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
         vmin, vmax (float): Min and max values for color scaling
         ses (str): Session identifier
     """
-    coupling_df = pd.read_csv(coupling_file, index_col=0)
+    coupling_csv = Path(f"{coupling_file}/{group_name}_average.csv")
+    coupling_df = pd.read_csv(coupling_csv, index_col=0)
 
     # Set vmax as the maximum value in the DataFrame
     if vmax is None:
@@ -516,7 +517,7 @@ def compare_sfc_groups(group1_name, group2_name, output_dir, ses, alpha=0.05, co
     
     # Create brain visualization of differences
     fig = visualize_coupling(
-        coupling_file=diff_file,
+        coupling_csv=diff_file,
         group_name=f"{group1_name}-{group2_name}",
         output_dir=stat_output_dir,
         ses=ses,
@@ -540,7 +541,7 @@ def compare_sfc_groups(group1_name, group2_name, output_dir, ses, alpha=0.05, co
         
         # Visualize significant regions
         sig_fig = visualize_coupling(
-            coupling_file=sig_file,
+            coupling_csv=sig_file,
             group_name=f"{group1_name}_vs_{group2_name}_significant",
             output_dir=stat_output_dir,
             ses=ses,
@@ -593,35 +594,43 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
     # Process the connectivity data and save averages
     process_connectivity(fisher_z_connectivity_file, superager_file, output_files)
 
-    # Visualize SFC in selected groups
-    visualize_coupling(
-        coupling_file=output_group_connectivity_file,
-        group_name="decliners",
-        output_dir=output_directory_group,
-        ses=ses)
+    for group_name in group_names:
+        # Visualize SFC in selected groups
+        visualize_coupling(
+            coupling_file=output_group_connectivity_file,
+            group_name=group_name,
+            output_dir=output_directory_group,
+            ses=ses)
     
 
 if __name__ == "__main__":
-    ses = "01"
-    superager_file = "/home/rachel/Desktop/data/maintainer_superager_data.csv"  
-    sfc_df = Path(f"/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-{ses}")
-    output_directory = Path(f"{sfc_df}/all_to_all_roi_matrices")
-    output_directory_group = Path(f"{sfc_df}/group_connectivity_matrices")
-    connectivity_file = Path(f"{output_directory}/all_sfc_data_ses-{ses}.csv")
-    fisher_z_connectivity_file = Path(f"{output_directory}/fisher_z_all_sfc_ses-{ses}.csv")
-    output_group_connectivity_file = Path(f"{output_directory_group}/decliners_average.csv")
+    sessions = ["01", "02"]
+    group_names = ["superagers", "non_superagers"] # This is to loop through the visualization
 
-    # Make sure the output directory exists
-    output_directory.mkdir(parents=True, exist_ok=True)
-    output_directory_group.mkdir(parents=True, exist_ok=True)
+    for ses in sessions:
+            print("--------------------------")
+            print(f"Processing ses-{ses} ...")
+            print("--------------------------")
 
-    main(
-        output_directory_group=output_directory_group,
-        connectivity_file=connectivity_file,
-        superager_file=superager_file,
-        ses=ses,
-        sfc_df=sfc_df,
-        output_directory=output_directory,
-        fisher_z_connectivity_file=fisher_z_connectivity_file,
-        output_group_connectivity_file=output_group_connectivity_file
-    )
+            superager_file = "/home/rachel/Desktop/data/maintainer_superager_data.csv"  
+            sfc_df = Path(f"/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-{ses}")
+            output_directory = Path(f"{sfc_df}/all_to_all_roi_matrices")
+            output_directory_group = Path(f"{sfc_df}/group_connectivity_matrices")
+            connectivity_file = Path(f"{output_directory}/all_sfc_data_ses-{ses}.csv")
+            fisher_z_connectivity_file = Path(f"{output_directory}/fisher_z_all_sfc_ses-{ses}.csv")
+            output_group_connectivity_file = Path(f"{output_directory_group}")
+
+            # Make sure the output directory exists
+            output_directory.mkdir(parents=True, exist_ok=True)
+            output_directory_group.mkdir(parents=True, exist_ok=True)
+
+            main(
+                output_directory_group=output_directory_group,
+                connectivity_file=connectivity_file,
+                superager_file=superager_file,
+                ses=ses,
+                sfc_df=sfc_df,
+                output_directory=output_directory,
+                fisher_z_connectivity_file=fisher_z_connectivity_file,
+                output_group_connectivity_file=output_group_connectivity_file
+            )

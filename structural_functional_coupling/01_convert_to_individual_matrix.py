@@ -4,30 +4,15 @@ import os
 from pathlib import Path
 import re
 
-
-# Paths 
-ses = "ses-01"
-structural_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structural_connectivity/{ses}")
-functional_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space/{ses}")
-structural_matrix = structural_dir / "all_to_all_roi_matrices" / "all_to_all_roi_matrix.csv"
-func_matrix = functional_dir / "all_to_all_roi_matrices" / "all_to_all_roi_matrix.csv"
-
-# Output directories
-struct_output_dir = structural_dir / "individual_connectivity_matrices"
-func_output_dir = functional_dir / "individual_connectivity_matrices"
-
-# Create output directories if they don't exist
-os.makedirs(struct_output_dir, exist_ok=True)
-os.makedirs(func_output_dir, exist_ok=True)
-
 # Function to convert the data 
-def create_individual_matrices(input_file, output_dir, is_functional=False):
+def create_individual_matrices(input_file, output_dir, ses, is_functional=False):
     """
     Convert a CSV file of connectivity matrices into individual matrices for each subject.
 
     Args:
         input_file (str): Path to the input CSV file.
         output_dir (str): Directory to save the individual matrices.
+        ses (str): Session identifier (e.g., "ses-01", "ses-02").
         is_functional (bool): If True, process functional connectivity; otherwise, structural.
     """
     # Read the input csv file
@@ -126,12 +111,37 @@ def create_individual_matrices(input_file, output_dir, is_functional=False):
             output_file = output_dir / f"{subject}_{ses}_structural_connectivity_matrix.csv"
         conn_df.to_csv(output_file)
 
-# Process structural connectivity matrices
-print("Processing structural connectivity matrices...")
-create_individual_matrices(structural_matrix, struct_output_dir, is_functional=False)
+def main():
+    # Paths 
+    sessions = ["ses-01", "ses-02"]
 
-# Process functional connectivity matrices
-print("Processing functional connectivity matrices...")
-create_individual_matrices(func_matrix, func_output_dir, is_functional=True)
+    for ses in sessions:
+        print("--------------------------")
+        print(f"Processing session: {ses}")
+        print("--------------------------")
 
-print("Conversion complete!")
+        structural_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structural_connectivity/{ses}")
+        functional_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space/{ses}")
+        structural_matrix = structural_dir / "all_to_all_roi_matrices" / "all_to_all_roi_matrix.csv"
+        func_matrix = functional_dir / "all_to_all_roi_matrices" / "all_to_all_roi_matrix.csv"
+
+        # Output directories
+        struct_output_dir = structural_dir / "individual_connectivity_matrices"
+        func_output_dir = functional_dir / "individual_connectivity_matrices"
+
+        # Create output directories if they don't exist
+        os.makedirs(struct_output_dir, exist_ok=True)
+        os.makedirs(func_output_dir, exist_ok=True)
+        
+        # Process structural connectivity matrices
+        print("Processing structural connectivity matrices...")
+        create_individual_matrices(structural_matrix, struct_output_dir, ses, is_functional=False)
+
+        # Process functional connectivity matrices
+        print("Processing functional connectivity matrices...")
+        create_individual_matrices(func_matrix, func_output_dir, ses, is_functional=True)
+
+        print("Conversion complete!")
+
+if __name__ == "__main__":
+    main()

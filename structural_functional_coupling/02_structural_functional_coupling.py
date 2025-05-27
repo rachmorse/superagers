@@ -143,27 +143,33 @@ def save_coupling_results(coupling_dict, output_path):
 
 def main():
     # Define the directories using Path
-    ses = "ses-01"
-    structural_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structural_connectivity/{ses}/individual_connectivity_matrices")
-    functional_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space/{ses}/individual_connectivity_matrices")
-    output_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/{ses}/individual_coupling_matrices")
-    mask_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
-    
-    # Make sure the output directory exists
-    output_dir.mkdir(parents=True, exist_ok=True)
+    sessions = ["ses-01", "ses-02"]
 
-    subjects_to_process, already_processed = get_subjects_to_process(output_dir, ses, mask_dir, functional_dir, structural_dir)
-    print(f"Number of subjects already processed: {len(already_processed)}")
-    print(f"Number of subjects to process: {len(subjects_to_process)}")
-    
-    # Uncomment to process manual list
-    # subjects_to_process = ["sub-134084"]
+    for ses in sessions:
+        print("--------------------------")
+        print(f"Processing {ses} ...")
+        print("--------------------------")
 
-    for subject in subjects_to_process:
-        # Calculate structure-function coupling for the specified ses
-        results = calculate_structure_function_coupling(structural_dir, functional_dir, subject, ses)
+        structural_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structural_connectivity/{ses}/individual_connectivity_matrices")
+        functional_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space/{ses}/individual_connectivity_matrices")
+        output_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/{ses}/individual_coupling_matrices")
+        mask_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
+        
+        # Make sure the output directory exists
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-        save_coupling_results(results, output_dir)
+        subjects_to_process, already_processed = get_subjects_to_process(output_dir, ses, mask_dir, functional_dir, structural_dir)
+        print(f"Number of subjects already processed: {len(already_processed)}")
+        print(f"Number of subjects to process: {len(subjects_to_process)}")
+        
+        # Uncomment to process manual list
+        # subjects_to_process = ["sub-134084"]
+
+        for subject in subjects_to_process:
+            # Calculate structure-function coupling for the specified ses
+            results = calculate_structure_function_coupling(structural_dir, functional_dir, subject, ses)
+
+            save_coupling_results(results, output_dir)
         
 if __name__ == "__main__":
     main()
