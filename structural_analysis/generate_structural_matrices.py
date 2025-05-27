@@ -11,7 +11,7 @@ import tempfile
 
 
 # Import functions from functional connectivity script
-sys.path.append('/home/rachel/Desktop/superagers/fMRI analysis')
+sys.path.append('/home/rachel/Desktop/superagers/fmri_analysis')
 from compute_functional_connectivity import (
     prepare_directories,
     create_network_mappings,
@@ -46,6 +46,10 @@ def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
     Returns:
         list: List of subject IDs to process.
     """
+    if not tractogram_dir.exists():
+        print(f"Tractogram directory {tractogram_dir} does not exist. Skipping.")
+        return []
+    
     subjects_to_process = []
     
     # Get all subjects with tractogram files
@@ -196,7 +200,7 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
 
     # Create a temporary file for the output
     temp_output_file = Path(temp_dir) / f"{subject}_ses-{ses}_temp_output.txt"
-
+    
     # Run tck2connectome to generate the connectivity matrix
     cmd = [
         "tck2connectome", 
@@ -365,10 +369,8 @@ def process_network_matrices(subject_id, full_matrix, combined_labels, output_di
 def main():
     """Main function to process structural connectivity for subjects."""
     # Set parameters
-    sessions = ["ses-01", "ses-02"]
+    sessions = ["01", "02"]
     cohorts = ["bbhi", "bbhi senior"]
-    # ses = "01"  
-    # cohort = "bbhi"
     mask_dir = Path("/home/rachel/Desktop/schaefer_analysis/fsaverage")
     output_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
     labels_csv_path = "/home/rachel/Desktop/schaefer_analysis/timeseries_data/native_space/combined_labels.csv"
@@ -377,9 +379,9 @@ def main():
     successful_subjects = []
     failed_subjects = []
     
-    for ses in sessions:
-        for cohort in cohorts:
-            print(f"Processing {cohort} for {ses}...")
+    for cohort in cohorts:
+        for ses in sessions:
+            print(f"Processing {cohort} {ses}...")
 
             if cohort == "bbhi":
                 if ses == "01":
