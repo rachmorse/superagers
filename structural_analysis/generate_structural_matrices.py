@@ -365,69 +365,75 @@ def process_network_matrices(subject_id, full_matrix, combined_labels, output_di
 def main():
     """Main function to process structural connectivity for subjects."""
     # Set parameters
-    ses = "01"  
-    cohort = "bbhi"
+    sessions = ["ses-01", "ses-02"]
+    cohorts = ["bbhi", "bbhi senior"]
+    # ses = "01"  
+    # cohort = "bbhi"
     mask_dir = Path("/home/rachel/Desktop/schaefer_analysis/fsaverage")
     output_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
     labels_csv_path = "/home/rachel/Desktop/schaefer_analysis/timeseries_data/native_space/combined_labels.csv"
-
-    if cohort == "bbhi":
-        if ses == "01":
-            tractogram_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_MSMTCSD_TP1")
-        else:  # ses-02
-            tractogram_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_MSMTCSD_TP2")
-    else:
-        if ses == "01":
-            tractogram_dir = Path("/pool/guttmann/institut/UB/Superagers/MRI/tracto_MSMTCSD_TP1")
-        else:  
-            tractogram_dir = Path("/pool/guttmann/institut/UB/Superagers/MRI/tracto_MSMTCSD_TP2")
-
-    # Setup MRTrix 
-    os.environ["PATH"] = f"/home/rachel/miniconda3/bin:{os.environ['PATH']}"
-    
-    # Create output directory if it does not exist
-    output_dir.mkdir(parents=True, exist_ok=True)
-    prepare_directories(output_dir, ses, ["all_to_all_roi_matrices", "within_network_matrices", "subcortical_matrices", "visualization"])
-
-    # Setup logging
-    setup_logging(output_dir)
-    
-    # Get subjects to process
-    subjects = get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses)
-    
-    # For testing with a single subject
-    # subjects = ["sub-1191"]
 
     # Track both failed and successful subjects
     successful_subjects = []
     failed_subjects = []
     
-    # Process each subject
-    for subject in subjects:
-        logging.info(f"Processing {subject} for ses-{ses}...")
-        
-        try:
-            result = generate_structural_connectivity(
-                subject=subject,
-                tractogram_dir=tractogram_dir,
-                mask_dir=mask_dir,
-                output_dir=output_dir,
-                ses=ses, 
-                labels_csv_path=labels_csv_path,
-                run_visualization=False
-            )
-            
-            # Check if processing was successful
-            if result is not None:
-                successful_subjects.append(subject)
-                logging.info(f"Successfully processed {subject}")
+    for ses in sessions:
+        for cohort in cohorts:
+            print(f"Processing {cohort} for {ses}...")
+
+            if cohort == "bbhi":
+                if ses == "01":
+                    tractogram_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_MSMTCSD_TP1")
+                else:  # ses-02
+                    tractogram_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_MSMTCSD_TP2")
             else:
-                failed_subjects.append(subject)
-                logging.error(f"Failed to process {subject} - generate_structural_connectivity returned None")
+                if ses == "01":
+                    tractogram_dir = Path("/pool/guttmann/institut/UB/Superagers/MRI/tracto_MSMTCSD_TP1")
+                else:  
+                    tractogram_dir = Path("/pool/guttmann/institut/UB/Superagers/MRI/tracto_MSMTCSD_TP2")
+
+            # Setup MRTrix 
+            os.environ["PATH"] = f"/home/rachel/miniconda3/bin:{os.environ['PATH']}"
+            
+            # Create output directory if it does not exist
+            output_dir.mkdir(parents=True, exist_ok=True)
+            prepare_directories(output_dir, ses, ["all_to_all_roi_matrices", "within_network_matrices", "subcortical_matrices", "visualization"])
+
+            # Setup logging
+            setup_logging(output_dir)
+            
+            # Get subjects to process
+            subjects = get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses)
+            
+            # For testing with a single subject
+            # subjects = ["sub-1191"]
+            
+            # Process each subject
+            for subject in subjects:
+                logging.info(f"Processing {subject} for ses-{ses}...")
                 
-        except Exception as e:
-            logging.error(f"{subject}: Error during processing: {str(e)}")
-            failed_subjects.append(subject)
+                try:
+                    result = generate_structural_connectivity(
+                        subject=subject,
+                        tractogram_dir=tractogram_dir,
+                        mask_dir=mask_dir,
+                        output_dir=output_dir,
+                        ses=ses, 
+                        labels_csv_path=labels_csv_path,
+                        run_visualization=False
+                    )
+                    
+                    # Check if processing was successful
+                    if result is not None:
+                        successful_subjects.append(subject)
+                        logging.info(f"Successfully processed {subject}")
+                    else:
+                        failed_subjects.append(subject)
+                        logging.error(f"Failed to process {subject} - generate_structural_connectivity returned None")
+                        
+                except Exception as e:
+                    logging.error(f"{subject}: Error during processing: {str(e)}")
+                    failed_subjects.append(subject)
     
     # Log summary
     total_subjects = len(subjects)

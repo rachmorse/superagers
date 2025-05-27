@@ -127,6 +127,7 @@ def append_csv_files(final_csv: Path, new_csv: Path):
         # Rename columns
         column_mapping = {
             "Measure:volume": "id",
+            "EstimatedTotalIntraCranialVol": "icv",
             "Left-Hippocampus": "Left_Hippocampus_volume",
             "Right-Hippocampus": "Right_Hippocampus_volume",
             "WM-hypointensities": "WM_hypointensities_volume"
@@ -139,6 +140,7 @@ def append_csv_files(final_csv: Path, new_csv: Path):
         columns_to_keep = [
             "id",
             "Left_Hippocampus_volume",
+            "icv",
             "Right_Hippocampus_volume",
             "WM_hypointensities_volume",
         ]
@@ -269,8 +271,6 @@ def main():
                 except subprocess.CalledProcessError as exc:
                     print(f"Error: asegstats2table failed for {subj}, skipping.\n{exc}")
                     failed_subjects.append(subj)
-                    if temp_csv.exists():
-                        temp_csv.unlink()
                     continue
 
                 if not temp_csv.exists():
@@ -303,8 +303,6 @@ def main():
                     except subprocess.CalledProcessError as exc:
                         print(f"Error: aparcstats2table failed for {subj} {hemi}, skipping.\n{exc}")
                         failed_subjects.append(f"{subj}_{hemi}_aparc")
-                        if temp_thick_csv.exists():
-                            temp_thick_csv.unlink()
                         continue
 
                     if not temp_thick_csv.exists():
