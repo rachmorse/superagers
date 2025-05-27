@@ -92,8 +92,14 @@ def get_unprocessed_subjects(subject_list, output_file):
         return subject_list
 
     # Attempt to parse which subjects have been processed by extracting "sub-XXX_ses-YY" from the 'Measure' column
+    df["Measure"] = df["Measure"].astype(str)
     processed_regex = df["Measure"].str.extract(r'(sub-\d+_ses-\d+)')
-    processed_set = set(processed_regex.dropna().unique())
+
+    # Get the first column (index 0) to convert from DataFrame to Series, then use unique()
+    if processed_regex.shape[1] > 0:  # Check if any columns were extracted
+        processed_set = set(processed_regex[0].dropna().unique())
+    else:
+        processed_set = set()  # No matching patterns found
 
     unprocessed = [sub for sub in subject_list if sub not in processed_set]
     return unprocessed
@@ -103,39 +109,85 @@ def get_unprocessed_subjects(subject_list, output_file):
 ##############################################################################
 def append_csv_files(final_csv: Path, new_csv: Path):
     """
-    Append the contents of new_csv to final_csv. Skip header if final_csv exists.
-    Ensure missing data is handled by adding blank spaces for missing columns.
+    Merge contents of new_csv into final_csv by matching on "Measure."
+    This ensures thickness columns and volume columns appear in a single row per subject.
     """
-    # Read the final CSV to get existing columns
-    if final_csv.exists():
+
+    # If final_csv doesn't exist or is empty, create a DataFrame with id only
+    if final_csv.exists() and final_csv.stat().st_size > 0:
         final_df = pd.read_csv(final_csv)
     else:
-        final_df = pd.DataFrame()
+        final_df = pd.DataFrame(columns=["id"])
+    print(f"Initial final_df head: {final_df.head(3)}")
 
-    # Read the new CSV
+    # Read CSV with thickness or volume data
     new_df = pd.read_csv(new_csv)
+    
+    # If the new_df is the volume df, subset to only needed columns
+    if "Left-Hippocampus" in new_df.columns:
+        # Rename columns
+        column_mapping = {
+            "Measure:volume": "id",
+            "Left-Hippocampus": "Left_Hippocampus_volume",
+            "Right-Hippocampus": "Right_Hippocampus_volume",
+            "WM-hypointensities": "WM_hypointensities_volume"
+        }
+        for old_col, new_col in column_mapping.items():
+            if old_col in new_df.columns:
+                new_df.rename(columns={old_col: new_col}, inplace=True)
+        
+        # Subset to only keep relevant columns     
+        columns_to_keep = [
+            "id",
+            "Left_Hippocampus_volume",
+            "Right_Hippocampus_volume",
+            "WM_hypointensities_volume",
+        ]
+        new_df = new_df[columns_to_keep]
 
-    # Ensure the new dataframe has all columns present in the final dataframe
-    for column in final_df.columns:
-        if column not in new_df.columns:
-            new_df[column] = ""
+    # If the new_df is the thickness df, rename columns and subset to only needed columns
+    elif "rh_bankssts_thickness" in new_df.columns:
+        # Rename the id column
+        new_df = new_df.rename(columns={"rh.aparc.thickness": "id"})
 
-    # Ensure the final dataframe has all columns present in the new dataframe
-    for column in new_df.columns:
-        if column not in final_df.columns:
-            final_df[column] = ""
+        # Subset to only keep relevant columns
+        columns_to_keep = [
+            "id",
+            "rh_MeanThickness_thickness"
+        ]
+        
+        new_df = new_df[columns_to_keep]
+        print(f"before merge: {new_df.head(3)}")
 
-    # Reorder columns to match the final dataframe
-    new_df = new_df[final_df.columns]
+    # If the new_df is the left hemisphere thickness df, rename columns and subset to only needed columns
+    elif "lh_bankssts_thickness" in new_df.columns:
+        # Rename the id column
+        new_df = new_df.rename(columns={"lh.aparc.thickness": "id"})
 
-    # Append the new dataframe to the final dataframe
-    final_df = pd.concat([final_df, new_df], ignore_index=True)
+        # Subset to only keep relevant columns
+        columns_to_keep = [
+            "id",
+            "lh_MeanThickness_thickness"
+        ]
+        
+        new_df = new_df[columns_to_keep]
+        print(f"before merge: {new_df.head(3)}")
 
-    # Write the combined dataframe back to the final CSV
-    final_df.to_csv(final_csv, index=False)
+    # Merge each of the df for each participant id added the _new suffix
+    merged_df = pd.merge(final_df, new_df, on="id", how="outer", suffixes=("", "_new"))
 
-    # Delete the temporary CSV
-    new_csv.unlink()
+    # Consolidate any columns that appear as duplicates with "_new" suffix.
+    for col in merged_df.columns:
+        if col.endswith("_new"):
+            base_col = col.replace("_new", "")
+            merged_df[base_col] = merged_df[base_col].fillna(merged_df[col])
+            merged_df.drop(columns=[col], inplace=True)
+
+    print(f"merge df head: {merged_df.head(3)}")
+
+    # Write updated CSV
+    merged_df.to_csv(final_csv, index=False)
+    print(f"Wrote updated data to {final_csv}")
 
 ##############################################################################
 # Main
@@ -186,9 +238,10 @@ def main():
 
     # For each timepoint, process each subject individually
     for ses in sessions:
-        session_output = output_dir / f"hippocampus_and_wm_hypointensities_{ses}.csv"
-        unprocessed_subjects = get_unprocessed_subjects([f"{base_subj}_{ses}" for base_subj in base_subj_list], session_output)
+        session_output = output_dir / f"structural_volume_thickness_{ses}.csv"
 
+        unprocessed_subjects = get_unprocessed_subjects([f"{base_subj}_{ses}" for base_subj in base_subj_list], session_output)
+        
         for subj in unprocessed_subjects:
             stats_dir = root_path / subj / "stats"
             if not stats_dir.is_dir():
@@ -282,3 +335,5 @@ if __name__ == "__main__":
     cohort = "bbhi"  
 
     main()
+
+    
