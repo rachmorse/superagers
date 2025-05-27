@@ -209,63 +209,69 @@ def main():
 
     print("-----------------------Running 01_fsaverage_to_t1.py-----------------------")
 
-    # Check if FreeSurfer is set up
     # Set up parameters
-    cohort = "bbhi senior" 
-    session = 'ses-02'
-    if not session.startswith('ses-'):
-        session = f'ses-{session}'
+    cohorts = ["bbhi", "bbhi senior"]
+    sessions = ['ses-01', 'ses-02']
 
-    output_folder = Path(f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}')
+    for cohort in cohorts:
+        for session in sessions:
+            print("-------------------------")
+            print(f"Processing {cohort} {session}")
+            print("-------------------------")
 
-    # Set paths based on cohort
-    if cohort == "bbhi":
-        # BBHI paths
-        reconall_dir = Path('/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall')
-    else:  # cohort == "bbhi senior"
-        reconall_dir = Path('/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall')
+            if not session.startswith('ses-'):
+                session = f'ses-{session}'
 
-    
-    # Set environment variables
-    os.environ['SUBJECTS_DIR'] = str(reconall_dir)
-    
-    # Determine subjects to process
-    subject_data, already_processed = get_subjects_to_process(reconall_dir, output_folder, session, cohort)
-    print(f"Number of subjects already processed: {len(already_processed)}")
+            output_folder = Path(f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}')
 
-    if not subject_data:
-        logger.info("No subjects found that need processing.")
-        return
-        
-    subjects = [s[0] for s in subject_data]
-    logger.info(f"Will process {len(subjects)} subjects: {', '.join(subjects)}")
-    
-    # Uncomment this code to process a single subject 
-    # Format subject_data = [(subject_id, subject_dir)]
-    # subject_data = [("sub-1014", "sub-1014_ses-01")]
-    
-    # Process each subject
-    successful = 0
-    for subject_id, subject_dir in subject_data:
-        logger.info(f"\n{'='*50}")
-        logger.info(f"Processing subject: {subject_id} (directory: {subject_dir})")
-        logger.info(f"{'='*50}\n")
+            # Set paths based on cohort
+            if cohort == "bbhi":
+                # BBHI paths
+                reconall_dir = Path('/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall')
+            else:  # cohort == "bbhi senior"
+                reconall_dir = Path('/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall')
 
-        # Set up paths
-        output_folder_t1 = Path(f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}/{subject_id}/t1_masks')
-        
-        if process_subject(
-            subject_dir,  
-            subject_id,   
-            reconall_dir,
-            output_folder_t1
-        ):
-            successful += 1
-    
-    logger.info(f"\nProcessing summary:")
-    logger.info(f"Total subjects: {len(subject_data)}")
-    logger.info(f"Successfully processed: {successful}")
-    logger.info(f"Failed: {len(subject_data) - successful}")
+            
+            # Set environment variables
+            os.environ['SUBJECTS_DIR'] = str(reconall_dir)
+            
+            # Determine subjects to process
+            subject_data, already_processed = get_subjects_to_process(reconall_dir, output_folder, session, cohort)
+            print(f"Number of subjects already processed: {len(already_processed)}")
+
+            if not subject_data:
+                logger.info("No subjects found that need processing.")
+                continue
+                
+            subjects = [s[0] for s in subject_data]
+            logger.info(f"Will process {len(subjects)} subjects: {', '.join(subjects)}")
+            
+            # Uncomment this code to process a single subject 
+            # Format subject_data = [(subject_id, subject_dir)]
+            # subject_data = [("sub-1014", "sub-1014_ses-01")]
+            
+            # Process each subject
+            successful = 0
+            for subject_id, subject_dir in subject_data:
+                logger.info(f"\n{'='*50}")
+                logger.info(f"Processing subject: {subject_id} (directory: {subject_dir})")
+                logger.info(f"{'='*50}\n")
+
+                # Set up paths
+                output_folder_t1 = Path(f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}/{subject_id}/t1_masks')
+                
+                if process_subject(
+                    subject_dir,  
+                    subject_id,   
+                    reconall_dir,
+                    output_folder_t1
+                ):
+                    successful += 1
+            
+            logger.info(f"\nProcessing summary:")
+            logger.info(f"Total subjects: {len(subject_data)}")
+            logger.info(f"Successfully processed: {successful}")
+            logger.info(f"Failed: {len(subject_data) - successful}")
 
 if __name__ == "__main__":
     main()

@@ -195,83 +195,89 @@ def cleanup_temp_files(output_folder_sub):
 def main():
     # Set up logging level based on verbose flag
     logger.setLevel(logging.DEBUG)
-
-    cohort = "bbhi senior"
-    ses = "ses-02"
-    output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
+    cohorts = ["bbhi", "bbhi senior"]
+    sessions = ["ses-01", "ses-02"]   
 
     print("-----------------------Running 02_subcortical_to_t1.py-----------------------")
 
-    # Determine subjects to process
-    subject_list, already_processed = get_subjects_to_process(output_folder)
-    print(f"Number of subjects already processed subjects: {len(already_processed)}")
-    
-    if not subject_list:
-        logger.info("No subjects found that need processing.")
-        return
+    for cohort in cohorts:
+        for ses in sessions:
+            print("-------------------------")
+            print(f"Processing {cohort} {ses}")
+            print("-------------------------")
+
+            output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
+
+            # Determine subjects to process
+            subject_list, already_processed = get_subjects_to_process(output_folder)
+            print(f"Number of subjects already processed subjects: {len(already_processed)}")
+            
+            if not subject_list:
+                logger.info("No subjects found that need processing.")
+                continue
+                
+            subjects = subject_list
+
+            # Uncomment this line to run the script with one subject
+            # subjects = ["sub-1014"]
         
-    subjects = subject_list
+            # Initialize lists to track successful and failed subjects
+            successful_subjects = []
+            failed_subjects = []
 
-    # Uncomment this line to run the script with one subject
-    # subjects = ["sub-1014"]
-   
-    # Initialize lists to track successful and failed subjects
-    successful_subjects = []
-    failed_subjects = []
+            print(f"Number of subjects to process: {len(subjects)}")
 
-    print(f"Number of subjects to process: {len(subjects)}")
+            for subject in subjects:
+                output_folder_sub = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}/{subject}/subcortical_t1_masks")
 
-    for subject in subjects:
-        output_folder_sub = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}/{subject}/subcortical_t1_masks")
+                # Create the output directory if it doesn't exist
+                os.makedirs(output_folder_sub, exist_ok=True)
 
-        # Create the output directory if it doesn't exist
-        os.makedirs(output_folder_sub, exist_ok=True)
+                # Set paths based on cohort
+                if cohort == "bbhi":
+                    # BBHI paths
+                    aseg_file = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")
+                    reference_file = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed/{subject}/native_T1/{subject}_{ses}_run-01_rest_sbref_ap_T1-space.nii.gz")
+                else:  # cohort == "bbhi senior"
+                    aseg_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")
+                    reference_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed/{subject}/{ses}/native_T1/{subject}_{ses}_run-01_rest_sbref_ap_T1-space.nii.gz") 
 
-        # Set paths based on cohort
-        if cohort == "bbhi":
-            # BBHI paths
-            aseg_file = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")
-            reference_file = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed/{subject}/native_T1/{subject}_{ses}_run-01_rest_sbref_ap_T1-space.nii.gz")
-        else:  # cohort == "bbhi senior"
-            aseg_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")
-            reference_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed/{subject}/{ses}/native_T1/{subject}_{ses}_run-01_rest_sbref_ap_T1-space.nii.gz") 
+                logger.info(f"Processing subject {subject}...")
 
-        logger.info(f"Processing subject {subject}...")
+                # Process left subcortical regions
+                left_success = process_subcortical_regions(
+                    aseg_file,
+                    subject,
+                    reference_file,
+                    output_folder_sub,
+                    region='left'
+                )
+                
+                # Process right subcortical regions
+                right_success = process_subcortical_regions(
+                    aseg_file,
+                    subject,
+                    reference_file,
+                    output_folder_sub,
+                    region='right'
+                )
+            
+                # Clean up temporary files
+                cleanup_temp_files(output_folder_sub)
 
-        # Process left subcortical regions
-        left_success = process_subcortical_regions(
-            aseg_file,
-            subject,
-            reference_file,
-            output_folder_sub,
-            region='left'
-        )
-        
-        # Process right subcortical regions
-        right_success = process_subcortical_regions(
-            aseg_file,
-            subject,
-            reference_file,
-            output_folder_sub,
-            region='right'
-        )
-    
-        # Clean up temporary files
-        cleanup_temp_files(output_folder_sub)
+                if left_success and right_success:
+                    print(f"Successfully processed {subject}")
+                    successful_subjects.append(subject)
+                else:
+                    print(f"Failed to process {subject}")
+                    failed_subjects.append(subject)
 
-        if left_success and right_success:
-            print(f"Successfully processed {subject}")
-            successful_subjects.append(subject)
-        else:
-            print(f"Failed to process {subject}")
-            failed_subjects.append(subject)
-
-    print(f"\n{len(successful_subjects)}/{len(subjects)} subjects processed successfully")
-    
-    if failed_subjects:
-        print("Failed subjects:")
-        for subject in failed_subjects:
-            print(f"  - {subject}")
+            print(f"\n{len(successful_subjects)}/{len(subjects)} subjects processed successfully")
+            
+            if failed_subjects:
+                print("Failed subjects:")
+                for subject in failed_subjects:
+                    print(f"  - {subject}")
 
 if __name__ == "__main__":
     main()

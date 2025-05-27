@@ -11,7 +11,7 @@ from nipype.interfaces.spm import Normalize12, NewSegment
 from nipype.interfaces.spm.preprocess import ApplyDeformations 
 import nipype.interfaces.spm.utils as spmu
 
-def get_subjects_to_process(dwi_bbhi_dir, dwi_bbhi_senior_dir, out_dir, ses, timepoint, cohort):
+def get_subjects_to_process(dwi_bbhi_dir, dwi_bbhi_senior_dir, out_dir, ses, cohort):
     """Generate a list of subjects to process based on whether they have
     T1 Schaefer / subcortical mask created and DWI data and do not already 
     have a DWI space mask.
@@ -20,8 +20,7 @@ def get_subjects_to_process(dwi_bbhi_dir, dwi_bbhi_senior_dir, out_dir, ses, tim
         dwi_bbhi_dir (Path): Path to the directory containing the DWI data for BBHI cohort.
         dwi_bbhi_senior_dir (Path): Path to the directory containing the DWI data for BBHI senior cohort.
         out_dir (Path): Path to the output directory where the native space masks are saved.
-        ses (str): Timepoint (format ses-01).
-        timepoint (str): Timepoint (format 1 or 2).
+        ses (str): Timepoint (format 1).
         cohort (str): Cohort identifier (e.g., "bbhi" or "bbhi senior").
     """
     already_processed_dwi = []
@@ -43,26 +42,26 @@ def get_subjects_to_process(dwi_bbhi_dir, dwi_bbhi_senior_dir, out_dir, ses, tim
         if cohort == "bbhi senior" and int(subject.split("-")[1]) > 6000:
             continue
 
-        # Set paths based on cohort and timepoint (as they vary)
+        # Set paths based on cohort and ses (as they vary)
         if cohort == "bbhi":
             dwi_root_dir = Path(f"{dwi_bbhi_dir}/{subject}")
-            if timepoint == "2":
-                bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp{timepoint}/{subject}/native_T1")
-            else:  # timepoint == "1"
+            if ses == "2":
+                bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp{ses}/{subject}/native_T1")
+            else:  # ses == "1"
                 bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed/{subject}/native_T1")
         else:  # cohort == "bbhi senior"
-            bold_root_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed/{subject}/{ses}/native_T1")
-            if ses == "ses-01":
+            bold_root_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed/{subject}/ses-0{ses}/native_T1")
+            if ses == "1":
                 dwi_root_dir = Path(f"{dwi_bbhi_senior_dir}/{subject}")
             else:  # ses == "ses-02"
-                dwi_root_dir = Path(f"{dwi_bbhi_senior_dir}/{subject}_{ses}")
+                dwi_root_dir = Path(f"{dwi_bbhi_senior_dir}/{subject}_ses-0{ses}")
 
         # Check if the required files exist
-        schaefer_subcort_atlas = Path(f"{out_dir}/{subject}/subcortical_t1_masks/{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz")
-        bold_data = Path(f"{bold_root_dir}/{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
+        schaefer_subcort_atlas = Path(f"{out_dir}/{subject}/subcortical_t1_masks/{subject}_ses-0{ses}_schaefer200_subcortical14_t1_space.nii.gz")
+        bold_data = Path(f"{bold_root_dir}/{subject}_ses-0{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
         eddy_corrected = Path(f"{dwi_root_dir}/eddy_corrected_data.nii.gz")
-        dwi_mask_output = Path(f"{out_dir}/{subject}/dwi_space_masks/{subject}_{ses}_schaefer200_subcortical14_dwi_space.nii.gz")
-        bold_mask_output = Path(f"{out_dir}/{subject}/bold_space_masks/{subject}_{ses}_schaefer200_subcortical14_bold_space.nii.gz")
+        dwi_mask_output = Path(f"{out_dir}/{subject}/dwi_space_masks/{subject}_ses-0{ses}_schaefer200_subcortical14_dwi_space.nii.gz")
+        bold_mask_output = Path(f"{out_dir}/{subject}/bold_space_masks/{subject}_ses-0{ses}_schaefer200_subcortical14_bold_space.nii.gz")
 
         # Check files separately to diagnose issues
         has_atlas = schaefer_subcort_atlas.exists()
@@ -223,9 +222,9 @@ def process_subject_dwi(subject, dwi_root_dir, out_dir, ses, cohort):
     eddy_corrected = Path(f"{dwi_root_dir}/eddy_corrected_data.nii.gz")
     
     # Define output paths and file names
-    b0_output = out_b0 / f"{subject}_{ses}_b0.nii.gz"
-    t1w_mask = out_subject_dir / f"subcortical_t1_masks/{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz"
-    output_path_dwi = out_native_masks / f"{subject}_{ses}_schaefer200_subcortical14_dwi_space.nii.gz"
+    b0_output = out_b0 / f"{subject}_ses-0{ses}_b0.nii.gz"
+    t1w_mask = out_subject_dir / f"subcortical_t1_masks/{subject}_ses-0{ses}_schaefer200_subcortical14_t1_space.nii.gz"
+    output_path_dwi = out_native_masks / f"{subject}_ses-0{ses}_schaefer200_subcortical14_dwi_space.nii.gz"
 
     try:
         # Step 1: Extract b0 from eddy corrected data
@@ -265,14 +264,14 @@ def process_subject_bold(subject, bold_root_dir, out_dir, ses, cohort):
     
     # Define output directories
     out_bold_masks =  out_subject_dir / f"bold_space_masks"
-    t1w_mask = out_subject_dir / f"subcortical_t1_masks/{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz"
-    output_path_bold = out_bold_masks / f"{subject}_{ses}_schaefer200_subcortical14_bold_space.nii.gz"
+    t1w_mask = out_subject_dir / f"subcortical_t1_masks/{subject}_ses-0{ses}_schaefer200_subcortical14_t1_space.nii.gz"
+    output_path_bold = out_bold_masks / f"{subject}_ses-0{ses}_schaefer200_subcortical14_bold_space.nii.gz"
 
     # Define BOLD paths
     if cohort == "bbhi":
-        bold_path = bold_root_dir / f"{subject}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz"
+        bold_path = bold_root_dir / f"{subject}/native_T1/{subject}_ses-0{ses}_run-01_rest_bold_ap_T1-space.nii.gz"
     else:  # cohort == "bbhi senior"
-        bold_path = bold_root_dir / f"{subject}/{ses}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz"
+        bold_path = bold_root_dir / f"{subject}/ses-0{ses}/native_T1/{subject}_ses-0{ses}_run-01_rest_bold_ap_T1-space.nii.gz"
 
     try:
         # Transform T1w mask to native space using the transformation matrix
@@ -290,105 +289,109 @@ def main():
     Main function to process transform the Schaefer/
     Harvard-Oxford MNI mask to native space.
     """
-    
     # Set up parameters
-    timepoint = "1"
-    ses = "ses-01"
-    cohort = "bbhi"
+    cohorts = ["bbhi", "bbhi senior"]
+    sessions = ["1", "2"]
 
     sys.stdout.flush() 
     print("-----------------------Running 04_t1_to_dwi_bold.py-----------------------")
 
-    out_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
+    for cohort in cohorts:
+        for ses in sessions: 
+            print("-------------------------")
+            print(f"Processing {cohort} ses-0{ses}")
+            print("-------------------------")
 
-    # Set up FSL so it runs correctly in this script
-    os.environ["FSLDIR"] = "/home/rachel/fsl"
-    os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:" + os.environ["PATH"]
-    subprocess.run(["bash", "-c", "source /home/rachel/fsl/etc/fslconf/fsl.sh"], check=True)
+            out_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-0{ses}")
 
-    # Set FSL to output compressed NIFTI files
-    os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
+            # Set up FSL so it runs correctly in this script
+            os.environ["FSLDIR"] = "/home/rachel/fsl"
+            os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:" + os.environ["PATH"]
+            subprocess.run(["bash", "-c", "source /home/rachel/fsl/etc/fslconf/fsl.sh"], check=True)
 
-    dwi_bbhi_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp{timepoint}")
-    dwi_bbhi_senior_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP{timepoint}")
+            # Set FSL to output compressed NIFTI files
+            os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
 
-    # Generate the list of subjects to process
-    subjects_for_dwi, subjects_for_bold, already_processed = get_subjects_to_process(dwi_bbhi_dir, dwi_bbhi_senior_dir, out_dir, ses, timepoint, cohort)
+            dwi_bbhi_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp{ses}")
+            dwi_bbhi_senior_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP{ses}")
 
-    # Uncomment the following line to process one subject
-    # subjects_for_dwi = ["sub-1014"] 
-    # subjects_for_bold = ["sub-1014"] 
-    
-    # Process each subject
-    result_dwi = []
-    result_bold = []
+            # Generate the list of subjects to process
+            subjects_for_dwi, subjects_for_bold, already_processed = get_subjects_to_process(dwi_bbhi_dir, dwi_bbhi_senior_dir, out_dir, ses, cohort)
 
-    print(f"Subjects needing DWI processing: {len(subjects_for_dwi)}")
-    print(f"Subjects needing BOLD processing: {len(subjects_for_bold)}")
-    print(f"Already processed subjects: {len(already_processed)}")
-    # sys.stdout.flush() 
-
-    # Check if there are subjects to process
-    if not subjects_for_dwi and not subjects_for_bold:
-        print("No subjects found that need processing.")
-        return []
-
-    for subject in subjects_for_dwi:
-
-        # Set paths based on cohort to run DWI 
-        if cohort == "bbhi":
-            dwi_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp{timepoint}/{subject}")
-        else:  # cohort == "bbhi senior"
-            if ses == "ses-01":
-                dwi_root_dir = Path(f"{dwi_bbhi_senior_dir}/{subject}")
-            else:  # ses == "ses-02"
-                dwi_root_dir = Path(f"{dwi_bbhi_senior_dir}/{subject}_{ses}")
-        
-        subject_result = process_subject_dwi(subject, dwi_root_dir, out_dir, ses, cohort)
-
-        if subject_result:
-            print(f"Successfully processed DWI for {subject}")
-            result_dwi.append(subject)
-        else:
-            print(f"Failed to process DWI for {subject}")
-
-    # Then run BOLD processing
-    for subject in subjects_for_bold:
-        if cohort == "bbhi":
-            if timepoint == "2":
-                bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp{timepoint}")
-            else:  # timepoint == "1"
-                bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed")
-        else:  # cohort == "bbhi senior"
-            bold_root_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed")
-        
-        subject_result = process_subject_bold(subject, bold_root_dir, out_dir, ses, cohort)
-
-        if subject_result:
-            print(f"Successfully processed BOLD for {subject}")
-            result_bold.append(subject)
-        else:
-            print(f"Failed to process BOLD for {subject}")
+            # Uncomment the following line to process one subject
+            # subjects_for_dwi = ["sub-1014"] 
+            # subjects_for_bold = ["sub-1014"] 
             
-    # Summary statistics
-    print(f"Successfully processed DWI for {len(result_dwi)} subjects")
-    print(f"Successfully processed BOLD for {len(result_bold)} subjects")
-    print(f"Total subjects with successful processing: {len(set(result_dwi + result_bold))}")
+            # Process each subject
+            result_dwi = []
+            result_bold = []
 
-    # Calculate failures
-    failed_dwi = [s for s in subjects_for_dwi if s not in result_dwi]
-    failed_bold = [s for s in subjects_for_bold if s not in result_bold]
+            print(f"Subjects needing DWI processing: {len(subjects_for_dwi)}")
+            print(f"Subjects needing BOLD processing: {len(subjects_for_bold)}")
+            print(f"Already processed subjects: {len(already_processed)}")
+            # sys.stdout.flush() 
 
-    print(f"Failed to process DWI for {len(failed_dwi)} subjects")
-    print(f"Failed to process BOLD for {len(failed_bold)} subjects")
+            # Check if there are subjects to process
+            if not subjects_for_dwi and not subjects_for_bold:
+                print("No subjects found that need processing.")
+                continue
 
-    if failed_dwi:
-        print(f"Failed DWI subjects: {failed_dwi}")
-    if failed_bold:
-        print(f"Failed BOLD subjects: {failed_bold}")
+            for subject in subjects_for_dwi:
 
-    # Return both result lists
-    return result_dwi, result_bold
+                # Set paths based on cohort to run DWI 
+                if cohort == "bbhi":
+                    dwi_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp{ses}/{subject}")
+                else:  # cohort == "bbhi senior"
+                    if ses == "1":
+                        dwi_root_dir = Path(f"{dwi_bbhi_senior_dir}/{subject}")
+                    else:  # ses == "ses-02"
+                        dwi_root_dir = Path(f"{dwi_bbhi_senior_dir}/{subject}_ses-0{ses}")
+                
+                subject_result = process_subject_dwi(subject, dwi_root_dir, out_dir, ses, cohort)
+
+                if subject_result:
+                    print(f"Successfully processed DWI for {subject}")
+                    result_dwi.append(subject)
+                else:
+                    print(f"Failed to process DWI for {subject}")
+
+            # Then run BOLD processing
+            for subject in subjects_for_bold:
+                if cohort == "bbhi":
+                    if ses == "2":
+                        bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp{ses}")
+                    else: 
+                        bold_root_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed")
+                else:  # cohort == "bbhi senior"
+                    bold_root_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed")
+                
+                subject_result = process_subject_bold(subject, bold_root_dir, out_dir, ses, cohort)
+
+                if subject_result:
+                    print(f"Successfully processed BOLD for {subject}")
+                    result_bold.append(subject)
+                else:
+                    print(f"Failed to process BOLD for {subject}")
+                    
+            # Summary statistics
+            print(f"Successfully processed DWI for {len(result_dwi)} subjects")
+            print(f"Successfully processed BOLD for {len(result_bold)} subjects")
+            print(f"Total subjects with successful processing: {len(set(result_dwi + result_bold))}")
+
+            # Calculate failures
+            failed_dwi = [s for s in subjects_for_dwi if s not in result_dwi]
+            failed_bold = [s for s in subjects_for_bold if s not in result_bold]
+
+            print(f"Failed to process DWI for {len(failed_dwi)} subjects")
+            print(f"Failed to process BOLD for {len(failed_bold)} subjects")
+
+            if failed_dwi:
+                print(f"Failed DWI subjects: {failed_dwi}")
+            if failed_bold:
+                print(f"Failed BOLD subjects: {failed_bold}")
+
+            # Return both result lists
+            return result_dwi, result_bold
 
 if __name__ == "__main__":
     main()

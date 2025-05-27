@@ -187,53 +187,60 @@ def process_subject(output_folder, subject, ses):
 
 def main():
     # Define paths
-    ses = "ses-02"
-    output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
-    cohort = "bbhi senior"
+    cohorts = ["bbhi", "bbhi senior"]
+    sessions = ["ses-01", "ses-02"]
     
     # Set up logging level
     logger.setLevel(logging.INFO)
 
     print("-----------------------Running 03_combine_t1_altases.py-----------------------")
         
-    # Get subjects to process
-    subjects, already_processed = get_subjects_to_process(output_folder, ses)
+    for cohort in cohorts:
+        for ses in sessions:
+            print("-------------------------")
+            print(f"Processing {cohort} {ses}")
+            print("-------------------------")
 
-    # If cohort is BBHI, filter subject ids to only include those > 6000
-    if cohort == "bbhi":
-        subjects = [subject for subject in subjects if int(subject.split("-")[1]) > 6000]
-    
-    print(f"Number of subjects to process: {len(subjects)}")
-    print(f"Number of subjects already processed: {len(already_processed)}")
+            output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
 
-    if not subjects:
-        logger.info("No subjects found that need processing.")
-        return
-    
-    # Create tracking lists
-    successful_subjects = []
-    failed_subjects = []
+            # Get subjects to process
+            subjects, already_processed = get_subjects_to_process(output_folder, ses)
 
-    # Process each subject
-    for i, subject in enumerate(subjects, 1):
-        logger.info(f"Processing subject {i}/{len(subjects)}: {subject}")
-        
-        success = process_subject(output_folder, subject, ses)
+            # If cohort is BBHI, filter subject ids to only include those > 6000
+            if cohort == "bbhi":
+                subjects = [subject for subject in subjects if int(subject.split("-")[1]) > 6000]
+            
+            print(f"Number of subjects to process: {len(subjects)}")
+            print(f"Number of subjects already processed: {len(already_processed)}")
 
-        if success:
-            print(f"Successfully processed {subject}")
-            successful_subjects.append(subject)
-        else:
-            print(f"Failed to process {subject}")
-            failed_subjects.append(subject)
-    
-    # Print summary
-    print(f"\n{len(successful_subjects)}/{len(subjects)} subjects processed successfully")
-    
-    if failed_subjects:
-        print("Failed subjects:")
-        for subject in failed_subjects:
-            print(f"  - {subject}")
+            if not subjects:
+                logger.info("No subjects found that need processing.")
+                continue
+            
+            # Create tracking lists
+            successful_subjects = []
+            failed_subjects = []
+
+            # Process each subject
+            for i, subject in enumerate(subjects, 1):
+                logger.info(f"Processing subject {i}/{len(subjects)}: {subject}")
+                
+                success = process_subject(output_folder, subject, ses)
+
+                if success:
+                    print(f"Successfully processed {subject}")
+                    successful_subjects.append(subject)
+                else:
+                    print(f"Failed to process {subject}")
+                    failed_subjects.append(subject)
+            
+            # Print summary
+            print(f"\n{len(successful_subjects)}/{len(subjects)} subjects processed successfully")
+            
+            if failed_subjects:
+                print("Failed subjects:")
+                for subject in failed_subjects:
+                    print(f"  - {subject}")
 
 if __name__ == "__main__":
     main()
