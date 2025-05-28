@@ -87,13 +87,13 @@ def get_unprocessed_subjects(subject_list, output_file):
         print("Returning the full list of subjects.")
         return subject_list
 
-    if "Measure" not in df.columns:
-        print(f"Warning: 'Measure' column not found in {output_file}, cannot filter processed subjects. Returning the full list.")
+    if "id" not in df.columns:
+        print(f"Warning: 'id' column not found in {output_file}, cannot filter processed subjects. Returning the full list.")
         return subject_list
 
-    # Attempt to parse which subjects have been processed by extracting "sub-XXX_ses-YY" from the 'Measure' column
-    df["Measure"] = df["Measure"].astype(str)
-    processed_regex = df["Measure"].str.extract(r'(sub-\d+_ses-\d+)')
+    # Attempt to parse which subjects have been processed by extracting "sub-XXX_ses-YY" from the 'id' column
+    df["id"] = df["id"].astype(str)
+    processed_regex = df["id"].str.extract(r'(sub-\d+_ses-\d+)')
 
     # Get the first column (index 0) to convert from DataFrame to Series, then use unique()
     if processed_regex.shape[1] > 0:  # Check if any columns were extracted
