@@ -118,11 +118,11 @@ def get_unprocessed_subjects(subject_list, output_file):
         print(f"Warning: 'id' column not found in {output_file}, cannot filter processed subjects. Returning the full list.")
         return subject_list
 
-    # Attempt to parse which subjects have been processed by extracting "sub-XXX_ses-YY" from the 'id' column
+    # Parse which subjects have been processed by extracting "sub-XXX_ses-YY" from the 'id' column
     df["id"] = df["id"].astype(str)
     processed_regex = df["id"].str.extract(r'(sub-\d+_ses-\d+)')
 
-    # Get the first column (index 0) to convert from DataFrame to Series, then use unique()
+    # Get the first column to convert from DataFrame to Series, then use unique()
     if processed_regex.shape[1] > 0:  # Check if any columns were extracted
         processed_set = set(processed_regex[0].dropna().unique())
     else:
@@ -179,7 +179,7 @@ def append_csv_files(final_csv: Path, new_csv: Path):
         ]
         new_df = new_df[columns_to_keep]
 
-    # If the new_df is the thickness df, rename columns and subset to only needed columns
+    # If the new_df is the rh thickness df, rename columns and subset to only needed columns
     elif "rh_bankssts_thickness" in new_df.columns:
         # Rename the id column
         new_df = new_df.rename(columns={"rh.aparc.thickness": "id"})
@@ -192,7 +192,7 @@ def append_csv_files(final_csv: Path, new_csv: Path):
         
         new_df = new_df[columns_to_keep]
 
-    # If the new_df is the left hemisphere thickness df, rename columns and subset to only needed columns
+    # If the new_df is the lh thickness df, rename columns and subset to only needed columns
     elif "lh_bankssts_thickness" in new_df.columns:
         # Rename the id column
         new_df = new_df.rename(columns={"lh.aparc.thickness": "id"})
@@ -234,7 +234,7 @@ def main():
     # Collect a list of failed subjects for final printing
     failed_subjects = []
 
-    # For each timepoint and cohort, process each subject individually
+    # For each session and cohort, process each subject individually
     for ses in sessions:
         for cohort in cohorts:
             if cohort == "bbhi":
@@ -249,12 +249,17 @@ def main():
             # Add session specific output directory
             session_output = output_dir / f"structural_volume_thickness_{ses}.csv"
 
+            # Get the list of subjects to process
             base_subj_list = get_subjects_to_process(root_path, ses, subject_csv)
 
             # Check whether any of the subs have already been processed
             unprocessed_subjects = get_unprocessed_subjects([f"{base_subj}_{ses}" for base_subj in base_subj_list], session_output)
+
+            # Print subject counts
             print(f"{len(unprocessed_subjects)} subjects to process for {cohort} {ses}")
             print(f"{len(base_subj_list)-len(unprocessed_subjects)} subjects already processed for {cohort} {ses}.")
+
+            # Run asegstats2table and aparcstats2table for each subject
             for subj in unprocessed_subjects:
                 stats_dir = root_path / subj / "stats"
                 if not stats_dir.is_dir():
