@@ -10,14 +10,6 @@ from pathlib import Path
 # “aparc” refers to “automatic parcellation,” used to label cortical regions in ?h.aparc.stats files.
 # “aseg” stands for “automatic segmentation,” which labels subcortical structures (including the hippocampus) in aseg.stats.
 
-"""
-This script extracts hippocampal volumes (labels #17 for left hippocampus,
-#53 for right hippocampus) and white matter hypointensities (label #77)
-using asegstats2table. 
-
-Comment/uncomment the relevant blocks for Superager vs. BBHI data.
-"""
-
 ##############################################################################
 # Create the wrapper script
 ##############################################################################
@@ -43,31 +35,66 @@ fi
     os.chmod("run_asegstats2table.sh", 0o755)
 
 ##############################################################################
-# Check for required segments in aseg.stats
+# Generate a list of subjects to process
 ##############################################################################
-def has_required_segments(stats_file, required_segments):
+def get_subjects_to_process(root_path, ses, subject_csv=None):
     """
-    Checks if aseg.stats has all required segmentation labels.
+    Generates a list of subjects to process based on a CSV file for BBHI 
+    or the recon-all directory for BBHI senior. For BBHI, it then checks that
+    the subjects have recon-all data before appending them to the list.
 
-    Args:   
-        stats_file (Path): Path to the aseg.stats file
-        required_segments (list of str): List of segmentation labels to check for
+    Args:
+        root_path (Path): Path to the recon-all containing subject data.
+        ses (str): Session identifier, e.g., "ses-01" or "ses-02".
+        subject_csv (str or None): Path to a CSV file containing subject IDs.
+    
+    Returns:
+        list of str: List of subject IDs.
     """
-    if not stats_file.is_file():
-        return False
+    # Process BBHI using the CSV file
+    if subject_csv:
+        df = pd.read_csv(subject_csv)
+        if "id" not in df.columns:
+            print(f"Error: 'id' column not found in {subject_csv}.")
+            return
 
-    content = stats_file.read_text()
-    # Look for lines containing " <segment> " to confirm presence of each
-    return all(any(f" {seg} " in line for line in content.splitlines()) 
-               for seg in required_segments)
+        all_subj_list = sorted({f"sub-{str(i).strip()}" for i in df["id"]})
+
+        base_subj_list = []
+        for subj in all_subj_list:
+            subject_reconall = Path(f"{root_path}/{subj}_{ses}")  
+            if subject_reconall.exists():
+                base_subj_list.append(subj)
+
+    # Process BBHI senior using the recon-all directory
+    else:
+        all_dirs = [
+            d for d in os.listdir(root_path)
+            if (root_path / d).is_dir() and d.startswith("sub-")
+        ]
+        pattern = re.compile(r"^(sub-\d+)(?:_ses-\d+)?$")
+        base_ids = set()
+        for d in all_dirs:
+            match = pattern.match(d)
+            if match:
+                base_ids.add(match.group(1))
+        all_subj_list = sorted(base_ids)
+
+        base_subj_list = []
+        for subj in all_subj_list:
+            subject_reconall = Path(f"{root_path}/{subj}_{ses}")  
+            if subject_reconall.exists():
+                base_subj_list.append(subj)
+    
+    return base_subj_list
 
 ##############################################################################
 # Get unprocessed subjects
 ##############################################################################
 def get_unprocessed_subjects(subject_list, output_file):
     """
-    Given a list of subjects (e.g., ['sub-001_ses-01', ...]) and an output CSV file,
-    return only those subjects not present in the output CSV.
+    Checks which subjects have already been processed by seeing 
+    if they are present in the output CSV.
 
     Args:
         subject_list (list of str): Potential subjects for a session
@@ -109,8 +136,14 @@ def get_unprocessed_subjects(subject_list, output_file):
 ##############################################################################
 def append_csv_files(final_csv: Path, new_csv: Path):
     """
-    Merge contents of new_csv into final_csv by matching on "Measure."
-    This ensures thickness columns and volume columns appear in a single row per subject.
+    Merges contents of new_csv (the file created per subject - lh thickness, rh thickness 
+    or volume) into final_csv (the output CSV containing all subject data) by matching on "id."
+    This ensures thickness columns and volume columns appear with a single row per subject.
+
+    Args:
+        final_csv (Path): Path to the output CSV file.
+        new_csv (Path): Path to the new CSV file created per subject (e.g. lh thickness, 
+        rh thickness or volume).
     """
 
     # If final_csv doesn't exist or is empty, create a DataFrame with id only
@@ -172,7 +205,7 @@ def append_csv_files(final_csv: Path, new_csv: Path):
         
         new_df = new_df[columns_to_keep]
 
-    # Merge each of the df for each participant id added the _new suffix
+    # Merge each of the df for each participant id adding the _new suffix
     merged_df = pd.merge(final_df, new_df, on="id", how="outer", suffixes=("", "_new"))
 
     # Consolidate any columns that appear as duplicates with "_new" suffix.
@@ -198,13 +231,10 @@ def main():
     cohorts = ["bbhi", "bbhi senior"]
     output_dir = Path("/home/rachel/Desktop/data/")
 
-    # Required segmentation labels
-    required_segments = ["17", "53", "77"]  # Left HC, Right HC, WM hypointensities
-
     # Collect a list of failed subjects for final printing
     failed_subjects = []
 
-    # For each timepoint, process each subject individually
+    # For each timepoint and cohort, process each subject individually
     for ses in sessions:
         for cohort in cohorts:
             if cohort == "bbhi":
@@ -216,47 +246,25 @@ def main():
             
             os.environ["SUBJECTS_DIR"] = str(root_path)  # Required by Freesurfer
 
-            # Create a list of subjects to process
-            if subject_csv:
-                df = pd.read_csv(subject_csv)
-                if "id" not in df.columns:
-                    print(f"Error: 'id' column not found in {subject_csv}.")
-                    return
-                base_subj_list = sorted({f"sub-{str(i).strip()}" for i in df["id"]})
-                print(f"Found {len(base_subj_list)} unique base subjects from CSV.")
-            else:
-                all_dirs = [
-                    d for d in os.listdir(root_path)
-                    if (root_path / d).is_dir() and d.startswith("sub-")
-                ]
-                pattern = re.compile(r"^(sub-\d+)(?:_ses-\d+)?$")
-                base_ids = set()
-                for d in all_dirs:
-                    match = pattern.match(d)
-                    if match:
-                        base_ids.add(match.group(1))
-                base_subj_list = sorted(base_ids)
-                print(f"Found {len(base_subj_list)} unique base subjects by directory listing.")
-
+            # Add session specific output directory
             session_output = output_dir / f"structural_volume_thickness_{ses}.csv"
 
+            base_subj_list = get_subjects_to_process(root_path, ses, subject_csv)
+
+            # Check whether any of the subs have already been processed
             unprocessed_subjects = get_unprocessed_subjects([f"{base_subj}_{ses}" for base_subj in base_subj_list], session_output)
-            
+            print(f"{len(unprocessed_subjects)} subjects to process for {cohort} {ses}")
+            print(f"{len(base_subj_list)-len(unprocessed_subjects)} subjects already processed for {cohort} {ses}.")
             for subj in unprocessed_subjects:
                 stats_dir = root_path / subj / "stats"
                 if not stats_dir.is_dir():
                     print(f"Warning: stats directory not found for {subj}, skipping.")
                     continue
 
-                stats_file = stats_dir / "aseg.stats"
-                if not has_required_segments(stats_file, required_segments):
-                    print(f"Warning: {subj} missing required segments: {required_segments}, skipping.")
-                    failed_subjects.append(subj)
-                    continue
-
                 # Build a temporary CSV for just this subject
                 temp_csv = output_dir / f"temp_{subj}.csv"
 
+                # Run asegstats2table to extract volumes
                 command = [
                     "./run_asegstats2table.sh",
                     "--subjects", subj,
@@ -285,7 +293,7 @@ def main():
                 if temp_csv.exists():
                     temp_csv.unlink()
 
-                # Cortical thickness extraction
+                # Run aparcstats2table for both hemispheres to extract thickness
                 for hemi in ["lh", "rh"]:
                     temp_thick_csv = output_dir / f"temp_{subj}_{hemi}_thickness.csv"
                     aparc_command = [
