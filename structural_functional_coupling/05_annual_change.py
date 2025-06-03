@@ -82,7 +82,7 @@ def main():
     metric_data_tp2 = pd.read_csv(metric_data_tp2)
     metric_data_tp1.rename(columns={'subject': 'id'}, inplace=True)
     metric_data_tp2.rename(columns={'subject': 'id'}, inplace=True)
-    metric_data = pd.merge(metric_data_tp1, metric_data_tp2, on='id', suffixes=('_1', '_2'))
+    metric_data = pd.merge(metric_data_tp1, metric_data_tp2, on='id', how='outer', suffixes=('_1', '_2'))
 
     # Merge in the age data
     age_data = pd.read_csv(age_dir / "maintainer_superager_data.csv")
