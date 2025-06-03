@@ -30,13 +30,9 @@ long_data <- data %>%
     values_from = "value"
   )
 
-# Filter to BBHI only 
-long_data_bbhi <- long_data %>% 
-  filter(cohort == "bbhi")
-
 # Create superager and maintainer chr versions
-long_data_bbhi$superager_chr <- ifelse(
-  long_data_bbhi$superager == 1,
+long_data$superager_chr <- ifelse(
+  long_data$superager == 1,
   "superager",
   "non_superager"
 )
@@ -47,8 +43,8 @@ long_data$superager_chr <- ifelse(
   "non_superager"
 )
 
-long_data_bbhi$maintainer_chr <- ifelse(
-  long_data_bbhi$maintainer == 1,
+long_data$maintainer_chr <- ifelse(
+  long_data$maintainer == 1,
   "maintainer",
   "decliner"
 )
@@ -61,7 +57,7 @@ long_data$maintainer_chr <- ifelse(
 
 # Make a time variable
 long_data$time <- ifelse(long_data$timepoint == 1, 0, long_data$fu_time)
-long_data_bbhi$time <- ifelse(long_data_bbhi$timepoint == 1, 0, long_data_bbhi$fu_time)
+long_data$time <- ifelse(long_data$timepoint == 1, 0, long_data$fu_time)
 
 ########## OPTIONS FOR THE ANALYSIS ###########
 
@@ -70,7 +66,7 @@ long_data_bbhi$time <- ifelse(long_data_bbhi$timepoint == 1, 0, long_data_bbhi$f
 # option two though is good too
 # it asks does factor x lead to superagers having better memory 
 
-# NOTE when the struct analysis is done, remember to replace long_data_bbhi
+# NOTE when the struct analysis is done, remember to replace long_data
 
 ######### OPTION ONE #############################
 # One way to run the analysis here is to check first which variables are important in memory
@@ -98,7 +94,7 @@ summary(lmer((func_Hippocampus) ~ superager_chr + (1 | id) + age + sex + YoE, da
 summary(lmer((memory) ~  (func_Hippocampus) + (1 | id)  + age + sex + YoE, data = long_data))
 
 ######### OPTION THREE #############################
-# Could jump direction to an interaction model I just dont know if there would be criticism that superagers is defined using age
+# Could jump direction to an interaction model I just dont know if there would be criticism that superagers is defined using memory
 # I suppose this would say something like an increase in FC is important for superagers and memory but increased FC do not affect memory in non-superager
 # that also seems a but odd to interpret and I have no significant examples 
 # the other thing though is that superagers are all meant to have good memory and looking at this says that superagers with decreased FC has bad memory
@@ -114,102 +110,93 @@ summary(lmer(scale(memory) ~  scale(func_Hippocampus) * superager_chr + (1 | id)
 # and HC struct connectivty is not important for preventing age related memory decline in non-superagers
 # but obviously this does not really make sense so thats fun 
 
-summary(lmer(scale(memory) ~  scale(struct_Hippocampus) * scale(age) * superager_chr + (1 | id) + sex + YoE, data = long_data_bbhi))
+summary(lmer(scale(memory) ~  scale(struct_Hippocampus) * scale(age) * superager_chr + (1 | id) + sex + YoE, data = long_data))
 
 ######################################
 ######### OPTION ONE #################
 ######################################
-summary(lmer(scale(memory) ~  scale(func_all) + (1 | id) + age + cohort + sex + YoE, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_within_DorsalAttention) + (1 | id)  + age + cohort + sex + YoE, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_all_VentralAttention) + (1 | id)  + age + cohort + sex + YoE, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_all_DorsalAttention) + (1 | id)  + age + cohort + sex + YoE, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_between_VentralAttention) + (1 | id)  + age + cohort + sex + YoE, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_between_DorsalAttention) + (1 | id)  + age + cohort + sex + YoE, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_within_Subcortical) + (1 | id) + age + cohort + sex + YoE + cohort, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_within_Default) + (1 | id) + age + cohort + sex + YoE + cohort, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_within_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_within_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_between_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_between_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_between_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_all_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_all_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data))
-summary(lmer(scale(memory) ~  scale(func_all_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+long_bbhi_senior <- long_data %>% 
+  filter(cohort == "bbhi_senior")
 
-summary(lmer(scale(memory) ~  scale(struct_all) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
+long_data_fc <- long_data %>% 
+  filter(!is.na(func_all))
 
-summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) + (1 | id)   + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) + (1 | id)  + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_all) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
+long_data_struct <- long_data %>% 
+  filter(!is.na(struct_all))
+
+long_data_sfc <- long_data %>% 
+  filter(!is.na(sfc_all))
+
+summary(lmer(scale(memory) ~  scale(func_all) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc))
+summary(lmer(scale(memory) ~  scale(func_within_DorsalAttention) + (1 | id)  + age + cohort + sex + YoE, data = long_data_fc))
+summary(lmer(scale(memory) ~  scale(func_all_VentralAttention) + (1 | id)  + age + cohort + sex + YoE, data = long_data_fc))
+summary(lmer(scale(memory) ~  scale(func_all_DorsalAttention) + (1 | id)  + age + cohort + sex + YoE, data = long_data_fc))
+summary(lmer(scale(memory) ~  scale(func_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc))
+summary(lmer(scale(memory) ~  scale(func_within_Subcortical) + (1 | id) + age + cohort + sex + YoE + cohort, data = long_data_fc))
+summary(lmer(scale(memory) ~  scale(func_within_Default) + (1 | id) + age + cohort + sex + YoE + cohort, data = long_data_fc))
+summary(lmer(scale(memory) ~  scale(func_within_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc))
+summary(lmer(scale(memory) ~  scale(func_within_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc))
+summary(lmer(scale(memory) ~  scale(func_all_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc))
+summary(lmer(scale(memory) ~  scale(func_all_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc))
+summary(lmer(scale(memory) ~  scale(func_all_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc))
+
+summary(lmer(scale(memory) ~  scale(struct_all) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
+summary(lmer(scale(memory) ~  scale(struct_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
+summary(lmer(scale(memory) ~  scale(struct_within_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
+summary(lmer(scale(memory) ~  scale(struct_within_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
+summary(lmer(scale(memory) ~  scale(struct_within_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
+summary(lmer(scale(memory) ~  scale(struct_within_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
+summary(lmer(scale(memory) ~  scale(struct_within_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
+summary(lmer(scale(memory) ~  scale(struct_all_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
+summary(lmer(scale(memory) ~  scale(struct_all_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
+summary(lmer(scale(memory) ~  scale(struct_all_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
+summary(lmer(scale(memory) ~  scale(struct_all_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
+summary(lmer(scale(memory) ~  scale(struct_all_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
+
+summary(lmer(scale(memory) ~  scale(sfc_all) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(memory) ~  scale(sfc_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(memory) ~  scale(sfc_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(memory) ~  scale(sfc_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(memory) ~  scale(sfc_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc))
 
 ## THEN ##
+summary(lmer(scale(func_all) ~  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc))
+summary(lmer(scale(func_within_DorsalAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc))
+summary(lmer(scale(func_all_VentralAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc))
+summary(lmer(scale(func_all_DorsalAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc))
 
-summary(lmer(scale(func_all) ~  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_Hippocampus) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_within_Subcortical) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_within_Default) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_within_Frontoparietal) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_within_VentralAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_within_DorsalAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_between_Subcortical) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_between_Default) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_between_Frontoparietal) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_between_VentralAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_between_DorsalAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_all_Subcortical) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_all_Default) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_all_Frontoparietal) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_all_VentralAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
-summary(lmer(scale(func_all_DorsalAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(func_all) ~  maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc))
+summary(lmer(scale(func_within_DorsalAttention) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc))
+summary(lmer(scale(func_all_VentralAttention) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc))
+summary(lmer(scale(func_all_DorsalAttention) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc))
 
-summary(lmer(scale(struct_all) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_Hippocampus) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_within_Subcortical) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_within_Default) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_within_Frontoparietal) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_within_VentralAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_within_DorsalAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_between_Subcortical) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_between_Default) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_between_Frontoparietal) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_between_VentralAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_between_DorsalAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_all_Subcortical) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_all_Default) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_all_Frontoparietal) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_all_VentralAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_all_DorsalAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
+summary(lmer(scale(sfc_all) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(sfc_Hippocampus) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(sfc_VentralAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc))
 
-summary(lmer(scale(sfc_all) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_Hippocampus) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_Subcortical) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_Default) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_Frontoparietal) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_VentralAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_DorsalAttention) ~  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
+summary(lmer(scale(sfc_all) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(sfc_Hippocampus) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(sfc_VentralAttention) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc))
+
+summary(lmer(scale(func_all) ~  superager_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
+summary(lmer(scale(func_within_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
+summary(lmer(scale(func_all_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
+summary(lmer(scale(func_all_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
+
+summary(lmer(scale(func_all) ~  maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
+summary(lmer(scale(func_within_DorsalAttention) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
+summary(lmer(scale(func_all_VentralAttention) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
+summary(lmer(scale(func_all_DorsalAttention) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
+
+summary(lmer(scale(sfc_all) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
+summary(lmer(scale(sfc_Hippocampus) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
+summary(lmer(scale(sfc_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
+
+summary(lmer(scale(sfc_all) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
+summary(lmer(scale(sfc_Hippocampus) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
+summary(lmer(scale(sfc_VentralAttention) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
 
 ######################################
 ######### OPTION TWO #################
@@ -232,33 +219,33 @@ summary(lmer(scale(memory) ~  scale(func_all_Subcortical) + (1 | id) + age + coh
 summary(lmer(scale(memory) ~  scale(func_all_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data))
 summary(lmer(scale(memory) ~  scale(func_all_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data))
 
-summary(lmer(scale(memory) ~  scale(struct_all) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
+summary(lmer(scale(memory) ~  scale(struct_all) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data))
 
-summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) + (1 | id)   + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) + (1 | id)  + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_all) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_bbhi))
+summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) + (1 | id)   + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) + (1 | id)  + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_all) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data))
 
 ## THEN ##
 
@@ -280,31 +267,31 @@ summary(lmer(scale(func_all_Frontoparietal) ~ superager_chr + (1 | id) + sex + a
 summary(lmer(scale(func_all_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
 summary(lmer(scale(func_all_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
 
-summary(lmer(scale(struct_all) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_Hippocampus) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_within_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_within_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_within_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_within_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_within_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_between_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_between_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_between_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_between_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_between_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_all_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_all_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_all_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_all_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_all_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
+summary(lmer(scale(struct_all) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_Hippocampus) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_within_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_within_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_within_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_within_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_within_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_between_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_between_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_between_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_between_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_between_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_all_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_all_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_all_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_all_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_all_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
 
-summary(lmer(scale(sfc_all) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_Hippocampus) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_DorsalAttention) ~  superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
+summary(lmer(scale(sfc_all) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(sfc_Hippocampus) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(sfc_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(sfc_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(sfc_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(sfc_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(sfc_DorsalAttention) ~  superager_chr + (1 | id) + sex + age + YoE, data = long_data))
 
 ## THEN mediation analysis for those that are significant
 
@@ -348,39 +335,39 @@ summary(lmer(scale(memory) ~  scale(func_all_Subcortical) + (1 | id) + age + sex
 summary(lmer(scale(memory) ~  scale(func_all_Default) + (1 | id) + age + sex + YoE, data = long_data))
 summary(lmer(scale(memory) ~  scale(func_all_Frontoparietal) + (1 | id) + age + sex + YoE, data = long_data))
 
-summary(lmer(scale(memory) ~  scale(struct_all) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_Hippocampus) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_Subcortical) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_Default) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_Frontoparietal) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_VentralAttention) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_DorsalAttention) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_Subcortical) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_Default) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_Frontoparietal) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_VentralAttention) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_DorsalAttention) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_Subcortical) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_Default) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_Frontoparietal) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_VentralAttention) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_DorsalAttention) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
+summary(lmer(scale(memory) ~  scale(struct_all) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_Hippocampus) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_Subcortical) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_Default) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_Frontoparietal) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_VentralAttention) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_DorsalAttention) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_Subcortical) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_Default) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_Frontoparietal) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_VentralAttention) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_DorsalAttention) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_Subcortical) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_Default) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_Frontoparietal) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_VentralAttention) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_DorsalAttention) + (1 | id) + age + sex + YoE, data = long_data))
 
-summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) + (1 | id)   + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_VentralAttention) ~  scale(age) * superager_chr + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_VentralAttention) ~  scale(age) * maintainer_chr + (1 | id) + age + sex + YoE, data = long_data_bbhi))
+summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) + (1 | id)   + age + sex + YoE, data = long_data))
+summary(lmer(scale(sfc_VentralAttention) ~  scale(age) * superager_chr + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(sfc_VentralAttention) ~  scale(age) * maintainer_chr + (1 | id) + age + sex + YoE, data = long_data))
 
-summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) + (1 | id)  + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_Hippocampus) ~  scale(age) * superager_chr + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_Hippocampus) ~  scale(age) * maintainer_chr + (1 | id) + age + sex + YoE, data = long_data_bbhi))
+summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) + (1 | id)  + age + sex + YoE, data = long_data))
+summary(lmer(scale(sfc_Hippocampus) ~  scale(age) * superager_chr + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(sfc_Hippocampus) ~  scale(age) * maintainer_chr + (1 | id) + age + sex + YoE, data = long_data))
 
-summary(lmer(scale(memory) ~  scale(sfc_all) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Subcortical) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Default) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Frontoparietal) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_DorsalAttention) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
+summary(lmer(scale(memory) ~  scale(sfc_all) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Subcortical) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Default) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Frontoparietal) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_DorsalAttention) + (1 | id) + age + sex + YoE, data = long_data))
 
 #########################################
 ###### LME Memory Interactions #########
@@ -404,47 +391,47 @@ summary(lmer(scale(memory) ~  scale(func_all_Frontoparietal) * scale(superager) 
 summary(lmer(scale(memory) ~  scale(func_all_VentralAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
 summary(lmer(scale(memory) ~  scale(func_all_DorsalAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
 
-summary(lmer(scale(memory) ~  scale(struct_all) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_Hippocampus) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_Subcortical) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_Default) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_Frontoparietal) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_VentralAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_DorsalAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_Subcortical) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_Default) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_Frontoparietal) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_VentralAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_DorsalAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_Subcortical) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_Default) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_Frontoparietal) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_VentralAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_DorsalAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
+summary(lmer(scale(memory) ~  scale(struct_all) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_Hippocampus) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_Subcortical) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_Default) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_Frontoparietal) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_VentralAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_DorsalAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_Subcortical) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_Default) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_Frontoparietal) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_VentralAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_DorsalAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_Subcortical) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_Default) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_Frontoparietal) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_VentralAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_DorsalAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
 
-summary(lmer(scale(memory) ~  scale(sfc_all) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Subcortical) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Default) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Frontoparietal) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_DorsalAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data_bbhi))
+summary(lmer(scale(memory) ~  scale(sfc_all) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Subcortical) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Default) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Frontoparietal) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_DorsalAttention) * scale(superager) + (1 | id) + age + sex + YoE, data = long_data))
 
 # Plot significant interaction
 
 # Center variables
-long_data_bbhi$sfc_all_centered = scale(long_data_bbhi$sfc_all)
-long_data_bbhi$maintainer_centered = scale(long_data_bbhi$maintainer)
-long_data_bbhi$memory_centered = scale(long_data_bbhi$memory)
+long_data$sfc_all_centered = scale(long_data$sfc_all)
+long_data$maintainer_centered = scale(long_data$maintainer)
+long_data$memory_centered = scale(long_data$memory)
 
 # 1) Fit the model
-model_sfc_lme <- lmer(memory_centered ~ sfc_all_centered * maintainer_centered + (1 | id) + age+ sex + YoE, data = long_data_bbhi)
+model_sfc_lme <- lmer(memory_centered ~ sfc_all_centered * maintainer_centered + (1 | id) + age+ sex + YoE, data = long_data)
 summary(model_sfc_lme)
 
 # 2) Create a grid of ages for which we want predictions
 sfc_all_centered_seq <- seq(
-  from = min(long_data_bbhi$sfc_all_centered, na.rm = TRUE),
-  to   = max(long_data_bbhi$sfc_all_centered, na.rm = TRUE),
+  from = min(long_data$sfc_all_centered, na.rm = TRUE),
+  to   = max(long_data$sfc_all_centered, na.rm = TRUE),
   length.out = 100
 )
 
@@ -472,12 +459,12 @@ palette_1 <- c("1.95553885959982" = "#A35C7A", "-0.509254911354119" = "#FFD65A")
 # Create the two-group plot
 ggplot() +
   geom_line(
-    data = long_data_bbhi, 
+    data = long_data, 
     aes(x = sfc_all_centered, y = memory_centered, group = id), 
     color = "lightgray", alpha = 0.5
   ) +  # Plot individual trajectories
   geom_point(
-    data = long_data_bbhi, 
+    data = long_data, 
     aes(x = sfc_all_centered, y = memory_centered), 
     color = "gray", size = 1
   ) +  # Add scatter points
@@ -520,31 +507,31 @@ summary(lmer(scale(func_all_Frontoparietal) ~ superager_chr + (1 | id) + sex + a
 summary(lmer(scale(func_all_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
 summary(lmer(scale(func_all_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
 
-summary(lmer(scale(struct_all) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_Hippocampus) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_within_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_within_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_within_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_within_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_within_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_between_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_between_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_between_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_between_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_between_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_all_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_all_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_all_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_all_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(struct_all_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
+summary(lmer(scale(struct_all) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_Hippocampus) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_within_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_within_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_within_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_within_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_within_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_between_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_between_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_between_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_between_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_between_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_all_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_all_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_all_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_all_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(struct_all_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
 
-summary(lmer(scale(sfc_all) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_Hippocampus) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
-summary(lmer(scale(sfc_DorsalAttention) ~  superager_chr + (1 | id) + sex + age + YoE, data = long_data_bbhi))
+summary(lmer(scale(sfc_all) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(sfc_Hippocampus) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(sfc_Subcortical) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(sfc_Default) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(sfc_Frontoparietal) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(sfc_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data))
+summary(lmer(scale(sfc_DorsalAttention) ~  superager_chr + (1 | id) + sex + age + YoE, data = long_data))
 
 
 #########################################
@@ -570,31 +557,31 @@ summary(lmer(scale(memory) ~  scale(func_all_Frontoparietal) *  superager_chr * 
 summary(lmer(scale(memory) ~  scale(func_all_VentralAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
 summary(lmer(scale(memory) ~  scale(func_all_DorsalAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
 
-summary(lmer(scale(memory) ~  scale(struct_all) * superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_Hippocampus) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_Subcortical) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_Default) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_Frontoparietal) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_VentralAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_within_DorsalAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_Subcortical) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_Default) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_Frontoparietal) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_VentralAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_between_DorsalAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_Subcortical) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_Default) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_Frontoparietal) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_VentralAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(struct_all_DorsalAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
+summary(lmer(scale(memory) ~  scale(struct_all) * superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_Hippocampus) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_Subcortical) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_Default) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_Frontoparietal) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_VentralAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_within_DorsalAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_Subcortical) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_Default) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_Frontoparietal) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_VentralAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_between_DorsalAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_Subcortical) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_Default) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_Frontoparietal) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_VentralAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(struct_all_DorsalAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
 
-summary(lmer(scale(memory) ~  scale(sfc_all) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Subcortical) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Default) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_Frontoparietal) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
-summary(lmer(scale(memory) ~  scale(sfc_DorsalAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_bbhi))
+summary(lmer(scale(memory) ~  scale(sfc_all) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Subcortical) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Default) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_Frontoparietal) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
+summary(lmer(scale(memory) ~  scale(sfc_DorsalAttention) *  superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data))
 
 # 1) Fit the model
 long_data$func_within_Default_centered <- scale(long_data$func_within_Default)
