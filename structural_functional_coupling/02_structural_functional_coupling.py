@@ -43,6 +43,8 @@ def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, struct
             subjects_to_process.append(subject)
         elif output_file_path.exists():
             already_processed.append(subject)
+        elif struct_conn_path.exists() and not func_conn_path.exists():
+            print(f"Functional connectivity matrix not found for {subject} {ses} likely due to scrubbing exclusion.")
 
     return subjects_to_process, already_processed
 
