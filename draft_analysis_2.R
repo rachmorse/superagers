@@ -55,6 +55,13 @@ long_data$maintainer_chr <- ifelse(
   "decliner"
 )
 
+long_data$group <- ifelse(
+  long_data$superager == 1 & long_data$maintainer == 0, "superager",
+  ifelse(long_data$superager == 0 & long_data$maintainer == 1, "maintainer",
+         NA
+         )
+)
+
 # Make a time variable
 long_data$time <- ifelse(long_data$timepoint == 1, 0, long_data$fu_time)
 long_data$time <- ifelse(long_data$timepoint == 1, 0, long_data$fu_time)
@@ -128,6 +135,15 @@ long_data_struct <- long_data %>%
 long_data_sfc <- long_data %>% 
   filter(!is.na(sfc_all_slopes) & !is.na(memory_slopes))
 
+long_data_fc_group <- long_data %>% 
+  filter(!is.na(func_all_slopes) & !is.na(memory_slopes) & !is.na(group))
+
+long_data_struct_group <- long_data %>% 
+  filter(!is.na(struct_all_slopes) & !is.na(memory_slopes) & !is.na(group))
+
+long_data_sfc_group <- long_data %>% 
+  filter(!is.na(sfc_all_slopes) & !is.na(memory_slopes) & !is.na(group))
+
 summary(lmer(scale(memory) ~  scale(func_all) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc))
 summary(lmer(scale(memory) ~  scale(func_within_DorsalAttention) + (1 | id)  + age + cohort + sex + YoE, data = long_data_fc))
 summary(lmer(scale(memory) ~  scale(func_all_VentralAttention) + (1 | id)  + age + cohort + sex + YoE, data = long_data_fc))
@@ -174,6 +190,11 @@ summary(lmer(scale(func_within_DorsalAttention) ~ maintainer_chr + (1 | id) + se
 summary(lmer(scale(func_all_VentralAttention) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
 summary(lmer(scale(func_all_DorsalAttention) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
 
+summary(lmer(scale(func_all) ~  group + (1 | id) + sex + age + YoE, data = long_data_fc_group))
+summary(lmer(scale(func_within_DorsalAttention) ~ group + (1 | id) + sex + age + YoE, data = long_data_fc_group))
+summary(lmer(scale(func_all_VentralAttention) ~ group + (1 | id) + sex + age + YoE, data = long_data_fc_group))
+summary(lmer(scale(func_all_DorsalAttention) ~ group + (1 | id) + sex + age + YoE, data = long_data_fc_group))
+
 summary(lmer(scale(sfc_all) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
 summary(lmer(scale(sfc_Hippocampus) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
 summary(lmer(scale(sfc_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
@@ -181,6 +202,10 @@ summary(lmer(scale(sfc_VentralAttention) ~ superager_chr + (1 | id) + sex + age 
 summary(lmer(scale(sfc_all) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
 summary(lmer(scale(sfc_Hippocampus) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
 summary(lmer(scale(sfc_VentralAttention) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
+
+summary(lmer(scale(sfc_all) ~ group + (1 | id) + sex + age + YoE, data = long_data_sfc_group))
+summary(lmer(scale(sfc_Hippocampus) ~ group + (1 | id) + sex + age + YoE, data = long_data_sfc_group))
+summary(lmer(scale(sfc_VentralAttention) ~ group + (1 | id) + sex + age + YoE, data = long_data_sfc_group))
 
 # 1) Fit the model
 
@@ -202,6 +227,42 @@ ggplot(long_data_sfc, aes(x = maintainer_chr, y = sfc_Hippocampus, fill = mainta
   geom_jitter(width = .13, alpha = 0.3, size = 1) +
   theme_minimal() +
   labs(y = "SFC Hippocampus") +
+  guides(fill = "none")
+
+palette_1 <- c("maintainer" = "#60B5FF", "superager" = "pink")
+
+ggplot(long_data_sfc_group, aes(x = group, y = sfc_Hippocampus, fill = group)) +
+  stat_halfeye(
+    adjust = .5,
+    width = .4,
+    .width = 0,
+    justification = -.4,
+    point_colour = NA,
+    alpha = 0.7
+  ) +
+  scale_fill_manual(values = palette_1) +
+  scale_color_manual(values = palette_1) +
+  geom_boxplot(width = .15, outlier.shape = NA, alpha = 0.5) +
+  geom_jitter(width = .13, alpha = 0.3, size = 1) +
+  theme_minimal() +
+  labs(y = "SFC Hippocampus") +
+  guides(fill = "none")
+
+ggplot(long_data_fc_group, aes(x = group, y = func_all, fill = group)) +
+  stat_halfeye(
+    adjust = .5,
+    width = .4,
+    .width = 0,
+    justification = -.4,
+    point_colour = NA,
+    alpha = 0.7
+  ) +
+  scale_fill_manual(values = palette_1) +
+  scale_color_manual(values = palette_1) +
+  geom_boxplot(width = .15, outlier.shape = NA, alpha = 0.5) +
+  geom_jitter(width = .13, alpha = 0.3, size = 1) +
+  theme_minimal() +
+  labs(y = "All FC") +
   guides(fill = "none")
 
 model_memory_sfc <- lmer((memory) ~ (sfc_Hippocampus) + (1 | id) + age + sex + YoE + cohort, data = long_data_sfc)
@@ -396,10 +457,18 @@ summary(lmer(scale(func_within_VentralAttention) ~ maintainer_chr * scale(age) +
 summary(lmer(scale(func_all) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
 summary(lmer(scale(func_within_DorsalAttention) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
 summary(lmer(scale(func_Hippocampus) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
-summary(lmer(scale(func_within_Subcortical) ~ superager_chr * scale(age) + (1|id)   + sex + YoE + cohort, data = long_data_fc))
-summary(lmer(scale(func_within_Default) ~ superager_chr * scale(age) + (1|id)   + sex + YoE + cohort, data = long_data_fc))
+summary(lmer(scale(func_within_Subcortical) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
+summary(lmer(scale(func_within_Default) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
 summary(lmer(scale(func_within_Frontoparietal) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
 summary(lmer(scale(func_within_VentralAttention) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
+
+summary(lmer(scale(func_all) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_fc_group))
+summary(lmer(scale(func_within_DorsalAttention) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_fc_group))
+summary(lmer(scale(func_Hippocampus) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_fc_group))
+summary(lmer(scale(func_within_Subcortical) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_fc_group))
+summary(lmer(scale(func_within_Default) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_fc_group))
+summary(lmer(scale(func_within_Frontoparietal) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_fc_group))
+summary(lmer(scale(func_within_VentralAttention) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_fc_group))
 
 # Apply FDR correction
 pvals <- c(0.169612, 0.12668, 0.29080, 0.055381, 0.015479, 0.067109, 0.0466)
@@ -419,14 +488,6 @@ pvals <- c(0.002899, 0.01383, 0.00969, 0.011085, 0.006652, 0.04545, 0.02737)
 pvals_fdr <- p.adjust(pvals, method = "fdr")
 print(pvals_fdr)
 
-summary(lmer(scale(sfc_all) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_Hippocampus) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_Subcortical) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_Default) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_Frontoparietal) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_VentralAttention) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_DorsalAttention) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-
 summary(lmer(scale(struct_all) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
 summary(lmer(scale(struct_Hippocampus) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
 summary(lmer(scale(struct_within_Subcortical) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
@@ -435,6 +496,22 @@ summary(lmer(scale(struct_within_Frontoparietal) ~ superager_chr * scale(age) + 
 summary(lmer(scale(struct_within_VentralAttention) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
 summary(lmer(scale(struct_within_DorsalAttention) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
 
+summary(lmer(scale(struct_all) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(struct_Hippocampus) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(struct_within_Subcortical) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(struct_within_Default) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(struct_within_Frontoparietal) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(struct_within_VentralAttention) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(struct_within_DorsalAttention) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_struct_group))
+
+summary(lmer(scale(sfc_all) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(sfc_Hippocampus) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(sfc_Subcortical) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(sfc_Default) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(sfc_Frontoparietal) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(sfc_VentralAttention) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
+summary(lmer(scale(sfc_DorsalAttention) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
+
 summary(lmer(scale(sfc_all) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
 summary(lmer(scale(sfc_Hippocampus) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
 summary(lmer(scale(sfc_Subcortical) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
@@ -442,6 +519,14 @@ summary(lmer(scale(sfc_Default) ~ superager_chr * scale(age) + (1|id)   + sex + 
 summary(lmer(scale(sfc_Frontoparietal) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
 summary(lmer(scale(sfc_VentralAttention) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
 summary(lmer(scale(sfc_DorsalAttention) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
+
+summary(lmer(scale(sfc_all) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc_group))
+summary(lmer(scale(sfc_Hippocampus) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc_group))
+summary(lmer(scale(sfc_Subcortical) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc_group))
+summary(lmer(scale(sfc_Default) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc_group))
+summary(lmer(scale(sfc_Frontoparietal) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc_group))
+summary(lmer(scale(sfc_VentralAttention) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc_group))
+summary(lmer(scale(sfc_DorsalAttention) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc_group))
 
 # Center variables
 long_data_fc$func_within_Default_centered = scale(long_data_fc$func_within_Default)
@@ -569,6 +654,169 @@ ggplot() +
   scale_color_manual(values = palette_1) +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
   labs(x = "age", y = "struct_within_Frontoparietal_centered", color = "Group", fill = "Group") +
+  theme_minimal() +
+  theme(legend.position.inside = c(0.8, 0.94))
+
+# Center variables
+long_data_sfc_group$sfc_DorsalAttention_centered = scale(long_data_sfc_group$sfc_DorsalAttention)
+long_data_sfc_group$age_centered = scale(long_data_sfc_group$age)
+
+# 1) Fit the model
+sfc_da <- lmer(sfc_DorsalAttention_centered ~ age_centered * group + (1 | id) + sex + YoE , data = long_data_sfc_group)
+summary(sfc_da)
+
+age_centered_seq <- seq(
+  from = min(long_data_sfc_group$age_centered, na.rm = TRUE),
+  to   = max(long_data_sfc_group$age_centered, na.rm = TRUE),
+  length.out = 100
+)
+
+# 3) Use emmeans to get marginal predictions for each superager_factor × sfc_all_centered
+em_2group <- emmeans(
+  sfc_da, 
+  specs = ~ factor(group) * age_centered,
+  at    = list(age_centered = age_centered_seq),
+  reff  = 0 # set reff = 0 to ignore random effects (similar to re.form = NA).
+)
+
+# 4) Convert the emmeans results to a data frame and rename columns
+predictions <- summary(em_2group) %>% 
+  as.data.frame() %>% 
+  rename(
+    predicted   = emmean,
+    lower_bound = lower.CL,
+    upper_bound = upper.CL
+  ) %>% 
+  mutate(age_centered = as.numeric(age_centered))  # Convert from factor if needed
+
+# Define colors for each group
+palette_1 <- c("maintainer" = "#60B5FF", "superager" = "pink")
+
+# Create the two-group plot
+ggplot() +
+  geom_line(
+    data = long_data_sfc_group, 
+    aes(x = age_centered, y = sfc_DorsalAttention_centered, group = id), 
+    color = "lightgray", alpha = 0.5
+  ) +  # Plot individual trajectories
+  geom_point(
+    data = long_data_sfc_group, 
+    aes(x = age_centered, y = sfc_DorsalAttention_centered), 
+    color = "gray", size = 1
+  ) +  # Add scatter points
+  geom_ribbon(
+    data = predictions, 
+    aes(x = age_centered, ymin = lower_bound, ymax = upper_bound, 
+        fill = factor(group)), 
+    alpha = 0.3
+  ) +  # Add CIs
+  geom_line(
+    data = predictions, 
+    aes(x = age_centered, y = predicted, color = factor(group)), 
+    size = 1.2
+  ) +  # Plot predicted lines
+  scale_color_manual(values = palette_1) +
+  scale_fill_manual(values = palette_1) +  # Match line & fill colors
+  labs(x = "age", y = "sfc_DorsalAttention_centered", color = "Group", fill = "Group") +
+  theme_minimal() +
+  theme(legend.position.inside = c(0.8, 0.94))
+
+#### Memory and variables by superager vs maintainer
+summary(lmer(scale(memory) ~  scale(func_all) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_fc_group))
+summary(lmer(scale(memory) ~  scale(func_within_DorsalAttention) * group + (1 | id)  + age + cohort + sex + YoE, data = long_data_fc_group))
+summary(lmer(scale(memory) ~  scale(func_all_VentralAttention) * group + (1 | id)  + age + cohort + sex + YoE, data = long_data_fc_group))
+summary(lmer(scale(memory) ~  scale(func_all_DorsalAttention) * group + (1 | id)  + age + cohort + sex + YoE, data = long_data_fc_group))
+summary(lmer(scale(memory) ~  scale(func_Hippocampus) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_fc_group))
+summary(lmer(scale(memory) ~  scale(func_within_Subcortical) * group + (1 | id) + age + cohort + sex + YoE + cohort, data = long_data_fc_group))
+summary(lmer(scale(memory) ~  scale(func_within_Default) * group + (1 | id) + age + cohort + sex + YoE + cohort, data = long_data_fc_group))
+summary(lmer(scale(memory) ~  scale(func_within_Frontoparietal) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_fc_group))
+summary(lmer(scale(memory) ~  scale(func_within_VentralAttention) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_fc_group))
+summary(lmer(scale(memory) ~  scale(func_all_Subcortical) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_fc_group))
+summary(lmer(scale(memory) ~  scale(func_all_Default) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_fc_group))
+summary(lmer(scale(memory) ~  scale(func_all_Frontoparietal) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_fc_group))
+
+summary(lmer(scale(memory) ~  scale(struct_all) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(memory) ~  scale(struct_Hippocampus) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(memory) ~  scale(struct_within_Subcortical) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(memory) ~  scale(struct_within_Default) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(memory) ~  scale(struct_within_Frontoparietal) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(memory) ~  scale(struct_within_VentralAttention) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(memory) ~  scale(struct_within_DorsalAttention) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(memory) ~  scale(struct_all_Subcortical) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(memory) ~  scale(struct_all_Default) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(memory) ~  scale(struct_all_Frontoparietal) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(memory) ~  scale(struct_all_VentralAttention) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_struct_group))
+summary(lmer(scale(memory) ~  scale(struct_all_DorsalAttention) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_struct_group))
+
+summary(lmer(scale(memory) ~  scale(sfc_all) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc_group))
+summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc_group))
+summary(lmer(scale(memory) ~  scale(sfc_Subcortical) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc_group))
+summary(lmer(scale(memory) ~  scale(sfc_Default) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc_group))
+summary(lmer(scale(memory) ~  scale(sfc_Frontoparietal) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc_group))
+summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc_group))
+summary(lmer(scale(memory) ~  scale(sfc_DorsalAttention) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc_group))
+
+# Center variables
+long_data_fc_group$memory_centered = scale(long_data_fc_group$memory)
+long_data_fc_group$func_all_Default_centered = scale(long_data_fc_group$func_all_Default)
+
+# 1) Fit the model
+fc_group_mem <- lmer(memory_centered ~ func_all_Default_centered * group + (1 | id) + sex + YoE , data = long_data_fc_group)
+summary(fc_group_mem)
+
+func_all_Default_centered_seq <- seq(
+  from = min(long_data_fc_group$func_all_Default_centered, na.rm = TRUE),
+  to   = max(long_data_fc_group$func_all_Default_centered, na.rm = TRUE),
+  length.out = 100
+)
+
+# 3) Use emmeans to get marginal predictions for each superager_factor × sfc_all_centered
+em_2group <- emmeans(
+  fc_group_mem, 
+  specs = ~ factor(group) * func_all_Default_centered,
+  at    = list(func_all_Default_centered = func_all_Default_centered_seq),
+  reff  = 0 # set reff = 0 to ignore random effects (similar to re.form = NA).
+)
+
+# 4) Convert the emmeans results to a data frame and rename columns
+predictions <- summary(em_2group) %>% 
+  as.data.frame() %>% 
+  rename(
+    predicted   = emmean,
+    lower_bound = lower.CL,
+    upper_bound = upper.CL
+  ) %>% 
+  mutate(func_all_Default_centered = as.numeric(func_all_Default_centered))  # Convert from factor if needed
+
+# Define colors for each group
+palette_1 <- c("maintainer" = "#60B5FF", "superager" = "pink")
+
+# Create the two-group plot
+ggplot() +
+  geom_line(
+    data = long_data_fc_group, 
+    aes(x = func_all_Default_centered, y = memory_centered, group = id), 
+    color = "lightgray", alpha = 0.5
+  ) +  # Plot individual trajectories
+  geom_point(
+    data = long_data_fc_group, 
+    aes(x = func_all_Default_centered, y = memory_centered), 
+    color = "gray", size = 1
+  ) +  # Add scatter points
+  geom_ribbon(
+    data = predictions, 
+    aes(x = func_all_Default_centered, ymin = lower_bound, ymax = upper_bound, 
+        fill = factor(group)), 
+    alpha = 0.3
+  ) +  # Add CIs
+  geom_line(
+    data = predictions, 
+    aes(x = func_all_Default_centered, y = predicted, color = factor(group)), 
+    size = 1.2
+  ) +  # Plot predicted lines
+  scale_color_manual(values = palette_1) +
+  scale_fill_manual(values = palette_1) +  # Match line & fill colors
+  labs(x = "func_all_Default_centered", y = "memory_centered", color = "Group", fill = "Group") +
   theme_minimal() +
   theme(legend.position.inside = c(0.8, 0.94))
 
