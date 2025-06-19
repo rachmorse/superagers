@@ -72,7 +72,7 @@ def main():
                 ]
             else:
                 files = [
-                    f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP2/{subject_id}/eddy_corrected_data.nii.gz",
+                    f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP2/{subject_id}_ses-02/eddy_corrected_data.nii.gz",
                     f"/pool/guttmann/institut/UB/Superagers/MRI/tracto_MSMTCSD_TP2/{subject_id}_dwi_tractogram_1M_SIFT.tck"
                 ]
         return files
