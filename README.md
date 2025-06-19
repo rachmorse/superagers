@@ -82,3 +82,7 @@ This repository contains the analysis scripts for our study on superagers, which
     - **Purpose:** The first exploritory analysis. Similar to `AAIC Superager Abstract.R` but a few steps behind and with some additional analyses not used for the AAIC abstract 
 4. **`gephi_visualization_prep.py`**
     - **Purpose:** Reorganizes the connectivty matrices data to be able to be used for creating Gephi figures. 
+
+## Misc Scripts
+1. **`missing_subs.py`**
+    - **Purpose:** Calculates which subs have functional data but to not have structural data and viceversa to make sure no subjects are missing data unecessarily.
