@@ -457,6 +457,7 @@ summary(lmer(scale(func_within_VentralAttention) ~ maintainer_chr * scale(age) +
 summary(lmer(scale(func_all) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
 summary(lmer(scale(func_within_DorsalAttention) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
 summary(lmer(scale(func_Hippocampus) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
+
 summary(lmer(scale(func_within_Subcortical) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
 summary(lmer(scale(func_within_Default) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
 summary(lmer(scale(func_within_Frontoparietal) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
