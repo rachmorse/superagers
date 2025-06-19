@@ -758,23 +758,23 @@ summary(lmer(scale(memory) ~  scale(sfc_DorsalAttention) * group + (1 | id) + ag
 
 # Center variables
 long_data_fc_group$memory_centered = scale(long_data_fc_group$memory)
-long_data_fc_group$func_all_Default_centered = scale(long_data_fc_group$func_all_Default)
+long_data_fc_group$func_within_Subcortical_centered = scale(long_data_fc_group$func_within_Subcortical)
 
 # 1) Fit the model
-fc_group_mem <- lmer(memory_centered ~ func_all_Default_centered * group + (1 | id) + sex + YoE , data = long_data_fc_group)
+fc_group_mem <- lmer(memory_centered ~ func_within_Subcortical_centered * group + (1 | id) + sex + YoE , data = long_data_fc_group)
 summary(fc_group_mem)
 
-func_all_Default_centered_seq <- seq(
-  from = min(long_data_fc_group$func_all_Default_centered, na.rm = TRUE),
-  to   = max(long_data_fc_group$func_all_Default_centered, na.rm = TRUE),
+func_within_Subcortical_centered_seq <- seq(
+  from = min(long_data_fc_group$func_within_Subcortical_centered, na.rm = TRUE),
+  to   = max(long_data_fc_group$func_within_Subcortical_centered, na.rm = TRUE),
   length.out = 100
 )
 
 # 3) Use emmeans to get marginal predictions for each superager_factor × sfc_all_centered
 em_2group <- emmeans(
   fc_group_mem, 
-  specs = ~ factor(group) * func_all_Default_centered,
-  at    = list(func_all_Default_centered = func_all_Default_centered_seq),
+  specs = ~ factor(group) * func_within_Subcortical_centered,
+  at    = list(func_within_Subcortical_centered = func_within_Subcortical_centered_seq),
   reff  = 0 # set reff = 0 to ignore random effects (similar to re.form = NA).
 )
 
@@ -786,7 +786,7 @@ predictions <- summary(em_2group) %>%
     lower_bound = lower.CL,
     upper_bound = upper.CL
   ) %>% 
-  mutate(func_all_Default_centered = as.numeric(func_all_Default_centered))  # Convert from factor if needed
+  mutate(func_within_Subcortical_centered = as.numeric(func_within_Subcortical_centered))  # Convert from factor if needed
 
 # Define colors for each group
 palette_1 <- c("maintainer" = "#60B5FF", "superager" = "pink")
@@ -795,27 +795,74 @@ palette_1 <- c("maintainer" = "#60B5FF", "superager" = "pink")
 ggplot() +
   geom_line(
     data = long_data_fc_group, 
-    aes(x = func_all_Default_centered, y = memory_centered, group = id), 
+    aes(x = func_within_Subcortical_centered, y = memory_centered, group = id), 
     color = "lightgray", alpha = 0.5
   ) +  # Plot individual trajectories
   geom_point(
     data = long_data_fc_group, 
-    aes(x = func_all_Default_centered, y = memory_centered), 
+    aes(x = func_within_Subcortical_centered, y = memory_centered), 
     color = "gray", size = 1
   ) +  # Add scatter points
   geom_ribbon(
     data = predictions, 
-    aes(x = func_all_Default_centered, ymin = lower_bound, ymax = upper_bound, 
+    aes(x = func_within_Subcortical_centered, ymin = lower_bound, ymax = upper_bound, 
         fill = factor(group)), 
     alpha = 0.3
   ) +  # Add CIs
   geom_line(
     data = predictions, 
-    aes(x = func_all_Default_centered, y = predicted, color = factor(group)), 
+    aes(x = func_within_Subcortical_centered, y = predicted, color = factor(group)), 
     size = 1.2
   ) +  # Plot predicted lines
   scale_color_manual(values = palette_1) +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
-  labs(x = "func_all_Default_centered", y = "memory_centered", color = "Group", fill = "Group") +
+  labs(x = "func_within_Subcortical_centered", y = "memory_centered", color = "Group", fill = "Group") +
   theme_minimal() +
   theme(legend.position.inside = c(0.8, 0.94))
+
+install.packages("interactions")
+library(interactions)
+
+# Fit model
+fc_group_mem <- lmer(memory_centered ~ func_all_Default_centered * group + (1 | id) + sex + YoE, data = long_data_fc_group)
+
+# Analyze the slopes for each group
+sim_slopes(fc_group_mem, 
+           pred = "func_all_Default_centered", 
+           modx = "group",
+           plot = FALSE)
+
+# Fit model
+sfc_da <- lmer(sfc_DorsalAttention_centered ~ age_centered * group + (1 | id) + sex + YoE , data = long_data_sfc_group)
+
+# Analyze the slopes for each group
+sim_slopes(sfc_da, 
+           pred = "age_centered", 
+           modx = "group",
+           plot = FALSE)
+
+struct_fpn_maint <- lmer(struct_within_Frontoparietal_centered ~ age_centered * maintainer_chr + (1 | id) + sex + YoE , data = long_data_struct)
+
+sim_slopes(struct_fpn_maint, 
+           pred = "age_centered", 
+           modx = "maintainer_chr",
+           plot = FALSE)
+
+func_dmn_sa <- lmer(func_within_Default_centered ~ age_centered * superager_chr + (1 | id) + sex + YoE, data = long_data_fc)
+
+sim_slopes(func_dmn_sa, 
+           pred = "age_centered", 
+           modx = "superager_chr",
+           plot = FALSE)
+
+func_sub <- lmer(scale(memory) ~  scale(func_within_Subcortical) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_fc_group)
+sim_slopes(func_sub, 
+           pred = "scale(func_within_Subcortical)", 
+           modx = "group",
+           plot = FALSE)
+
+func_dmn <- lmer(scale(memory) ~  scale(func_within_Default) * group + (1 | id) + age + cohort + sex + YoE, data = long_data_fc_group)
+sim_slopes(func_dmn, 
+           pred = "scale(func_within_Default)", 
+           modx = "group",
+           plot = FALSE)
