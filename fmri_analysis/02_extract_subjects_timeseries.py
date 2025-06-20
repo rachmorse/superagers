@@ -312,11 +312,12 @@ def main(
 
 
 if __name__ == "__main__":
-    sessions = ["1", "2"]  
+    # sessions = ["1", "2"]  
     cohorts = ["bbhi", "bbhi senior"]  
     threshold = "0.5"
     root = Path("/home/rachel/Desktop/schaefer_analysis") 
     output_directory = Path(f"{root}/timeseries_data/native_space")
+    sessions = ["2"]  
 
     for ses in sessions:
         for cohort in cohorts:
@@ -348,6 +349,7 @@ if __name__ == "__main__":
 
             # Optionally, manually specify subjects to process
             # subjects = ["sub-4045"]
+            subjects = ["sub-1014", "sub-1033", "sub-3054", "sub-3071", "sub-4016", "sub-4045", "sub-85733", "sub-126271", "sub-167505"]
 
             main(
                 ses=ses,
