@@ -6,6 +6,7 @@ library(tidyr)
 library(stringr)
 library(emmeans)
 library(ggplot2)
+library(broom.mixed)
 
 # Read and prepare the data
 data <- read.csv("~/Documents/2023:2024/Data/Exported data/clean_data_all.csv")
@@ -144,69 +145,112 @@ long_data_struct_group <- long_data %>%
 long_data_sfc_group <- long_data %>% 
   filter(!is.na(sfc_all_slopes) & !is.na(memory_slopes) & !is.na(group))
 
-summary(lmer(scale(memory) ~  scale(func_all) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc))
-summary(lmer(scale(memory) ~  scale(func_within_DorsalAttention) + (1 | id)  + age + cohort + sex + YoE, data = long_data_fc))
-summary(lmer(scale(memory) ~  scale(func_all_VentralAttention) + (1 | id)  + age + cohort + sex + YoE, data = long_data_fc))
-summary(lmer(scale(memory) ~  scale(func_all_DorsalAttention) + (1 | id)  + age + cohort + sex + YoE, data = long_data_fc))
-summary(lmer(scale(memory) ~  scale(func_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc))
-summary(lmer(scale(memory) ~  scale(func_within_Subcortical) + (1 | id) + age + cohort + sex + YoE + cohort, data = long_data_fc))
-summary(lmer(scale(memory) ~  scale(func_within_Default) + (1 | id) + age + cohort + sex + YoE + cohort, data = long_data_fc))
-summary(lmer(scale(memory) ~  scale(func_within_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc))
-summary(lmer(scale(memory) ~  scale(func_within_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc))
-summary(lmer(scale(memory) ~  scale(func_all_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc))
-summary(lmer(scale(memory) ~  scale(func_all_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc))
-summary(lmer(scale(memory) ~  scale(func_all_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc))
+func_models <- list(
+  func_all = lmer(scale(memory) ~ scale(func_all) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc),
+  func_within_DorsalAttention = lmer(scale(memory) ~ scale(func_within_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc),
+  func_Hippocampus = lmer(scale(memory) ~ scale(func_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc),
+  func_within_Subcortical = lmer(scale(memory) ~ scale(func_within_Subcortical) + (1 | id) + age + cohort + sex + YoE + cohort, data = long_data_fc),
+  func_within_Default = lmer(scale(memory) ~ scale(func_within_Default) + (1 | id) + age + cohort + sex + YoE + cohort, data = long_data_fc),
+  func_within_Frontoparietal = lmer(scale(memory) ~ scale(func_within_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc),
+  func_within_VentralAttention = lmer(scale(memory) ~ scale(func_within_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_fc)
+)
 
-summary(lmer(scale(memory) ~  scale(struct_all) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
-summary(lmer(scale(memory) ~  scale(struct_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
-summary(lmer(scale(memory) ~  scale(struct_within_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
-summary(lmer(scale(memory) ~  scale(struct_within_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
-summary(lmer(scale(memory) ~  scale(struct_within_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
-summary(lmer(scale(memory) ~  scale(struct_within_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
-summary(lmer(scale(memory) ~  scale(struct_within_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
-summary(lmer(scale(memory) ~  scale(struct_all_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
-summary(lmer(scale(memory) ~  scale(struct_all_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
-summary(lmer(scale(memory) ~  scale(struct_all_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
-summary(lmer(scale(memory) ~  scale(struct_all_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
-summary(lmer(scale(memory) ~  scale(struct_all_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct))
+# Function to extract the p-value for the *first predictor* in each model
+get_pval <- function(mod) {
+  s <- summary(mod)
+  as.numeric(coef(s)[2, "Pr(>|t|)"])
+}
 
-summary(lmer(scale(memory) ~  scale(sfc_all) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(memory) ~  scale(sfc_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(memory) ~  scale(sfc_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(memory) ~  scale(sfc_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(memory) ~  scale(sfc_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(memory) ~  scale(sfc_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(memory) ~  scale(sfc_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc))
+pvals <- sapply(func_models, get_pval)
+pvals_fdr <- p.adjust(pvals, method = "fdr")
+
+results_func <- data.frame(
+  pval = pvals,
+  pval_fdr = pvals_fdr,
+  significant_fdr = pvals_fdr < 0.05
+)
+print(results_func)
+
+struct_models <- list(
+  struct_all = lmer(scale(memory) ~ scale(struct_all) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct),
+  struct_Hippocampus = lmer(scale(memory) ~ scale(struct_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct),
+  struct_within_Subcortical = lmer(scale(memory) ~ scale(struct_within_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct),
+  struct_within_Default = lmer(scale(memory) ~ scale(struct_within_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct),
+  struct_within_Frontoparietal = lmer(scale(memory) ~ scale(struct_within_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct),
+  struct_within_VentralAttention = lmer(scale(memory) ~ scale(struct_within_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct),
+  struct_within_DorsalAttention = lmer(scale(memory) ~ scale(struct_within_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_struct)
+)
+
+pvals <- sapply(struct_models, get_pval)
+pvals_fdr <- p.adjust(pvals, method = "fdr")
+
+results_struct <- data.frame(
+  pval = pvals,
+  pval_fdr = pvals_fdr,
+  significant_fdr = pvals_fdr < 0.05
+)
+print(results_struct)
+
+# SFC Models
+sfc_models <- list(
+  sfc_all = lmer(scale(memory) ~ scale(sfc_all) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc),
+  sfc_Hippocampus = lmer(scale(memory) ~ scale(sfc_Hippocampus) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc),
+  sfc_Subcortical = lmer(scale(memory) ~ scale(sfc_Subcortical) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc),
+  sfc_Default = lmer(scale(memory) ~ scale(sfc_Default) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc),
+  sfc_Frontoparietal = lmer(scale(memory) ~ scale(sfc_Frontoparietal) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc),
+  sfc_VentralAttention = lmer(scale(memory) ~ scale(sfc_VentralAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc),
+  sfc_DorsalAttention = lmer(scale(memory) ~ scale(sfc_DorsalAttention) + (1 | id) + age + cohort + sex + YoE, data = long_data_sfc)
+)
+
+pvals <- sapply(sfc_models, get_pval)
+pvals_fdr <- p.adjust(pvals, method = "fdr")
+
+results_sfc <- data.frame(
+  pval = pvals,
+  pval_fdr = pvals_fdr,
+  significant_fdr = pvals_fdr < 0.05
+)
+print(results_sfc)
 
 ## THEN ##
+func_group_models <- list(
+  func_sa <- lmer(scale(func_within_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_fc),
+  func_maint <- lmer(scale(func_within_DorsalAttention) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_fc),
+  func_sa_maint <- lmer(scale(func_within_DorsalAttention) ~ group + (1 | id) + sex + age + YoE, data = long_data_fc_group)
+)
 
-summary(lmer(scale(func_all) ~  superager_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
-summary(lmer(scale(func_within_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
-summary(lmer(scale(func_all_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
-summary(lmer(scale(func_all_DorsalAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
+pvals <- sapply(func_group_models, get_pval)
+pvals_fdr <- p.adjust(pvals, method = "fdr")
 
-summary(lmer(scale(func_all) ~  maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
-summary(lmer(scale(func_within_DorsalAttention) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
-summary(lmer(scale(func_all_VentralAttention) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
-summary(lmer(scale(func_all_DorsalAttention) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_fc))
+results_group_func <- data.frame(
+  pval = pvals,
+  pval_fdr = pvals_fdr,
+  significant_fdr = pvals_fdr < 0.05
+)
+print(results_group_func)
 
-summary(lmer(scale(func_all) ~  group + (1 | id) + sex + age + YoE, data = long_data_fc_group))
-summary(lmer(scale(func_within_DorsalAttention) ~ group + (1 | id) + sex + age + YoE, data = long_data_fc_group))
-summary(lmer(scale(func_all_VentralAttention) ~ group + (1 | id) + sex + age + YoE, data = long_data_fc_group))
-summary(lmer(scale(func_all_DorsalAttention) ~ group + (1 | id) + sex + age + YoE, data = long_data_fc_group))
+struct_group_models <- list(
+  sfc_Hippocampus_superager = lmer(scale(sfc_Hippocampus) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_sfc),
+  sfc_VentralAttention_superager = lmer(scale(sfc_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_sfc),
+  sfc_Hippocampus_maintainer = lmer(scale(sfc_Hippocampus) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_sfc),
+  sfc_VentralAttention_maintainer = lmer(scale(sfc_VentralAttention) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_sfc),
+  sfc_Hippocampus_group = lmer(scale(sfc_Hippocampus) ~ group + (1 | id) + sex + age + YoE, data = long_data_sfc_group),
+  sfc_VentralAttention_group = lmer(scale(sfc_VentralAttention) ~ group + (1 | id) + sex + age + YoE, data = long_data_sfc_group)
+)
 
-summary(lmer(scale(sfc_all) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_Hippocampus) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_VentralAttention) ~ superager_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
+# Calculate and correct
+group_pvals <- sapply(struct_group_models, get_pval)
+group_pvals_fdr <- p.adjust(group_pvals, method = "fdr")
 
-summary(lmer(scale(sfc_all) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_Hippocampus) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_VentralAttention) ~ maintainer_chr + (1 | id) + sex + age + YoE, data = long_data_sfc))
+results_group_struct <- data.frame(
+  pval = group_pvals,
+  pval_fdr = group_pvals_fdr,
+  significant_fdr = group_pvals_fdr < 0.05
+)
 
-summary(lmer(scale(sfc_all) ~ group + (1 | id) + sex + age + YoE, data = long_data_sfc_group))
-summary(lmer(scale(sfc_Hippocampus) ~ group + (1 | id) + sex + age + YoE, data = long_data_sfc_group))
-summary(lmer(scale(sfc_VentralAttention) ~ group + (1 | id) + sex + age + YoE, data = long_data_sfc_group))
+print(results_group_struct)
 
+#######
 # 1) Fit the model
 
 library(ggdist)
@@ -446,88 +490,222 @@ ggplot() +
 
 
 ######## Now look at where superagers / maintainers have different age-related changes in connectivity #####
-summary(lmer(scale(func_all) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
-summary(lmer(scale(func_within_DorsalAttention) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
-summary(lmer(scale(func_Hippocampus) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
-summary(lmer(scale(func_within_Subcortical) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE + cohort, data = long_data_fc))
-summary(lmer(scale(func_within_Default) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE + cohort, data = long_data_fc))
-summary(lmer(scale(func_within_Frontoparietal) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
-summary(lmer(scale(func_within_VentralAttention) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
+# Function to extract the p-value for the *first predictor* in each model
+get_pval_int <- function(mod) {
+  s <- summary(mod)
+  coef_table <- coef(s)
+  last_row <- nrow(coef_table)
+  as.numeric(coef_table[last_row, "Pr(>|t|)"])
+}
 
-summary(lmer(scale(func_all) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
-summary(lmer(scale(func_within_DorsalAttention) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
-summary(lmer(scale(func_Hippocampus) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
+# List of models to fit
+func_maint_models <- list(
+  func_all = lmer(scale(func_all) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc),
+  func_within_DorsalAttention = lmer(scale(func_within_DorsalAttention) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc),
+  func_Hippocampus = lmer(scale(func_Hippocampus) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc),
+  func_within_Subcortical = lmer(scale(func_within_Subcortical) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_fc),
+  func_within_Default = lmer(scale(func_within_Default) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_fc),
+  func_within_Frontoparietal = lmer(scale(func_within_Frontoparietal) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc),
+  func_within_VentralAttention = lmer(scale(func_within_VentralAttention) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc)
+)
 
-summary(lmer(scale(func_within_Subcortical) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
-summary(lmer(scale(func_within_Default) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
-summary(lmer(scale(func_within_Frontoparietal) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
-summary(lmer(scale(func_within_VentralAttention) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_fc))
+# Calculate p-values and apply FDR correction
+func_maint_pvals <- sapply(func_maint_models, get_pval_int)
+func_maint_pvals_fdr <- p.adjust(func_maint_pvals, method = "fdr")
 
-summary(lmer(scale(func_all) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_fc_group))
-summary(lmer(scale(func_within_DorsalAttention) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_fc_group))
-summary(lmer(scale(func_Hippocampus) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_fc_group))
-summary(lmer(scale(func_within_Subcortical) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_fc_group))
-summary(lmer(scale(func_within_Default) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_fc_group))
-summary(lmer(scale(func_within_Frontoparietal) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_fc_group))
-summary(lmer(scale(func_within_VentralAttention) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_fc_group))
+results_func_maint <- data.frame(
+  pval = func_maint_pvals,
+  pval_fdr = func_maint_pvals_fdr,
+  significant_fdr = func_maint_pvals_fdr < 0.05
+)
 
-# Apply FDR correction
-pvals <- c(0.169612, 0.12668, 0.29080, 0.055381, 0.015479, 0.067109, 0.0466)
-pvals_fdr <- p.adjust(pvals, method = "fdr")
-print(pvals_fdr)
+print(results_func_maint)
 
-summary(lmer(scale(struct_all) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
-summary(lmer(scale(struct_Hippocampus) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
-summary(lmer(scale(struct_within_Subcortical) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
-summary(lmer(scale(struct_within_Default) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
-summary(lmer(scale(struct_within_Frontoparietal) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
-summary(lmer(scale(struct_within_VentralAttention) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
-summary(lmer(scale(struct_within_DorsalAttention) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
+# List of models to fit
+func_sa_models <- list(
+  func_all = lmer(scale(func_all) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc),
+  func_within_DorsalAttention = lmer(scale(func_within_DorsalAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc),
+  func_Hippocampus = lmer(scale(func_Hippocampus) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc),
+  func_within_Subcortical = lmer(scale(func_within_Subcortical) ~ superager_chr * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_fc),
+  func_within_Default = lmer(scale(func_within_Default) ~ superager_chr * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_fc),
+  func_within_Frontoparietal = lmer(scale(func_within_Frontoparietal) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc),
+  func_within_VentralAttention = lmer(scale(func_within_VentralAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_fc)
+)
 
-# Apply FDR correction
-pvals <- c(0.002899, 0.01383, 0.00969, 0.011085, 0.006652, 0.04545, 0.02737)
-pvals_fdr <- p.adjust(pvals, method = "fdr")
-print(pvals_fdr)
+# Calculate p-values and apply FDR correction
+func_sa_pvals <- sapply(func_sa_models, get_pval_int)
+func_sa_pvals_fdr <- p.adjust(func_sa_pvals, method = "fdr")
 
-summary(lmer(scale(struct_all) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
-summary(lmer(scale(struct_Hippocampus) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
-summary(lmer(scale(struct_within_Subcortical) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
-summary(lmer(scale(struct_within_Default) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
-summary(lmer(scale(struct_within_Frontoparietal) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
-summary(lmer(scale(struct_within_VentralAttention) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
-summary(lmer(scale(struct_within_DorsalAttention) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_struct))
+results_func_sa <- data.frame(
+  pval = func_sa_pvals,
+  pval_fdr = func_sa_pvals_fdr,
+  significant_fdr = func_sa_pvals_fdr < 0.05
+)
 
-summary(lmer(scale(struct_all) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_struct_group))
-summary(lmer(scale(struct_Hippocampus) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_struct_group))
-summary(lmer(scale(struct_within_Subcortical) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_struct_group))
-summary(lmer(scale(struct_within_Default) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_struct_group))
-summary(lmer(scale(struct_within_Frontoparietal) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_struct_group))
-summary(lmer(scale(struct_within_VentralAttention) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_struct_group))
-summary(lmer(scale(struct_within_DorsalAttention) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_struct_group))
+print(results_func_sa)
 
-summary(lmer(scale(sfc_all) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_Hippocampus) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_Subcortical) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_Default) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_Frontoparietal) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_VentralAttention) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_DorsalAttention) ~ maintainer_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
+# List of models to fit
+func_sa_maint_models <- list(
+  func_all = lmer(scale(func_all) ~ group * scale(age) + (1 | id) + sex + YoE, data = long_data_fc_group),
+  func_within_DorsalAttention = lmer(scale(func_within_DorsalAttention) ~ group * scale(age) + (1 | id) + sex + YoE, data = long_data_fc_group),
+  func_Hippocampus = lmer(scale(func_Hippocampus) ~ group * scale(age) + (1 | id) + sex + YoE, data = long_data_fc_group),
+  func_within_Subcortical = lmer(scale(func_within_Subcortical) ~ group * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_fc_group),
+  func_within_Default = lmer(scale(func_within_Default) ~ group * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_fc_group),
+  func_within_Frontoparietal = lmer(scale(func_within_Frontoparietal) ~ group * scale(age) + (1 | id) + sex + YoE, data = long_data_fc_group),
+  func_within_VentralAttention = lmer(scale(func_within_VentralAttention) ~ group * scale(age) + (1 | id) + sex + YoE, data = long_data_fc_group)
+)
 
-summary(lmer(scale(sfc_all) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_Hippocampus) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_Subcortical) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_Default) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_Frontoparietal) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_VentralAttention) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
-summary(lmer(scale(sfc_DorsalAttention) ~ superager_chr * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc))
+# Calculate p-values and apply FDR correction
+func_sa_maint_pvals <- sapply(func_sa_maint_models, get_pval_int)
+func_sa_maint_pvals_fdr <- p.adjust(func_sa_maint_pvals, method = "fdr")
 
-summary(lmer(scale(sfc_all) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc_group))
-summary(lmer(scale(sfc_Hippocampus) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc_group))
-summary(lmer(scale(sfc_Subcortical) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc_group))
-summary(lmer(scale(sfc_Default) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc_group))
-summary(lmer(scale(sfc_Frontoparietal) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc_group))
-summary(lmer(scale(sfc_VentralAttention) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc_group))
-summary(lmer(scale(sfc_DorsalAttention) ~ group * scale(age) + (1|id)   + sex + YoE, data = long_data_sfc_group))
+results_func_sa_maint <- data.frame(
+  pval = func_sa_maint_pvals,
+  pval_fdr = func_sa_maint_pvals_fdr,
+  significant_fdr = func_sa_maint_pvals_fdr < 0.05
+)
+
+print(results_func_sa_maint)
+
+# Structural now 
+# List of models to fit
+struct_maint_models <- list(
+  struct_all = lmer(scale(struct_all) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_struct),
+  struct_within_DorsalAttention = lmer(scale(struct_within_DorsalAttention) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_struct),
+  struct_Hippocampus = lmer(scale(struct_Hippocampus) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_struct),
+  struct_within_Subcortical = lmer(scale(struct_within_Subcortical) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_struct),
+  struct_within_Default = lmer(scale(struct_within_Default) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_struct),
+  struct_within_Frontoparietal = lmer(scale(struct_within_Frontoparietal) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_struct),
+  struct_within_VentralAttention = lmer(scale(struct_within_VentralAttention) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_struct)
+)
+
+# Calculate p-values and apply FDR correction
+struct_maint_pvals <- sapply(struct_maint_models, get_pval_int)
+struct_maint_pvals_fdr <- p.adjust(struct_maint_pvals, method = "fdr")
+
+results_struct_maint <- data.frame(
+  pval = struct_maint_pvals,
+  pval_fdr = struct_maint_pvals_fdr,
+  significant_fdr = struct_maint_pvals_fdr < 0.05
+)
+
+print(results_struct_maint)
+
+# List of models to fit
+struct_sa_models <- list(
+  struct_all = lmer(scale(struct_all) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_struct),
+  struct_within_DorsalAttention = lmer(scale(struct_within_DorsalAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_struct),
+  struct_Hippocampus = lmer(scale(struct_Hippocampus) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_struct),
+  struct_within_Subcortical = lmer(scale(struct_within_Subcortical) ~ superager_chr * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_struct),
+  struct_within_Default = lmer(scale(struct_within_Default) ~ superager_chr * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_struct),
+  struct_within_Frontoparietal = lmer(scale(struct_within_Frontoparietal) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_struct),
+  struct_within_VentralAttention = lmer(scale(struct_within_VentralAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_struct)
+)
+
+# Calculate p-values and apply FDR correction
+struct_sa_pvals <- sapply(struct_sa_models, get_pval_int)
+struct_sa_pvals_fdr <- p.adjust(struct_sa_pvals, method = "fdr")
+
+results_struct_sa <- data.frame(
+  pval = struct_sa_pvals,
+  pval_fdr = struct_sa_pvals_fdr,
+  significant_fdr = struct_sa_pvals_fdr < 0.05
+)
+
+print(results_struct_sa)
+
+# List of models to fit
+struct_sa_maint_models <- list(
+  struct_all = lmer(scale(struct_all) ~ group * scale(age) + (1 | id) + sex + YoE, data = long_data_struct_group),
+  struct_within_DorsalAttention = lmer(scale(struct_within_DorsalAttention) ~ group * scale(age) + (1 | id) + sex + YoE, data = long_data_struct_group),
+  struct_Hippocampus = lmer(scale(struct_Hippocampus) ~ group * scale(age) + (1 | id) + sex + YoE, data = long_data_struct_group),
+  struct_within_Subcortical = lmer(scale(struct_within_Subcortical) ~ group * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_struct_group),
+  struct_within_Default = lmer(scale(struct_within_Default) ~ group * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_struct_group),
+  struct_within_Frontoparietal = lmer(scale(struct_within_Frontoparietal) ~ group * scale(age) + (1 | id) + sex + YoE, data = long_data_struct_group),
+  struct_within_VentralAttention = lmer(scale(struct_within_VentralAttention) ~ group * scale(age) + (1 | id) + sex + YoE, data = long_data_struct_group)
+)
+
+# Calculate p-values and apply FDR correction
+struct_sa_maint_pvals <- sapply(struct_sa_maint_models, get_pval_int)
+struct_sa_maint_pvals_fdr <- p.adjust(struct_sa_maint_pvals, method = "fdr")
+
+results_struct_sa_maint <- data.frame(
+  pval = struct_sa_maint_pvals,
+  pval_fdr = struct_sa_maint_pvals_fdr,
+  significant_fdr = struct_sa_maint_pvals_fdr < 0.05
+)
+
+print(results_struct_sa_maint)
+
+# SFC 
+# List of models to fit
+sfc_maint_models <- list(
+  sfc_all = lmer(scale(sfc_all) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc),
+  sfc_DorsalAttention = lmer(scale(sfc_DorsalAttention) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc),
+  sfc_Hippocampus = lmer(scale(sfc_Hippocampus) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc),
+  sfc_Subcortical = lmer(scale(sfc_Subcortical) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_sfc),
+  sfc_Default = lmer(scale(sfc_Default) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_sfc),
+  sfc_Frontoparietal = lmer(scale(sfc_Frontoparietal) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc),
+  sfc_VentralAttention = lmer(scale(sfc_VentralAttention) ~ maintainer_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc)
+)
+
+# Calculate p-values and apply FDR correction
+sfc_maint_pvals <- sapply(sfc_maint_models, get_pval_int)
+sfc_maint_pvals_fdr <- p.adjust(sfc_maint_pvals, method = "fdr")
+
+results_sfc_maint <- data.frame(
+  pval = sfc_maint_pvals,
+  pval_fdr = sfc_maint_pvals_fdr,
+  significant_fdr = sfc_maint_pvals_fdr < 0.05
+)
+
+print(results_sfc_maint)
+
+# List of models to fit
+sfc_sa_models <- list(
+  sfc_all = lmer(scale(sfc_all) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc),
+  sfc_DorsalAttention = lmer(scale(sfc_DorsalAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc),
+  sfc_Hippocampus = lmer(scale(sfc_Hippocampus) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc),
+  sfc_Subcortical = lmer(scale(sfc_Subcortical) ~ superager_chr * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_sfc),
+  sfc_Default = lmer(scale(sfc_Default) ~ superager_chr * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_sfc),
+  sfc_Frontoparietal = lmer(scale(sfc_Frontoparietal) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc),
+  sfc_VentralAttention = lmer(scale(sfc_VentralAttention) ~ superager_chr * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc)
+)
+
+# Calculate p-values and apply FDR correction
+sfc_sa_pvals <- sapply(sfc_sa_models, get_pval_int)
+sfc_sa_pvals_fdr <- p.adjust(sfc_sa_pvals, method = "fdr")
+
+results_sfc_sa <- data.frame(
+  pval = sfc_sa_pvals,
+  pval_fdr = sfc_sa_pvals_fdr,
+  significant_fdr = sfc_sa_pvals_fdr < 0.05
+)
+
+print(results_sfc_sa)
+
+# List of models to fit
+sfc_sa_maint_models <- list(
+  sfc_all = lmer(scale(sfc_all) ~ group * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc_group),
+  sfc_DorsalAttention = lmer(scale(sfc_DorsalAttention) ~ group * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc_group),
+  sfc_Hippocampus = lmer(scale(sfc_Hippocampus) ~ group * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc_group),
+  sfc_Subcortical = lmer(scale(sfc_Subcortical) ~ group * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_sfc_group),
+  sfc_Default = lmer(scale(sfc_Default) ~ group * scale(age) + (1 | id) + sex + YoE + cohort, data = long_data_sfc_group),
+  sfc_Frontoparietal = lmer(scale(sfc_Frontoparietal) ~ group * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc_group),
+  sfc_VentralAttention = lmer(scale(sfc_VentralAttention) ~ group * scale(age) + (1 | id) + sex + YoE, data = long_data_sfc_group)
+)
+
+# Calculate p-values and apply FDR correction
+sfc_sa_maint_pvals <- sapply(sfc_sa_maint_models, get_pval_int)
+sfc_sa_maint_pvals_fdr <- p.adjust(sfc_sa_maint_pvals, method = "fdr")
+
+results_sfc_sa_maint <- data.frame(
+  pval = sfc_sa_maint_pvals,
+  pval_fdr = sfc_sa_maint_pvals_fdr,
+  significant_fdr = sfc_sa_maint_pvals_fdr < 0.05
+)
+
+print(results_sfc_sa_maint)
 
 # Center variables
 long_data_fc$func_within_Default_centered = scale(long_data_fc$func_within_Default)
