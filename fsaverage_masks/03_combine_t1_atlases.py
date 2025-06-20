@@ -206,9 +206,12 @@ def main():
             # Get subjects to process
             subjects, already_processed = get_subjects_to_process(output_folder, ses)
 
-            # If cohort is BBHI, filter subject ids to only include those > 6000
+            # Filter subjects by cohort ID
             if cohort == "bbhi":
-                subjects = [subject for subject in subjects if int(subject.split("-")[1]) > 6000]
+                # Keep only subjects whose numeric ID is >= 5000
+                subjects = [subject for subject in subjects if int(subject.split("-")[1]) >= 5000]
+            else:  # cohort == "bbhi senior"
+                subjects = [subject for subject in subjects if int(subject.split("-")[1]) < 5000]
             
             print(f"Number of subjects to process: {len(subjects)}")
             print(f"Number of subjects already processed: {len(already_processed)}")

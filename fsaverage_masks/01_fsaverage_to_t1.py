@@ -43,9 +43,9 @@ def get_subjects_to_process(reconall_dir, out_dir, ses, cohort):
     valid_ids = None
     if cohort == 'bbhi':
         if ses == 'ses-02':
-            # This has IDs for tp1 that dont have tp2 data
             df_bbhi = pd.read_csv('/home/rachel/Desktop/data/clean_bbhi.csv')
         else:
+            # This has IDs for tp1 that dont have tp2 data
             df_bbhi = pd.read_csv('/home/rachel/Desktop/data/bbhi_ids_tp1.csv')
 
         # Convert ID column to string in case file has numeric IDs
@@ -115,8 +115,6 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
             logger.error("Please download these files manually and place them in the fsaverage_masks directory")
             return False
             
-        logger.info(f"Processing subject: {subject_id}")
-
         lh_annotation = output_folder / f"lh.Schaefer2018_200Parcels_7Networks_order.annot"
         rh_annotation = output_folder / f"rh.Schaefer2018_200Parcels_7Networks_order.annot"
         

@@ -233,6 +233,15 @@ def main():
                 # Create the output directory if it doesn't exist
                 os.makedirs(output_folder_sub, exist_ok=True)
 
+                # Convert subject to a numeric ID to be able to filter based on cohort
+                numeric_id = int(subject.split('-')[1])
+                
+                # If current cohort is "bbhi" but numeric_id < 5000, skip it (because the pattern does not match)
+                if cohort == "bbhi" and numeric_id < 5000:
+                    continue
+                if cohort == "bbhi senior" and numeric_id > 5000:
+                    continue
+
                 # Set paths based on cohort
                 if cohort == "bbhi":
                     # BBHI paths

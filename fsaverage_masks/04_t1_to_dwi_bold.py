@@ -89,14 +89,16 @@ def get_subjects_to_process(dwi_bbhi_dir, dwi_bbhi_senior_dir, out_dir, ses, coh
         if not has_atlas:
             missing_files.append(subject)
             print(f"Subject {subject} missing atlas file")
-        elif not has_eddy or not has_bold:
+        elif not has_eddy and not has_bold:
             missing_files.append(subject)
             print(f"Subject {subject} missing both eddy and BOLD data")
-            print(f"{bold_data} or {eddy_corrected} not found")
+            print(f"{bold_data} and {eddy_corrected} not found")
         elif not has_eddy:
             print(f"Subject {subject} missing eddy data")
+            print(f"{eddy_corrected}")
         elif not has_bold:
             print(f"Subject {subject} missing BOLD data")
+            print(f"{bold_data}")
 
     print(f"Subjects already with DWI mask: {len(already_processed_dwi)}")
     print(f"Subjects already with BOLD mask: {len(already_processed_bold)}")
@@ -390,8 +392,8 @@ def main():
             if failed_bold:
                 print(f"Failed BOLD subjects: {failed_bold}")
 
-            # Return both result lists
-            return result_dwi, result_bold
+    # Return both result lists
+    return result_dwi, result_bold
 
 if __name__ == "__main__":
     main()
