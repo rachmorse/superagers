@@ -10,12 +10,35 @@ library(broom.mixed)
 
 # Read and prepare the data
 data <- read.csv("~/Documents/2023:2024/Data/Exported data/clean_data_all.csv")
+sys_1 <- read.csv("~/Documents/2023:2024/Data/Exported data/globalSyS_ses-01.csv")
+sys_2 <- read.csv("~/Documents/2023:2024/Data/Exported data/globalSyS_ses-02.csv")
 
 # Extract numeric id
 data$id <- as.numeric(sub("sub-", "", data$id))
 
 # Create cohort variable
 data$cohort <- ifelse(data$id > 5000, "bbhi", "bbhi_senior")
+
+sys_1 <- sys_1 %>% 
+  rename(
+    sys_v1_1 = gSyS_v1,
+    sys_v2_1 = gSyS_v2,
+    id = id_user
+  ) %>% 
+  mutate(id = as.numeric(gsub("sub-", "", id)))
+
+sys_2 <- sys_2 %>% 
+  rename(
+    sys_v1_2 = gSyS_v1,
+    sys_v2_2 = gSyS_v2,
+    id = id_user
+  ) %>% 
+  mutate(id = as.numeric(gsub("sub-", "", id)))
+
+# Merge the clean dfs
+data <- data %>% 
+  full_join(sys_1, by = "id") %>% 
+  full_join(sys_2, by = "id") 
 
 # Pivot data from wide to long
 long_data <- data %>%
@@ -135,6 +158,14 @@ long_data_struct <- long_data %>%
 
 long_data_sfc <- long_data %>% 
   filter(!is.na(sfc_all_slopes) & !is.na(memory_slopes))
+
+long_data_sys <- long_data %>%
+  filter(!is.na(sys_v1)) %>% 
+  group_by(id) %>%
+  mutate(non_na_sys = sum(!is.na(sys_v1))) %>%
+  filter(non_na_sys >= 2) %>%
+  ungroup() %>%
+  select(-non_na_sys)
 
 long_data_fc_group <- long_data %>% 
   filter(!is.na(func_all_slopes) & !is.na(memory_slopes) & !is.na(group))
@@ -999,7 +1030,6 @@ ggplot() +
   theme_minimal() +
   theme(legend.position.inside = c(0.8, 0.94))
 
-install.packages("interactions")
 library(interactions)
 
 # Fit model
@@ -1045,3 +1075,90 @@ sim_slopes(func_dmn,
            pred = "scale(func_within_Default)", 
            modx = "group",
            plot = FALSE)
+
+
+#######SYS 
+summary(lmer(scale(memory) ~  scale(sys_v1) * superager_chr + (1 | id) + age + cohort + sex + YoE, data = long_data_sys))
+summary(lmer(scale(memory) ~  scale(sys_v2) * superager_chr + (1 | id) + age + cohort + sex + YoE, data = long_data_sys))
+
+summary(lmer(scale(memory) ~  scale(sys_v1) * maintainer_chr + (1 | id) + age + cohort + sex + YoE, data = long_data_sys))
+summary(lmer(scale(memory) ~  scale(sys_v2) * maintainer_chr + (1 | id) + age + cohort + sex + YoE, data = long_data_sys))
+
+summary(lmer(scale(memory) ~  scale(sys_v1) + (1 | id) + age + cohort + sex + YoE, data = long_data_sys))
+summary(lmer(scale(memory) ~  scale(sys_v2) + (1 | id) + age + cohort + sex + YoE, data = long_data_sys))
+
+summary(lmer(scale(sys_v1) ~  scale(age) * superager_chr + (1 | id) + cohort + sex + YoE, data = long_data_sys))
+summary(lmer(scale(sys_v2) ~  scale(age) * superager_chr + (1 | id) + cohort + sex + YoE, data = long_data_sys))
+
+summary(lmer(scale(sys_v1) ~  scale(age) * maintainer_chr + (1 | id) + cohort + sex + YoE, data = long_data_sys))
+summary(lmer(scale(sys_v2) ~  scale(age) * maintainer_chr + (1 | id) + cohort + sex + YoE, data = long_data_sys))
+
+summary(lmer(scale(sys_v1) ~  superager_chr + (1 | id) + age + cohort + sex + YoE, data = long_data_sys))
+summary(lmer(scale(sys_v2) ~  superager_chr + (1 | id) + age + cohort + sex + YoE, data = long_data_sys))
+
+summary(lmer(scale(sys_v1) ~  maintainer_chr + (1 | id) + age + cohort + sex + YoE, data = long_data_sys))
+summary(lmer(scale(sys_v2) ~  maintainer_chr + (1 | id) + age + cohort + sex + YoE, data = long_data_sys))
+
+# Center variables
+long_data_sys$memory_centered = scale(long_data_sys$memory)
+long_data_sys$sys_v1_centered = scale(long_data_sys$sys_v1)
+
+# 1) Fit the model
+sys <- lmer(memory_centered ~  sys_v1_centered * maintainer_chr + (1 | id) + age + cohort + sex + YoE, data = long_data_sys)
+summary(sys)
+
+sys_seq <- seq(
+  from = min(long_data_sys$sys_v1_centered, na.rm = TRUE),
+  to   = max(long_data_sys$sys_v1_centered, na.rm = TRUE),
+  length.out = 100
+)
+
+# 3) Use emmeans to get marginal predictions for each superager_factor × sfc_all_centered
+em_2group <- emmeans(
+  sys, 
+  specs = ~ factor(maintainer_chr) * sys_v1_centered,
+  at    = list(sys_v1_centered = sys_seq),
+  reff  = 0 # set reff = 0 to ignore random effects (similar to re.form = NA).
+)
+
+# 4) Convert the emmeans results to a data frame and rename columns
+predictions <- summary(em_2group) %>% 
+  as.data.frame() %>% 
+  rename(
+    predicted   = emmean,
+    lower_bound = lower.CL,
+    upper_bound = upper.CL
+  ) %>% 
+  mutate(sys_v1_centered = as.numeric(sys_v1_centered))  # Convert from factor if needed
+
+# Define colors for each group
+palette_1 <- c("maintainer" = "#60B5FF", "decliner" = "pink")
+
+# Create the two-group plot
+ggplot() +
+  geom_line(
+    data = long_data_sys, 
+    aes(x = sys_v1_centered, y = memory_centered, group = id), 
+    color = "lightgray", alpha = 0.5
+  ) +  # Plot individual trajectories
+  geom_point(
+    data = long_data_sys, 
+    aes(x = sys_v1_centered, y = memory_centered), 
+    color = "gray", size = 1
+  ) +  # Add scatter points
+  geom_ribbon(
+    data = predictions, 
+    aes(x = sys_v1_centered, ymin = lower_bound, ymax = upper_bound, 
+        fill = factor(maintainer_chr)), 
+    alpha = 0.3
+  ) +  # Add CIs
+  geom_line(
+    data = predictions, 
+    aes(x = sys_v1_centered, y = predicted, color = factor(maintainer_chr)), 
+    size = 1.2
+  ) +  # Plot predicted lines
+  scale_color_manual(values = palette_1) +
+  scale_fill_manual(values = palette_1) +  # Match line & fill colors
+  labs(x = "sys_v1_centered", y = "memory_centered", color = "Group", fill = "Group") +
+  theme_minimal() +
+  theme(legend.position.inside = c(0.8, 0.94))
