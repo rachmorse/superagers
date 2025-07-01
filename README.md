@@ -17,6 +17,7 @@ This repository contains the analysis scripts for our study on superagers, which
 ### classification
 - **Purpose:** These scripts clean the data from the BBHI and BBHI senior cohorts to be able to merge the relevant data, then classify participants as superagers or non-superagers and as maintainers or decliners. 
 - **Scripts:**
+    - `check_invalid_nps`: Prepares BBHI and BBHI senior raw data, filtering for those with comments about their neuropsychological data. It saves the comments, so they can be read manually to exclude subjects with invalid data. 
     - `cleaning_bbhi_data.ipynb`: Cleans BBHI data for merge.
     - `cleaning_bbhi_senior_data.ipynb`: Cleans BBHI senior data for merge.
     - `superager_classification.ipynb`: Classifies participants as superagers or non-superagers using modified [Sun et al. (2016)](https://pubmed.ncbi.nlm.nih.gov/27629716/) criteria:
