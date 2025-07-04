@@ -1902,6 +1902,23 @@ files = [
 traitlets = "*"
 
 [[package]]
+name = "merf"
+version = "1.0"
+description = "Mixed Effects Random Forest"
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "merf-1.0-py3-none-any.whl", hash = "sha256:80df116410628469166011107f722d278ae4ba1fde2987c95b822af327f609b0"},
+    {file = "merf-1.0.tar.gz", hash = "sha256:40515c519e904b610ea62cc19f5d716d216389a707dbc0eb2f51dbfcfa5ced1e"},
+]
+
+[package.dependencies]
+matplotlib = ">=3.0"
+numpy = "*"
+pandas = ">=1.0"
+scikit-learn = "*"
+
+[[package]]
 name = "mistune"
 version = "3.1.0"
 description = "A sane and fast Markdown parser with useful plugins and renderers"
@@ -3986,4 +4003,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10"
-content-hash = "5ca21e6c864b76682ba6dd2ba14442468b86c04a32efc8d3b02cb555887edf9c"
+content-hash = "53076efa8a8d5212d1d45772e1cf4369e4568306694fe6e92c7197b1738bd4a8"

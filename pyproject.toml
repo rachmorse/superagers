@@ -18,6 +18,7 @@ openpyxl = "^3.1.5"
 seaborn = "^0.13.2"
 statsmodels = "^0.14.4"
 nipype = "^1.10.0"
+merf = "^1.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=6,<7"
