@@ -315,7 +315,18 @@ def main():
     # Fiter the cohort 
     # df_long = df_long[df_long["superager"] == 1].copy()
     
-    feature_cols = ["age", "sex", "edu", "cohort", "memory_1"] + [c for c in df_long.columns if c.startswith("roi_")]
+    # feature_cols = ["age", "sex", "edu", "cohort", "memory_1"] + [c for c in df_long.columns if c.startswith("roi_")]
+    feature_cols = ["age", "sex", 'edu', 'cohort', 'roi_LH_Cont_OFC', 'roi_RH_Limbic_OFC', 
+                    'Subcortical 202: Left Amygdala', 'roi_LH_Limbic_TempPole', 'roi_RH_Cont_PFCv', 
+                    'roi_RH_Default_PFCv', 'roi_LH_DorsAttn_PrCv', 'roi_LH_SalVentAttn_PFCl', 
+                    'roi_RH_SalVentAttn_FrOperIns', 'roi_LH_Cont_pCun', 'roi_LH_Cont_Temp', 
+                    'roi_RH_Default_Par', 'roi_LH_Cont_Cing', 'roi_LH_Limbic_OFC', 
+                    'roi_LH_Default_PHC', 'roi_LH_Default_PFC', 'Subcortical 208: Right Hippocampus', 
+                    'Subcortical 201: Left Hippocampus', 'Subcortical 210: Right Pallidum', 'roi_RH_Cont_Par', 
+                    'roi_RH_Cont_pCun', 'Subcortical 213: Right Accumbens', 'roi_RH_Cont_PFCmp', 'roi_LH_DorsAttn_FEF', 
+                    'roi_LH_SalVentAttn_ParOper', 'roi_RH_SalVentAttn_PrC', 'Subcortical 206: Left Accumbens',
+                    'Subcortical 204: Left Putamen', 'Subcortical 207: Left Thalamus', 'roi_LH_Default_Par',
+                    'Subcortical 209: Right Amygdala', 'roi_RH_SalVentAttn_Med', 'Subcortical 214: Right Thalamus', 'roi_RH_Cont_Temp']
 
     # One fit + importance
     merf_model, imp, y, y_hat, delta_r2 = fit_merf_once(df_long, feature_cols)
