@@ -403,6 +403,7 @@ def main():
             output_path = ses_path / f"{sub}_{ses}_structure_function_coupling_grouped.csv"
             if csv_path.is_file():
                 save_grouped_roi_averages(csv_path, output_path)
+                
 
     # Prepare the data for analysis
     X_t1, X_t2, y_t1, y_t2, X_slope, y_slope, age_diff, final_subjects = prep_data(
@@ -411,6 +412,19 @@ def main():
     # Map feature indices back to ROI names 
     roi_names_path = root_path / "ses-01" / "individual_coupling_matrices" / f"{subjects[0]}_ses-01_structure_function_coupling_grouped.csv"
     roi_names = pd.read_csv(roi_names_path)['ROI_name'].tolist()
+
+    # Save the data as CSV
+    out_file_1 = Path(f"/home/rachel/Desktop/data/grouped_{connectivity_type}_ses-01.csv")
+    out_file_2 = Path(f"/home/rachel/Desktop/data/grouped_{connectivity_type}_ses-02.csv")
+
+    df_t1 = pd.DataFrame(X_t1, columns=roi_names)
+    df_t1.insert(0, "id", final_subjects)         # add subject IDs
+    df_t1.to_csv(out_file_1, index=False)         # save with headers
+
+    X_t2 = np.array(X_t2)
+    df_t2 = pd.DataFrame(X_t2, columns=roi_names)
+    df_t2.insert(0, "id", final_subjects)
+    df_t2.to_csv(out_file_2, index=False)
 
     # Convert sex and cohort to numeric
     memory_data["sex"] = memory_data["sex"].map({"male": 0, "female": 1})
@@ -483,12 +497,12 @@ def main():
     # Build the formula 
     roi_cols = [c for c in df_subj.columns if c.endswith("_slope") and c != "memory_slope"]
     roi_terms = " + ".join(roi_cols)
-    int_terms  = " + ".join(f"Group_SA:{r}" for r in roi_cols)
+    int_terms  = " + ".join(f"Group_maint:{r}" for r in roi_cols)
     demo_vars = ["age_1", "sex", "YoE"] 
     demo_terms = " + ".join(demo_vars)
 
     formula = (
-        f"memory_slope ~ Group_SA + {roi_terms} + {int_terms} + {demo_terms}"
+        f"memory_slope ~ Group_maint + {roi_terms} + {int_terms} + {demo_terms}"
     )
     print(formula)
 
@@ -500,21 +514,25 @@ def main():
     overlap_rois = sorted(set(stable_rois_t1) & set(stable_rois_t2))
     print(f"ROIs stable at both waves ({len(overlap_rois)}):", overlap_rois)
 
-        # Build + scale + sanitise 
+    # Build + scale + sanitise 
     df_long, name_map = make_long_df(X_t1, X_t2, y_t1, y_t2, 
                                     subjects, superager_vec, maintainer_vec, overlap_rois)   
-    print(f"Long DataFrame: {df_long.columns}")
-    # Build the model 
-    roi_cols  = [c for c in df_long.columns
-             if c not in ["y", "id", "time", "Group_SA", "Group_maint"]]
-    roi_terms = " + ".join(roi_cols)
-    int_terms = " + ".join(f"Group_SA:{r}" for r in roi_cols)
-    formula_lme = f"y ~ Group_SA * time + {roi_terms} + {int_terms}"
-    print("LME formula:\n", formula_lme)
 
-    # Run the model 
-    lme = smf.mixedlm(formula_lme, data=df_long, groups="id")      # (1 | id)
-    fit = lme.fit(method="lbfgs")                                   # fast optimiser
+    # Build the model 
+    roi_cols = [
+        c for c in df_long.columns
+        if c not in ["y", "id", "time", "Group_SA", "Group_maint"]
+    ]
+    if roi_cols:
+        roi_terms = " + ".join(roi_cols)
+        int_terms = " + ".join(f"Group_maint:{r}" for r in roi_cols)
+        formula_lme = f"y ~ Group_maint * time + {roi_terms} + {int_terms}"
+    else:
+        formula_lme = "y ~ Group_maint * time"  # no ROI terms
+
+    print("LME formula:\n", formula_lme)
+    lme = smf.mixedlm(formula_lme, data=df_long, groups="id")
+    fit = lme.fit(method="lbfgs")
     print(fit.summary())
 
 if __name__ == "__main__":
