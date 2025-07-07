@@ -34,6 +34,33 @@ def get_subjects_to_process(output_folder, ses):
 
     return subjects
 
+def flatten_connectivity_csv(matrix_csv, measure_col="pearson_rho"):
+    """
+    Reads an NxN connectivity CSV (214×214) and flattens it into a long DataFrame,
+    returning columns: ROI_name, measure_col.
+
+    Args:
+        matrix_csv (str or Path): Path to the NxN CSV.
+        measure_col (str): Name for the connectivity measure (e.g. "sc_value", "fc_value").
+
+    Returns:
+        pd.DataFrame with columns ["ROI_name", measure_col].
+    """
+    # Read the NxN matrix 
+    df_matrix = pd.read_csv(matrix_csv, header=0, index_col=0)
+    roi_list = df_matrix.index.tolist()  # ROI names
+
+    # Compute the mean connectivity for each ROI (row-wise mean)
+    avg_conn = df_matrix.mean(axis=1).values
+
+    # Build the output DataFrame
+    df_out = pd.DataFrame({
+        "ROI_name": roi_list,
+        measure_col: avg_conn
+    })
+
+    return df_out
+
 def save_grouped_roi_averages(csv_path, output_path):
     """
     Reads a subject's SFC CSV, groups by ROI prefix, 
@@ -382,7 +409,7 @@ def build_wide_df(
     return df_subj
 
 def main():
-    connectivity_type = "SFC"  # Options: "SFC", "FC", "SC"
+    connectivity_type = "SC"  # Options: "SFC", "FC", "SC"
     sessions = ["ses-01", "ses-02"] 
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
@@ -395,6 +422,44 @@ def main():
     subjects = sorted(set(subjects_tp1) & set(subjects_tp2))
     print(f"Subjects: {len(subjects)}")
 
+    # Make the flattened FC and SC CSVs for each subject
+    for sub in subjects:
+        for ses in sessions:
+            ses_path_fc = fc_root_path / ses / "individual_connectivity_matrices"
+            ses_path_sc = sc_root_path / ses / "individual_connectivity_matrices"
+
+            # ── Functional connectivity ──
+            fc_csv = ses_path_fc / f"{sub}_{ses}_functional_connectivity_matrix.csv"
+            if fc_csv.is_file():
+                fc_flat = flatten_connectivity_csv(fc_csv, measure_col="pearson_rho")
+
+                fc_output_dir = ses_path_fc / "grouped_rois"
+                fc_output_dir.mkdir(parents=True, exist_ok=True)  # Ensure dir exists
+
+                fc_output = fc_output_dir / f"{sub}_{ses}_functional_connectivity_flat.csv"
+                fc_flat.to_csv(fc_output, index=False)  # (Optional) Save the flattened version
+
+                # Group the flattened CSV by ROI
+                grouped_output = fc_output_dir / f"{sub}_{ses}_functional_connectivity_grouped.csv"
+                save_grouped_roi_averages(fc_output, grouped_output)
+
+            # ── Structural connectivity ──
+            sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix.csv"
+            if sc_csv.is_file():
+                sc_flat = flatten_connectivity_csv(sc_csv, measure_col="pearson_rho")
+
+                sc_output_dir = ses_path_sc / "grouped_rois"
+                sc_output_dir.mkdir(parents=True, exist_ok=True)  # Ensure dir exists
+
+                sc_output = sc_output_dir / f"{sub}_{ses}_structural_connectivity_flat.csv"
+                sc_flat.to_csv(sc_output, index=False)  # (Optional) Save the flattened version
+
+                # Group the flattened CSV by ROI
+                grouped_output = sc_output_dir / f"{sub}_{ses}_structural_connectivity_grouped.csv"
+                save_grouped_roi_averages(sc_output, grouped_output)
+            else:
+                print(f"Missing SC CSV at path: {sc_csv}")
+
     # Make the grouped averages for each subject's SFC CSV
     for sub in subjects:
         for ses in sessions:
@@ -404,7 +469,6 @@ def main():
             if csv_path.is_file():
                 save_grouped_roi_averages(csv_path, output_path)
                 
-
     # Prepare the data for analysis
     X_t1, X_t2, y_t1, y_t2, X_slope, y_slope, age_diff, final_subjects = prep_data(
         subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type)
