@@ -188,7 +188,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
 def bootstrap_stability_enet(
         X, y, roi_names,
         demographic_X=None,              
-        stab_threshold=0.75,         
+        stab_threshold=0.80,         
         n_boot=500,
         random_state=42,
         l1_grid=(0.1, 0.5, 0.9),
@@ -201,7 +201,7 @@ def bootstrap_stability_enet(
         X (np.ndarray): Feature matrix of averaged feature values for SFC.
         y (np.ndarray): Target variable (e.g. memory scores).
         roi_names (list): List of ROI names corresponding to features in X.
-        stab_threshold (float): Threshold for stability selection (default 0.75).
+        stab_threshold (float): Threshold for stability selection (default 0.80).
         n_boot (int): Number of bootstrap iterations (default 500).
         random_state (int): Random seed for reproducibility.
         l1_grid (tuple): Tuple of l1_ratio values to test in ElasticNetCV
@@ -552,49 +552,51 @@ def main():
             X_t1, y_t1,
             roi_names=roi_names,
             demographic_X=demographic_cols,
-            stab_threshold=0.75,
+            stab_threshold=0.80,
             n_boot=500,
             random_state=42)
 
-    print("\nStable ROIs (≥ 75 %):")
-    print(stab_t1[stab_t1 >= 0.75].apply(lambda x: f"{x:.2%}"))
+    print("\nStable ROIs (≥ 80 %):")
+    print(stab_t1[stab_t1 >= 0.80].apply(lambda x: f"{x:.2%}"))
 
     # Save the stable ROI names
-    stable_rois_t1 = stab_t1[stab_t1 >= 0.75].index.tolist()
+    stable_rois_t1 = stab_t1[stab_t1 >= 0.80].index.tolist()
 
     # 2) Stability analysis for Time 2
     stab_t2 = bootstrap_stability_enet(
             X_t2, y_t2,
             roi_names=roi_names,
             demographic_X=demographic_cols,
-            stab_threshold=0.75,
+            stab_threshold=0.80,
             n_boot=500,
             random_state=42)
 
-    print("\nStable ROIs (≥ 75 %):")
-    print(stab_t2[stab_t2 >= 0.75].apply(lambda x: f"{x:.2%}"))
+    print("\nStable ROIs (≥ 80 %):")
+    print(stab_t2[stab_t2 >= 0.80].apply(lambda x: f"{x:.2%}"))
 
     # Save the stable ROI names
-    stable_rois_t2 = stab_t2[stab_t2 >= 0.75].index.tolist()
+    stable_rois_t2 = stab_t2[stab_t2 >= 0.80].index.tolist()
 
     # 3) Stability analysis for slope
     stab_long = bootstrap_stability_enet(
             X_slope, y_slope,
             roi_names=roi_names,
             demographic_X=demographic_cols,
-            stab_threshold=0.75,
+            stab_threshold=0.80,
             n_boot=500,
             random_state=42)
 
-    print("\nStable ROIs (≥ 75 %):")
-    print(stab_long[stab_long >= 0.75].apply(lambda x: f"{x:.2%}"))
+    print("\nStable ROIs (≥ 80 %):")
+    print(stab_long[stab_long >= 0.80].apply(lambda x: f"{x:.2%}"))
 
     # Save the stable ROI names
-    stable_rois_long = stab_long[stab_long >= 0.75].index.tolist()
+    stable_rois_long = stab_long[stab_long >= 0.80].index.tolist()
 
     # Generate a list of ROIs important at t1, t2, AND slope
     stable_rois = list(set(stable_rois_t1) & set(stable_rois_t2) & set(stable_rois_long))
+    stable_rois_cs = list(set(stable_rois_t1) & set(stable_rois_t2))
     print(f"Stable ROIs across all analyses: {stable_rois}")
+    print(f"Stable ROIs cross-sectional: {stable_rois_cs}")
 
     # 2) Build the long DataFrame (make sure superager_vec is defined for each subject)
     superager_vec = memory_data.set_index("id").loc[final_subjects, "superager"].values
