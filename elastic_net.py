@@ -248,6 +248,56 @@ def bootstrap_stability_enet(
     if n_stable:
         print(f"  • Median |coef|    : {med_abs_coef:.4f}")
 
+    rows = []
+    for j, roi in enumerate(roi_names):
+        sel_mask = coefs[:, j] != 0
+        p_select = sel_mask.mean()           # same as stab[j]
+        if p_select < stab_threshold:
+            continue                         # skip unstable ROIs
+
+        # unconditional median & sign-consistency (optional)
+        med_all   = np.median(coefs[:, j])
+        signs     = np.sign(coefs[sel_mask, j])
+        sign_cons = (signs == 1).sum() - (signs == -1).sum()
+        sign_cons /= (signs.size or 1)
+
+        # **conditional** (non-zero) bootstrap CI & median
+        nonzero_coefs = coefs[sel_mask, j]
+        med_nz   = np.median(nonzero_coefs)
+        ci_low, ci_high = np.percentile(nonzero_coefs, [2.5, 97.5])
+
+        # determine direction now that CI no longer includes the zeros
+        if ci_low > 0:
+            direction = 'positive'
+        elif ci_high < 0:
+            direction = 'negative'
+        else:
+            direction = 'uncertain'
+
+        rows.append({
+            'ROI'            : roi,
+            'stab'           : p_select,
+            'sign_consist'   : sign_cons,
+            'med_coef_all'   : med_all,
+            'med_coef_sel'   : med_nz,
+            'ci_low_sel'     : ci_low,
+            'ci_high_sel'    : ci_high,
+            'direction'      : direction
+        })
+
+    stable_df = pd.DataFrame(rows).sort_values('stab', ascending=False)
+
+    print(f"\nStable ROIs (stab ≥ {stab_threshold}):")
+    if stable_df.empty:
+        print("  (none)")
+    else:
+        for _, r in stable_df.iterrows():
+            print(f"  • {r.ROI:<25} "
+                f"stab={r.stab:.2f}   "
+                f"β̃_sel={r.med_coef_sel:+.3f}   "
+                f"CI_sel=[{r.ci_low_sel:+.3f},{r.ci_high_sel:+.3f}]   "
+                f"dir={r.direction}")
+
     # Use this to estimate the role of just the demographics
     if demographic_X is not None:
         kf = KFold(n_splits=5, shuffle=True, random_state=random_state)
@@ -409,7 +459,7 @@ def build_wide_df(
     return df_subj
 
 def main():
-    connectivity_type = "SC"  # Options: "SFC", "FC", "SC"
+    connectivity_type = "SFC"  # Options: "SFC", "FC", "SC"
     sessions = ["ses-01", "ses-02"] 
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
