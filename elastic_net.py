@@ -223,12 +223,12 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
     age_diff = (df['age2'] - df['age1']).values
 
     # Elastic Net requires scaled features (not outputs)
-    # 2) Scale features only
+    # Scale the features just before running the analysis
     scaler = StandardScaler()
     X_t1 = scaler.fit_transform(X_t1)
-    X_t2 = scaler.transform(X_t2)
+    X_t2 = scaler.fit_transform(X_t2)
     X_slope = (X_t2 - X_t1) / age_diff[:, None]
-    X_slope = scaler.transform(X_slope)
+    X_slope = scaler.fit_transform(X_slope)
 
     # 3) Practice-effect residualization
     y_t1 = df['y1'].values
@@ -270,7 +270,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
     return X_t1, X_t2, y_t1, y_t2, X_slope, y_slope, age_diff, superager_vec, y_t1_resid, y_t2_adj_resid, y_slope_adj_resid, X_all
 
 def bootstrap_stability_enet(
-        X, y, roi_names, connectivity_type,
+        X, y, roi_names, connectivity_type, timepoint,
         stab_threshold=0.80,         
         n_boot=500,
         random_state=42,
@@ -284,6 +284,8 @@ def bootstrap_stability_enet(
         X (np.ndarray): Feature matrix of averaged feature values for connectivity.
         y (np.ndarray): Target variable (e.g. memory scores).
         roi_names (list): List of ROI names corresponding to features in X.
+        connectivity_type (str): Type of connectivity data (e.g. "SFC", "FC", "SC").
+        timepoint (str): Timepoint of the data being processed (e.g. "tp1", "tp2", "slope").
         stab_threshold (float): Threshold for stability selection (default 0.80).
         n_boot (int): Number of bootstrap iterations (default 500).
         random_state (int): Random seed for reproducibility.
@@ -306,7 +308,7 @@ def bootstrap_stability_enet(
             l1_ratio=l1_grid,
             alphas=alpha_grid,
             cv=5,
-            max_iter=10000,
+            max_iter=5000,
             n_jobs      = 8, # Parallelization
             random_state=rng.integers(1e9)
         ).fit(X_b, y_b)
@@ -324,7 +326,7 @@ def bootstrap_stability_enet(
     med_abs_coef = np.median(np.abs(coefs[:, stable_mask])
                     if n_stable else np.nan)
     
-    print(f"\nStability-selection summary for {connectivity_type} (threshold ≥ {stab_threshold:.2f})")
+    print(f"\nStability-selection summary for {connectivity_type} for {timepoint} (threshold ≥ {stab_threshold:.2f})")
     print(f"  • Stable ROIs      : {n_stable} / {p}")
 
     rows = []
@@ -392,7 +394,7 @@ def bootstrap_stability_enet(
             l1_ratio   = l1_grid,
             alphas     = alpha_grid,
             cv         = 5,
-            max_iter   = 10000,
+            max_iter   = 5000,
             n_jobs     = 8,  # Parallelization
             random_state=random_state
         )
@@ -416,7 +418,8 @@ def bootstrap_stability_enet(
     return stab_series
 
 def main():
-    connectivity_type = "all"  # Options: "SFC", "FC", "SC", "all"
+    # Just a note that running all may lead to problems with colinearity
+    connectivity_type = "SFC"  # Options: "SFC", "FC", "SC", "all"
     sessions = ["ses-01", "ses-02"] 
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
@@ -506,6 +509,7 @@ def main():
             X_t1, y_t1_resid, 
             roi_names=roi_names, 
             connectivity_type=connectivity_type,
+            timepoint="tp1",
             stab_threshold=0.80,
             n_boot=500,
             random_state=42)
@@ -515,6 +519,7 @@ def main():
             X_t2, y_t2_adj_resid,
             roi_names=roi_names,
             connectivity_type=connectivity_type,
+            timepoint="tp2",
             stab_threshold=0.80,
             n_boot=500,
             random_state=42)
@@ -524,6 +529,7 @@ def main():
             X_slope, y_slope_adj_resid,
             roi_names=roi_names,
             connectivity_type=connectivity_type,
+            timepoint="slope",
             stab_threshold=0.80,
             n_boot=500,
             random_state=42)
