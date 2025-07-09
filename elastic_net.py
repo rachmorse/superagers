@@ -260,6 +260,8 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
     y_t1_resid        = y_t1         - lr1.predict(covs_t1)
     y_t2_adj_resid    = y_t2_adj     - lr2.predict(covs_t2)
     y_slope_adj_resid = y_slope_adj  - lrs.predict(covs_slope)
+    y_t2_resid        = y_t2         - lr2.predict(covs_t2)
+    y_slope_resid     = y_slope      - lrs.predict(covs_slope)
 
     # 6) Make a superager vector 
     superager_vec = df['superager'].values.astype(int)
@@ -267,10 +269,11 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
     # 7) generate a stacked version of tp1 and tp2 features
     X_all = np.hstack([X_t1, X_t2, X_slope])   # shape: (N_subjects, 2 * len(roi_names))
 
-    return X_t1, X_t2, y_t1, y_t2, X_slope, y_slope, age_diff, superager_vec, y_t1_resid, y_t2_adj_resid, y_slope_adj_resid, X_all
+    return X_t1, X_t2, y_t1, y_t2, X_slope, y_slope, age_diff, superager_vec, y_t1_resid, y_t2_adj_resid, y_slope_adj_resid, y_t2_resid, y_slope_resid, X_all
 
 def bootstrap_stability_enet(
-        X, y, roi_names, connectivity_type, timepoint,
+        X, y, roi_names, connectivity_type, timepoint, 
+        max_iter=5000,
         stab_threshold=0.80,         
         n_boot=500,
         random_state=42,
@@ -308,7 +311,7 @@ def bootstrap_stability_enet(
             l1_ratio=l1_grid,
             alphas=alpha_grid,
             cv=5,
-            max_iter=5000,
+            max_iter=max_iter,
             n_jobs      = 8, # Parallelization
             random_state=rng.integers(1e9)
         ).fit(X_b, y_b)
@@ -394,7 +397,7 @@ def bootstrap_stability_enet(
             l1_ratio   = l1_grid,
             alphas     = alpha_grid,
             cv         = 5,
-            max_iter   = 5000,
+            max_iter   = max_iter,
             n_jobs     = 8,  # Parallelization
             random_state=random_state
         )
@@ -419,7 +422,7 @@ def bootstrap_stability_enet(
 
 def main():
     # Just a note that running all may lead to problems with colinearity
-    connectivity_type = "SFC"  # Options: "SFC", "FC", "SC", "all"
+    connectivity_type = "FC"  # Options: "SFC", "FC", "SC", "all"
     sessions = ["ses-01", "ses-02"] 
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
@@ -482,7 +485,7 @@ def main():
                 save_grouped_roi_averages(csv_path, output_path)
                 
     # Prepare the data for analysis
-    X_t1, X_t2, y_t1, y_t2, X_slope, y_slope, age_diff, superager_vec, y_t1_resid, y_t2_adj_resid, y_slope_adj_resid, X_all = prep_data(
+    X_t1, X_t2, y_t1, y_t2, X_slope, y_slope, age_diff, superager_vec, y_t1_resid, y_t2_adj_resid, y_slope_adj_resid, y_t2_resid, y_slope_resid, X_all = prep_data(
         subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type)
 
     # Map feature indices back to ROI names 
@@ -510,26 +513,29 @@ def main():
             roi_names=roi_names, 
             connectivity_type=connectivity_type,
             timepoint="tp1",
+            max_iter=20000,
             stab_threshold=0.80,
             n_boot=500,
             random_state=42)
 
     # 2) Stability analysis for Time 2
     bootstrap_stability_enet(
-            X_t2, y_t2_adj_resid,
+            X_t2, y_t2_resid,
             roi_names=roi_names,
             connectivity_type=connectivity_type,
             timepoint="tp2",
+            max_iter=20000,
             stab_threshold=0.80,
             n_boot=500,
             random_state=42)
 
     # 3) Stability analysis for slope
     bootstrap_stability_enet(
-            X_slope, y_slope_adj_resid,
+            X_slope, y_slope_resid,
             roi_names=roi_names,
             connectivity_type=connectivity_type,
             timepoint="slope",
+            max_iter=20000,
             stab_threshold=0.80,
             n_boot=500,
             random_state=42)
