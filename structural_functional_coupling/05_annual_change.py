@@ -98,6 +98,9 @@ def main():
 
     # Merge the result with the original data to get a clean output
     merged_data = pd.merge(age_data, result, on=['id', 'age_1', 'age_2'], how='left')
+
+    # Filter participants whose follow-up time is less than 1.5 years
+    merged_data = merged_data[merged_data['fu_time'] >= 1.5]
     print(merged_data.sample(5))
     merged_data.to_csv(age_dir / 'clean_data_all.csv', index=False)
 

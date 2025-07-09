@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.linear_model import ElasticNetCV
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, permutation_test_score
 from sklearn.preprocessing import StandardScaler 
 import statsmodels.formula.api as smf
 from sklearn.metrics import r2_score
@@ -9,18 +9,20 @@ from pathlib import Path
 import os
 import re
 
-def get_subjects_to_process(output_folder, ses):
-    """Generate a list of subjects to process.
+def get_subjects_to_process(output_folder, ses, id_csv_path):
+    """
+    Generate a list of subjects to process, ensuring each subject is also in the id column of the provided CSV.
     Args:
         output_folder (Path): Path to the directory coupling results
         ses (str): Session ID (format: ses-01).
-
+        id_csv_path (Path or str): Path to CSV file with 'id' column.
     Returns:
         list: List of subject IDs to process.
     """
-    subjects = []
+    # Load valid subject IDs from the CSV - this allows removing subs without sufficiently long follow-up
+    valid_ids = set(pd.read_csv(id_csv_path)['id'].astype(str))
 
-    # Iterate over all files in the folder
+    subjects = []
     for fname in os.listdir(output_folder):
         if not fname.startswith("sub-") or not fname.endswith(f"{ses}_structure_function_coupling.csv"):
             continue
@@ -29,7 +31,7 @@ def get_subjects_to_process(output_folder, ses):
         subject = fname.split("_")[0]
 
         sfc_path = output_folder / fname
-        if sfc_path.exists():
+        if sfc_path.exists() and subject in valid_ids:
             subjects.append(subject)
 
     return subjects
@@ -61,27 +63,53 @@ def flatten_connectivity_csv(matrix_csv, measure_col="pearson_rho"):
 
     return df_out
 
-def save_grouped_roi_averages(csv_path, output_path):
-    """
-    Reads a subject's SFC CSV, groups by ROI prefix, 
-    averages pearson_rho, and saves a new CSV.
 
-    Args:
-        csv_path (str or Path): Path to each subs SFC CSV file.
-        output_path (str or Path): Path to save the grouped averages CSV.
+def save_grouped_roi_averages(csv_path, output_path, group_level="ROI"):
+    """
+    Reads a subject's connectivity CSV (SFC/FC/SC),
+    then groups & averages pearson_rho either:
+      • by ROI prefix (strip trailing _<digits>), or
+      • by network (for cortical: 3rd "_" field; for subcortical: region name).
     """
     df = pd.read_csv(csv_path)
+    df["ROI_name"] = df["ROI_name"].astype(str)
 
-    # Extract the group prefix (e.g. PFCv)
-    df['ROI_group'] = df['ROI_name'].apply(lambda x: re.sub(r'_\d+$', '', x))
+    if group_level.lower() == "roi":
+        df["ROI_group"] = df["ROI_name"].str.replace(r'_\d+$', '', regex=True)
+        grouped = (
+            df
+            .groupby("ROI_group", as_index=False)["pearson_rho"]
+            .mean()
+            .rename(columns={"ROI_group": "ROI_name"})
+        )
 
-    # Group by ROI_group and take the average
-    grouped = df.groupby('ROI_group', as_index=False)['pearson_rho'].mean()
+    elif group_level.lower() == "network":
+        def network_key(name):
+            if name.startswith("Subcortical"):
+                # split on spaces, drop first two tokens ("Subcortical", code) and the side
+                parts = name.split()
+                # parts = ["Subcortical","208","Right","Hippocampus",...]
+                region = " ".join(parts[3:])
+                return region
+            else:
+                # cortical case: "7Networks_RH_Cont_pCun"
+                parts = name.split("_")
+                if len(parts) >= 3:
+                    return parts[2]
+                # fallback
+                return name
 
-    # Rename column back to ROI_name for output
-    grouped = grouped.rename(columns={'ROI_group': 'ROI_name'})
+        df["network"] = df["ROI_name"].apply(network_key)
+        grouped = (
+            df
+            .groupby("network", as_index=False)["pearson_rho"]
+            .mean()
+            .rename(columns={"network": "ROI_name"})
+        )
 
-    # Save to output_path
+    else:
+        raise ValueError("group_level must be 'ROI' or 'network'")
+
     grouped.to_csv(output_path, index=False)
 
 def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type):
@@ -111,41 +139,63 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
 
     # Prepare the data 
     for sub in subjects:
-        if connectivity_type == "SFC":
-            ses_01_path = root_path / "ses-01" / "individual_coupling_matrices"
-            csv_t1 = ses_01_path / f"{sub}_ses-01_structure_function_coupling_grouped.csv"
-        elif connectivity_type == "FC":
-            csv_t1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_grouped.csv"
-        else:
-            csv_t1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_grouped.csv"
-        if csv_t1.is_file():
-            df_t1 = pd.read_csv(csv_t1)
-            sfc_t1_flat = pd.to_numeric(df_t1['pearson_rho'].values, errors='coerce') # Use 'pearson_rho' column which is where SFC values are
-            X_t1.append(sfc_t1_flat)
-            if sub in memory_dict:
-                y_t1.append(memory_dict[sub]["ses-01"])
-        else:
-            print(f"File not found: {csv_t1}")
+        # helper to load one modality’s t1/t2
+        def load_modality(mod):
+            if mod == "SFC":
+                p1 = root_path / "ses-01" / "individual_coupling_matrices"
+                p2 = root_path / "ses-02" / "individual_coupling_matrices"
+                f1 = p1 / f"{sub}_ses-01_structure_function_coupling_grouped.csv"
+                f2 = p2 / f"{sub}_ses-02_structure_function_coupling_grouped.csv"
+                col = 'pearson_rho'
+            elif mod == "FC":
+                f1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_grouped.csv"
+                f2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_grouped.csv"
+                col = 'pearson_rho'  # or whatever FC column is named
+            else:  # "SC"
+                f1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_grouped.csv"
+                f2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_grouped.csv"
+                col = 'pearson_rho'  # or SC’s weight column
 
-        if connectivity_type == "SFC":
-            ses_02_path = root_path / "ses-02" / "individual_coupling_matrices"
-            csv_t2 = ses_02_path / f"{sub}_ses-02_structure_function_coupling_grouped.csv"
-        elif connectivity_type == "FC":
-            csv_t2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_grouped.csv"
-        else:
-            csv_t2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_grouped.csv"  
+            # read both if they exist, otherwise return None, None
+            if f1.is_file() and f2.is_file():
+                v1 = pd.to_numeric(pd.read_csv(f1)[col].values, errors='coerce')
+                v2 = pd.to_numeric(pd.read_csv(f2)[col].values, errors='coerce')
+                return v1, v2
+            else:
+                return None, None
 
-        if csv_t2.is_file():
-            df_t2 = pd.read_csv(csv_t2)
-            sfc_t2_flat = pd.to_numeric(df_t2['pearson_rho'].values, errors='coerce')
-            X_t2.append(sfc_t2_flat)
-            if sub in memory_dict:
-                y_t2.append(memory_dict[sub]["ses-02"])
-        else:
-            print(f"File not found: {csv_t2}")
+        # decide which modality(ies) to load
+        if connectivity_type == "all":
+            # load each and horizontally stack
+            feats = [load_modality(m) for m in ("SFC","FC","SC")]
+            # if any modality failed, skip this subject
+            if any(v1 is None for v1, v2 in feats):
+                print(f"Missing modality for {sub}, skipping")
+                continue
+            # unpack and concatenate
+            v1_all = np.hstack([v1 for v1, _ in feats])
+            v2_all = np.hstack([v2 for _, v2 in feats])
+            feat1, feat2 = v1_all, v2_all
 
-        if np.any(np.isnan(sfc_t1_flat)) or np.any(np.isnan(sfc_t2_flat)):
-            print(f"Warning: NaNs found in features for {sub}")
+        else:
+            feat1, feat2 = load_modality(connectivity_type)
+            if feat1 is None:
+                print(f"File(s) missing for {sub} {connectivity_type}, skipping")
+                continue
+
+        # append features & memory
+        X_t1.append(feat1)
+        X_t2.append(feat2)
+        if sub in memory_dict:
+            y_t1.append(memory_dict[sub]["ses-01"])
+            y_t2.append(memory_dict[sub]["ses-02"])
+        else:
+            print(f"No memory for {sub}, skipping")
+            X_t1.pop(); X_t2.pop()
+
+        # nan check
+        if np.isnan(feat1).any() or np.isnan(feat2).any():
+            print(f"Warning: NaNs in features for {sub}")
 
     # Convert lists to numpy arrays
     X_t1 = np.array(X_t1)  # shape: [N_subjects, p_features]
@@ -227,6 +277,7 @@ def bootstrap_stability_enet(
             l1_ratio=l1_grid,
             alphas=alpha_grid,
             cv=5,
+            max_iter=5000,
             random_state=rng.integers(1e9)
         ).fit(X_b, y_b)
 
@@ -240,7 +291,7 @@ def bootstrap_stability_enet(
     # Add extra metrics 
     stable_mask = stab_series >= stab_threshold
     n_stable    = stable_mask.sum()
-    med_abs_coef = (np.median(np.abs(coefs[:, stable_mask]).mean(axis=0))
+    med_abs_coef = np.median(np.abs(coefs[:, stable_mask])
                     if n_stable else np.nan)
     
     print(f"\nStability-selection summary (threshold ≥ {stab_threshold:.2f})")
@@ -285,18 +336,19 @@ def bootstrap_stability_enet(
             'direction'      : direction
         })
 
-    stable_df = pd.DataFrame(rows).sort_values('stab', ascending=False)
-
-    print(f"\nStable ROIs (stab ≥ {stab_threshold}):")
-    if stable_df.empty:
-        print("  (none)")
-    else:
+    stable_df = pd.DataFrame(rows)
+    if not stable_df.empty:
+        stable_df = stable_df.sort_values('stab', ascending=False)
+        print(f"\nStable ROIs (stab ≥ {stab_threshold}):")
         for _, r in stable_df.iterrows():
             print(f"  • {r.ROI:<25} "
-                f"stab={r.stab:.2f}   "
-                f"β̃_sel={r.med_coef_sel:+.3f}   "
-                f"CI_sel=[{r.ci_low_sel:+.3f},{r.ci_high_sel:+.3f}]   "
-                f"dir={r.direction}")
+                  f"stab={r.stab:.2f}   "
+                  f"β̃_sel={r.med_coef_sel:+.3f}   "
+                  f"CI_sel=[{r.ci_low_sel:+.3f},{r.ci_high_sel:+.3f}]   "
+                  f"dir={r.direction}")
+    else:
+        print(f"\nStable ROIs (stab ≥ {stab_threshold}):")
+        print("  (none)")
 
     # Use this to estimate the role of just the demographics
     if demographic_X is not None:
@@ -313,16 +365,39 @@ def bootstrap_stability_enet(
             en    = ElasticNetCV(l1_ratio=l1_grid,
                                  alphas=alpha_grid,
                                  cv=5,
+                                 max_iter=5000,
                                  random_state=rng.integers(1e9)).fit(X_tr, y[train])
             r2_full.append(r2_score(y[test], en.predict(X_te)))
 
         r2_base = np.mean(r2_base)
         r2_full = np.mean(r2_full)
-        print(f"  • CV R² demographics   : {r2_base:.3f}")
-        print(f"  • CV R² demographics+R : {r2_full:.3f}")
-        print(f"  • Δ R²             : {r2_full - r2_base:+.3f}")
+        # print(f"  • CV R² demographics   : {r2_base:.3f}")
+        # print(f"  • CV R² demographics+R : {r2_full:.3f}")
+        # print(f"  • Δ R²             : {r2_full - r2_base:+.3f}")
 
-    return stab_series
+        full_pipe = ElasticNetCV(
+            l1_ratio=l1_grid,
+            alphas=alpha_grid,
+            cv=5,                 
+            max_iter=5000,
+            random_state=random_state
+        )
+        cv = KFold(n_splits=5, shuffle=True, random_state=random_state)
+
+        score, permutation_scores, p_value = permutation_test_score(
+            full_pipe, X, y,
+            scoring='r2',
+            cv=cv,
+            n_permutations=1000,
+            random_state=random_state,
+            n_jobs=4                     # Parallelization
+        )
+
+        print(f"\nPermutation test (n_permutations={1000}):")
+        print(f"  • CV R² (true labels)   : {score:.3f}")
+        print(f"  • permutation p-value   : {p_value:.3f}")
+
+    return stab_series  
 
 def make_long_df(
     X_t1, X_t2,
@@ -459,16 +534,17 @@ def build_wide_df(
     return df_subj
 
 def main():
-    connectivity_type = "SFC"  # Options: "SFC", "FC", "SC"
+    connectivity_type = "all"  # Options: "SFC", "FC", "SC", "all"
     sessions = ["ses-01", "ses-02"] 
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
     sc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
-    memory_data = pd.read_csv("/home/rachel/Desktop/data/clean_data_all.csv")
+    csv_path = Path("/home/rachel/Desktop/data/clean_data_all.csv")
+    memory_data = pd.read_csv(csv_path)
 
     # Get the list of subjects to process
-    subjects_tp1 = get_subjects_to_process(root_path / "ses-01" / "individual_coupling_matrices", "ses-01")
-    subjects_tp2 = get_subjects_to_process(root_path / "ses-02" / "individual_coupling_matrices", "ses-02")
+    subjects_tp1 = get_subjects_to_process(root_path / "ses-01" / "individual_coupling_matrices", "ses-01", csv_path)
+    subjects_tp2 = get_subjects_to_process(root_path / "ses-02" / "individual_coupling_matrices", "ses-02", csv_path)
     subjects = sorted(set(subjects_tp1) & set(subjects_tp2))
     print(f"Subjects: {len(subjects)}")
 
@@ -491,7 +567,7 @@ def main():
 
                 # Group the flattened CSV by ROI
                 grouped_output = fc_output_dir / f"{sub}_{ses}_functional_connectivity_grouped.csv"
-                save_grouped_roi_averages(fc_output, grouped_output)
+                save_grouped_roi_averages(fc_output, grouped_output) # Adding group_level="network" allows looking at all of the DMN for example rather than individual ROIs
 
             # ── Structural connectivity ──
             sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix.csv"
@@ -506,7 +582,8 @@ def main():
 
                 # Group the flattened CSV by ROI
                 grouped_output = sc_output_dir / f"{sub}_{ses}_structural_connectivity_grouped.csv"
-                save_grouped_roi_averages(sc_output, grouped_output)
+                save_grouped_roi_averages(sc_output, grouped_output) # Adding group_level="network" allows looking at all of the DMN for example rather than individual ROIs
+
             else:
                 print(f"Missing SC CSV at path: {sc_csv}")
 
@@ -525,7 +602,23 @@ def main():
 
     # Map feature indices back to ROI names 
     roi_names_path = root_path / "ses-01" / "individual_coupling_matrices" / f"{subjects[0]}_ses-01_structure_function_coupling_grouped.csv"
-    roi_names = pd.read_csv(roi_names_path)['ROI_name'].tolist()
+    roi_names_pre = pd.read_csv(roi_names_path)['ROI_name'].tolist()
+
+    if connectivity_type in ["SFC", "SC", "FC"]:
+        roi_names = roi_names_pre
+    else:
+        # For "all", add modality prefixes to each ROI name
+        modalities = ["sfc", "fc", "sc"]
+        roi_names = [f"{mod}_{roi}" for mod in modalities for roi in roi_names_pre]
+
+    # We want 2×len(roi_names) names for the stacked X_all:
+    roi_names_tp1 = [f"{r}_1" for r in roi_names]
+    roi_names_tp2 = [f"{r}_2" for r in roi_names]
+    all_roi_names = roi_names_tp1 + roi_names_tp2
+
+    # Also generate a stacked version of tp1 and tp2 features
+    X_all = np.hstack([X_t1, X_t2])   # shape: (N_subjects, 2 * len(roi_names))
+    assert X_all.shape[1] == len(all_roi_names)
 
     # Save the data as CSV
     out_file_1 = Path(f"/home/rachel/Desktop/data/grouped_{connectivity_type}_ses-01.csv")
@@ -588,68 +681,80 @@ def main():
 
     print("\nStable ROIs (≥ 80 %):")
     print(stab_long[stab_long >= 0.80].apply(lambda x: f"{x:.2%}"))
-
+    
     # Save the stable ROI names
     stable_rois_long = stab_long[stab_long >= 0.80].index.tolist()
 
-    # Generate a list of ROIs important at t1, t2, AND slope
-    stable_rois = list(set(stable_rois_t1) & set(stable_rois_t2) & set(stable_rois_long))
-    stable_rois_cs = list(set(stable_rois_t1) & set(stable_rois_t2))
-    print(f"Stable ROIs across all analyses: {stable_rois}")
-    print(f"Stable ROIs cross-sectional: {stable_rois_cs}")
+    # 4) Stability analysis for both timepoints together
+    stab_all = bootstrap_stability_enet(
+            X_all, y_t2,
+            roi_names=all_roi_names,
+            demographic_X=demographic_cols,
+            stab_threshold=0.80,
+            n_boot=500,
+            random_state=42)
 
-    # 2) Build the long DataFrame (make sure superager_vec is defined for each subject)
-    superager_vec = memory_data.set_index("id").loc[final_subjects, "superager"].values
-    maintainer_vec = memory_data.set_index("id").loc[final_subjects, "maintainer"].values
+    print("\nStable ROIs (≥ 80 %):")
+    print(stab_all[stab_all >= 0.80].apply(lambda x: f"{x:.2%}"))
 
-    df_subj = build_wide_df(
-        X_t1, X_t2, y_t1, y_t2, age_diff,
-        subjects, roi_names, stable_rois_long,
-        group_maint_vec=maintainer_vec,             
-        group_sa_vec=superager_vec,
-        memory_data=memory_data
-    )
+    # # Generate a list of ROIs important at t1, t2, AND slope
+    # stable_rois = list(set(stable_rois_t1) & set(stable_rois_t2) & set(stable_rois_long))
+    # stable_rois_cs = list(set(stable_rois_t1) & set(stable_rois_t2))
+    # print(f"Stable ROIs across all analyses: {stable_rois}")
+    # print(f"Stable ROIs cross-sectional: {stable_rois_cs}")
 
-    # Build the formula 
-    roi_cols = [c for c in df_subj.columns if c.endswith("_slope") and c != "memory_slope"]
-    roi_terms = " + ".join(roi_cols)
-    int_terms  = " + ".join(f"Group_maint:{r}" for r in roi_cols)
-    demo_vars = ["age_1", "sex", "YoE"] 
-    demo_terms = " + ".join(demo_vars)
+    # # 2) Build the long DataFrame (make sure superager_vec is defined for each subject)
+    # superager_vec = memory_data.set_index("id").loc[final_subjects, "superager"].values
+    # maintainer_vec = memory_data.set_index("id").loc[final_subjects, "maintainer"].values
 
-    formula = (
-        f"memory_slope ~ Group_maint + {roi_terms} + {int_terms} + {demo_terms}"
-    )
-    print(formula)
+    # df_subj = build_wide_df(
+    #     X_t1, X_t2, y_t1, y_t2, age_diff,
+    #     subjects, roi_names, stable_rois_long,
+    #     group_maint_vec=maintainer_vec,             
+    #     group_sa_vec=superager_vec,
+    #     memory_data=memory_data
+    # )
 
-    # Fit the mixed-effects model
-    ols_fit = smf.ols(formula, data=df_subj).fit(cov_type="HC3")  # HC3 = robust SEs
-    print(ols_fit.summary())
+    # # Build the formula 
+    # roi_cols = [c for c in df_subj.columns if c.endswith("_slope") and c != "memory_slope"]
+    # roi_terms = " + ".join(roi_cols)
+    # int_terms  = " + ".join(f"Group_maint:{r}" for r in roi_cols)
+    # demo_vars = ["age_1", "sex", "YoE"] 
+    # demo_terms = " + ".join(demo_vars)
 
-    # Now run an LME with ROIs important at tp1 and tp2
-    overlap_rois = sorted(set(stable_rois_t1) & set(stable_rois_t2))
-    print(f"ROIs stable at both waves ({len(overlap_rois)}):", overlap_rois)
+    # formula = (
+    #     f"memory_slope ~ Group_maint + {roi_terms} + {int_terms} + {demo_terms}"
+    # )
+    # print(formula)
 
-    # Build + scale + sanitise 
-    df_long, name_map = make_long_df(X_t1, X_t2, y_t1, y_t2, 
-                                    subjects, superager_vec, maintainer_vec, overlap_rois)   
+    # # Fit the mixed-effects model
+    # ols_fit = smf.ols(formula, data=df_subj).fit(cov_type="HC3")  # HC3 = robust SEs
+    # print(ols_fit.summary())
 
-    # Build the model 
-    roi_cols = [
-        c for c in df_long.columns
-        if c not in ["y", "id", "time", "Group_SA", "Group_maint"]
-    ]
-    if roi_cols:
-        roi_terms = " + ".join(roi_cols)
-        int_terms = " + ".join(f"Group_maint:{r}" for r in roi_cols)
-        formula_lme = f"y ~ Group_maint * time + {roi_terms} + {int_terms}"
-    else:
-        formula_lme = "y ~ Group_maint * time"  # no ROI terms
+    # # Now run an LME with ROIs important at tp1 and tp2
+    # overlap_rois = sorted(set(stable_rois_t1) & set(stable_rois_t2))
+    # print(f"ROIs stable at both waves ({len(overlap_rois)}):", overlap_rois)
 
-    print("LME formula:\n", formula_lme)
-    lme = smf.mixedlm(formula_lme, data=df_long, groups="id")
-    fit = lme.fit(method="lbfgs")
-    print(fit.summary())
+    # # Build + scale + sanitise 
+    # df_long, name_map = make_long_df(X_t1, X_t2, y_t1, y_t2, 
+    #                                 subjects, superager_vec, maintainer_vec, overlap_rois)   
+
+    # # Build the model 
+    # roi_cols = [
+    #     c for c in df_long.columns
+    #     if c not in ["y", "id", "time", "Group_SA", "Group_maint"]
+    # ]
+    # if roi_cols:
+    #     roi_terms = " + ".join(roi_cols)
+    #     int_terms = " + ".join(f"Group_maint:{r}" for r in roi_cols)
+    #     formula_lme = f"y ~ Group_maint * time + {roi_terms} + {int_terms}"
+    # else:
+    #     formula_lme = "y ~ Group_maint * time"  # no ROI terms
+
+    # print("LME formula:\n", formula_lme)
+    # lme = smf.mixedlm(formula_lme, data=df_long, groups="id")
+    # fit = lme.fit(method="lbfgs")
+    # print(fit.summary())
 
 if __name__ == "__main__":
     main()
