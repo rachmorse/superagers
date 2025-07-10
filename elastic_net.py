@@ -117,8 +117,60 @@ def save_grouped_roi_averages(csv_path, output_path, group_level="ROI"):
             .rename(columns={"network": "ROI_name"})
         )
 
+    elif group_level.lower() == "streamline":
+        def streamline_key(name):
+            if name.startswith("Subcortical"):
+                parts = name.split(":")
+                if len(parts) > 1:
+                    sub_part = parts[1].strip()    # "Left Hippocampus"
+                    tokens = sub_part.split()      # ["Left", "Hippocampus"]
+                    return tokens[-1]              # "Hippocampus"
+                return name  
+            else:
+                # Cortical case: "7Networks_RH_Cont_pCun"
+                return re.sub(r"_\d+$", "", name)   
+
+        df["roi_label"] = df["ROI_name"].apply(streamline_key)
+
+        grouped = (
+            df
+            .groupby("roi_label", as_index=False)
+            .agg({"pearson_rho": "mean"})
+            .rename(columns={"roi_label": "ROI_name"})
+        )
+        
+        # Exclude specified ROIs/networks/groups
+        keep_rois = [
+            "7Networks_LH_Limbic_OFC", # Wang et al., 2017
+            "7Networks_RH_Cont_Cing", # For ACC / MCC
+            "7Networks_LH_Cont_Cing",
+            "7Networks_RH_Cont_PFCl",
+            "7Networks_RH_Cont_PFCmp",
+            "7Networks_RH_Cont_PFCv",
+            "7Networks_LH_Cont_PFCl",
+            "7Networks_LH_Cont_PFCmp",
+            "7Networks_LH_Cont_PFCv",
+            "7Networks_LH_Cont_Temp",
+            "7Networks_RH_Cont_Temp",
+            "7Networks_LH_Default_PFC",
+            "7Networks_RH_Default_PFC",
+            "7Networks_LH_Default_PHC",
+            "7Networks_RH_Default_PHC",
+            "7Networks_LH_Default_Temp",
+            "7Networks_RH_Default_Temp",
+            "7Networks_LH_Default_Par",
+            "7Networks_RH_Default_Par",
+            "7Networks_LH_Default_pCunPCC",
+            "7Networks_RH_Default_pCunPCC",
+            "Hippocampus",
+            "Amygdala"
+        ]
+
+        if keep_rois:
+            grouped = grouped[grouped["ROI_name"].isin(keep_rois)]
+        
     else:
-        raise ValueError("group_level must be 'ROI' or 'network'")
+        raise ValueError("group_level must be 'ROI', 'network', or 'streamline'")
 
     grouped.to_csv(output_path, index=False)
 
@@ -234,6 +286,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
     y_t1 = df['y1'].values
     y_t2 = df['y2'].values
     y_slope = (y_t2 - y_t1) / age_diff[:, None]
+    y_slope_2 = (y_t2 - y_t1) / age_diff # Added to create the correct array shape for y_slope_adj
     valid = ~np.isnan(y_t1) & ~np.isnan(y_t2)
     slope, intercept, *_ = linregress(y_t1[valid], y_t2[valid])
     y_t2_adj = y_t2 - (intercept + slope * y_t1)
@@ -261,7 +314,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
     y_t2_adj_resid    = y_t2_adj     - lr2.predict(covs_t2)
     y_slope_adj_resid = y_slope_adj  - lrs.predict(covs_slope)
     y_t2_resid        = y_t2         - lr2.predict(covs_t2)
-    y_slope_resid     = y_slope      - lrs.predict(covs_slope)
+    y_slope_resid     = y_slope_2      - lrs.predict(covs_slope)
 
     # 6) Make a superager vector 
     superager_vec = df['superager'].values.astype(int)
@@ -455,7 +508,7 @@ def main():
 
                 # Group the flattened CSV by ROI
                 grouped_output = fc_output_dir / f"{sub}_{ses}_functional_connectivity_grouped.csv"
-                save_grouped_roi_averages(fc_output, grouped_output) # Adding group_level="network" allows looking at all of the DMN for example rather than individual ROIs
+                save_grouped_roi_averages(fc_output, grouped_output, group_level = "streamline") # Adding group_level="network" allows looking at all of the DMN for example rather than individual ROIs
 
             # ── Structural connectivity ──
             sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix.csv"
@@ -470,7 +523,7 @@ def main():
 
                 # Group the flattened CSV by ROI
                 grouped_output = sc_output_dir / f"{sub}_{ses}_structural_connectivity_grouped.csv"
-                save_grouped_roi_averages(sc_output, grouped_output) # Adding group_level="network" allows looking at all of the DMN for example rather than individual ROIs
+                save_grouped_roi_averages(sc_output, grouped_output, group_level = "streamline") # Adding group_level="network" allows looking at all of the DMN for example rather than individual ROIs
 
             else:
                 print(f"Missing SC CSV at path: {sc_csv}")
@@ -482,7 +535,7 @@ def main():
             csv_path = ses_path / f"{sub}_{ses}_structure_function_coupling.csv"
             output_path = ses_path / f"{sub}_{ses}_structure_function_coupling_grouped.csv"
             if csv_path.is_file():
-                save_grouped_roi_averages(csv_path, output_path)
+                save_grouped_roi_averages(csv_path, output_path, group_level = "streamline")
                 
     # Prepare the data for analysis
     X_t1, X_t2, y_t1, y_t2, X_slope, y_slope, age_diff, superager_vec, y_t1_resid, y_t2_adj_resid, y_slope_adj_resid, y_t2_resid, y_slope_resid, X_all = prep_data(
