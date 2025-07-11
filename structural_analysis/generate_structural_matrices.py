@@ -165,7 +165,7 @@ def visualize_sc_data(subject_id, connectivity_matrix, output_directory, ses, cm
     vis_dir.mkdir(parents=True, exist_ok=True)
     
     # Save the figure
-    output_file = vis_dir / f"{subject_id}_structural_connectivity.png"
+    output_file = vis_dir / f"{subject_id}_ses-{ses}_structural_connectivity.png"
     plt.savefig(output_file, dpi=150, bbox_inches='tight')
     plt.close()
     
