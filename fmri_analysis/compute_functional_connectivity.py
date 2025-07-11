@@ -302,7 +302,7 @@ def visualize_fc_data(
     """
     # Visualize connectivity matrix
     plt.figure(figsize=(10, 8))
-    plt.imshow(connectivity_matrix, vmin=-1, vmax=1, cmap="coolwarm")
+    plt.imshow(connectivity_matrix, vmin=-1, vmax=1, cmap="RdBu_r")
     plt.colorbar(label="Correlation Coefficient")
     plt.title(f"Connectivity Matrix for Subject {subject_id}")
     plt.xlabel("Regions")
