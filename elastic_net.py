@@ -77,6 +77,7 @@ def save_grouped_roi_averages(csv_path, output_path, group_level="ROI"):
         group_level (str): Grouping level, either "ROI" or "network".
                            "ROI" groups by ROI prefix (eg PFCv)
                            "network" groups by network name (eg DMN)
+                           "streamline" groups by a predefined set of ROIs important in memory.
     """
     df = pd.read_csv(csv_path)
     df["ROI_name"] = df["ROI_name"].astype(str)
@@ -508,7 +509,9 @@ def main():
 
                 # Group the flattened CSV by ROI
                 grouped_output = fc_output_dir / f"{sub}_{ses}_functional_connectivity_grouped.csv"
-                save_grouped_roi_averages(fc_output, grouped_output, group_level = "streamline") # Adding group_level="network" allows looking at all of the DMN for example rather than individual ROIs
+                # Adding group_level="network" allows looking at all of the DMN for example rather than individual ROIs
+                # Adding group_level="streamline" allows at a predefined subset of ROIs important in memory
+                save_grouped_roi_averages(fc_output, grouped_output, group_level = "streamline") 
 
             # ── Structural connectivity ──
             sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix.csv"
@@ -523,7 +526,7 @@ def main():
 
                 # Group the flattened CSV by ROI
                 grouped_output = sc_output_dir / f"{sub}_{ses}_structural_connectivity_grouped.csv"
-                save_grouped_roi_averages(sc_output, grouped_output, group_level = "streamline") # Adding group_level="network" allows looking at all of the DMN for example rather than individual ROIs
+                save_grouped_roi_averages(sc_output, grouped_output, group_level = "streamline") 
 
             else:
                 print(f"Missing SC CSV at path: {sc_csv}")

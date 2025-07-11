@@ -522,7 +522,7 @@ def compare_sfc_groups(group1_name, group2_name, output_dir, ses, alpha=0.05, co
         output_dir=stat_output_dir,
         ses=ses,
         vmin=vmin,
-        vmax=vmax
+        vmax=None
     )
     
     # Create overlay of significant regions
