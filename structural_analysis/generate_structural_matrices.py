@@ -378,6 +378,7 @@ def main():
     # Track both failed and successful subjects
     successful_subjects = []
     failed_subjects = []
+    all_subjects = []
     
     for cohort in cohorts:
         for ses in sessions:
@@ -408,6 +409,7 @@ def main():
             
             # Get subjects to process
             subjects = get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses)
+            all_subjects.extend(subjects)
             
             # For testing with a single subject
             # subjects = ["sub-1191"]
@@ -440,7 +442,7 @@ def main():
                     failed_subjects.append(subject)
     
     # Log summary
-    total_subjects = len(subjects)
+    total_subjects = len(all_subjects)
     successful_count = len(successful_subjects)
     failed_count = len(failed_subjects)
     
