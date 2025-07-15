@@ -379,7 +379,6 @@ def summarize_fmri_results(results_dict, ses_number):
         print("-----------------------------")
 
 def main():
-
     csv_path = "/home/rachel/Desktop/data/clean_data_all.csv"
     df = pd.read_csv(csv_path)
 
@@ -402,6 +401,8 @@ def main():
     fmri_results_ses2_struct_missing = gather_fmri_checks(struct_not_func_tp2, 2)
     summarize_fmri_results(fmri_results_ses2_struct_missing, 2)
 
+    n = df['sfc_all_slopes'].notna().sum() 
+    print(f"Number of subjects with all data: {n}")
 
 if __name__ == "__main__":
     main()
