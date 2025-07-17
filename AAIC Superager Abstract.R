@@ -235,6 +235,7 @@ fig1 <- ggplot() +
   labs(x = "Age", y = "Episodic Memory Composite", color = "Group", fill = "Group") +
   theme_minimal() +
   theme(legend.position.inside = c(0.8, 0.94))
+fig1
 
 # 5) Subset data for each group to run separate scaled models
 superager_df <- long_data %>% filter(superager_factor == "superager")
@@ -288,7 +289,7 @@ fig2 <- ggplot() +
   geom_point(
     data = long_data, 
     aes(x = age, y = memory), 
-    color = "gray", size = 1
+    color = "gray", linewidth = 1
   ) +  # Add scatter points
   geom_ribbon(
     data = predictions_2, 
@@ -299,7 +300,7 @@ fig2 <- ggplot() +
   geom_line(
     data = predictions_2, 
     aes(x = age, y = predicted, color = superager_maintainer), 
-    size = 1.2
+    linewidth = 1.2
   ) +  # Plot predicted lines
   scale_color_manual(values = palette) +
   scale_fill_manual(values = palette) +
@@ -384,7 +385,7 @@ ggplot() +
   geom_point(
     data = long_data, 
     aes(x = age, y = adj_hc), 
-    color = "gray", size = 1
+    color = "gray", linewidth = 1
   ) +  # Add scatter points
   geom_ribbon(
     data = predictions, 
@@ -395,7 +396,7 @@ ggplot() +
   geom_line(
     data = predictions, 
     aes(x = age, y = predicted, color = superager_factor), 
-    size = 1.2
+    linewidth = 1.2
   ) +  # Plot predicted lines
   scale_color_manual(values = palette_1) +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
@@ -449,7 +450,7 @@ ggplot() +
   geom_point(
     data = long_data, 
     aes(x = age, y = adj_hc), 
-    color = "gray", size = 1
+    color = "gray", linewidth = 1
   ) +  # Add scatter points
   geom_ribbon(
     data = predictions, 
@@ -460,7 +461,7 @@ ggplot() +
   geom_line(
     data = predictions, 
     aes(x = age, y = predicted, color = maintainer_factor), 
-    size = 1.2
+    linewidth = 1.2
   ) +  # Plot predicted lines
   scale_color_manual(values = palette_1) +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
@@ -517,7 +518,7 @@ ggplot() +
   geom_point(
     data = long_data, 
     aes(x = age, y = wmh), 
-    color = "gray", size = 1
+    color = "gray", linewidth = 1
   ) +  # Add scatter points
   geom_ribbon(
     data = predictions, 
@@ -528,7 +529,7 @@ ggplot() +
   geom_line(
     data = predictions, 
     aes(x = age, y = predicted, color = superager_factor), 
-    size = 1.2
+    linewidth = 1.2
   ) +  # Plot predicted lines
   scale_color_manual(values = palette_1) +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
@@ -582,7 +583,7 @@ ggplot() +
   geom_point(
     data = long_data, 
     aes(x = age, y = wmh), 
-    color = "gray", size = 1
+    color = "gray", linewidth = 1
   ) +  # Add scatter points
   geom_ribbon(
     data = predictions, 
@@ -593,7 +594,7 @@ ggplot() +
   geom_line(
     data = predictions, 
     aes(x = age, y = predicted, color = maintainer_factor), 
-    size = 1.2
+    linewidth = 1.2
   ) +  # Plot predicted lines
   scale_color_manual(values = palette_1) +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
@@ -643,7 +644,7 @@ ggplot() +
   geom_point(
     data = long_data, 
     aes(x = age, y = wmh), 
-    color = "gray", size = 1
+    color = "gray", linewidth = 1
   ) +  # Add scatter points
   geom_ribbon(
     data = predictions_2, 
@@ -654,7 +655,7 @@ ggplot() +
   geom_line(
     data = predictions_2, 
     aes(x = age, y = predicted, color = superager_maintainer), 
-    size = 1.2
+    linewidth = 1.2
   ) +  # Plot predicted lines
   scale_color_manual(values = palette) +
   scale_fill_manual(values = palette) +
@@ -704,7 +705,7 @@ ggplot() +
   geom_point(
     data = long_data, 
     aes(x = age, y = adj_hc), 
-    color = "gray", size = 1
+    color = "gray", linewidth = 1
   ) +  # Add scatter points
   geom_ribbon(
     data = predictions_2, 
@@ -715,7 +716,7 @@ ggplot() +
   geom_line(
     data = predictions_2, 
     aes(x = age, y = predicted, color = superager_maintainer), 
-    size = 1.2
+    linewidth = 1.2
   ) +  # Plot predicted lines
   scale_color_manual(values = palette) +
   scale_fill_manual(values = palette) +
@@ -769,7 +770,7 @@ ggplot() +
   geom_point(
     data = long_data, 
     aes(x = age, y = gm), 
-    color = "gray", size = 1
+    color = "gray", linewidth = 1
   ) +  # Add scatter points
   geom_ribbon(
     data = predictions, 
@@ -780,7 +781,7 @@ ggplot() +
   geom_line(
     data = predictions, 
     aes(x = age, y = predicted, color = maintainer_factor), 
-    size = 1.2
+    linewidth = 1.2
   ) +  # Plot predicted lines
   scale_color_manual(values = palette_1) +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
@@ -830,7 +831,7 @@ ggplot() +
   geom_point(
     data = long_data, 
     aes(x = age, y = gm), 
-    color = "gray", size = 1
+    color = "gray", linewidth = 1
   ) +  # Add scatter points
   geom_ribbon(
     data = predictions_2, 
@@ -841,7 +842,7 @@ ggplot() +
   geom_line(
     data = predictions_2, 
     aes(x = age, y = predicted, color = superager_maintainer), 
-    size = 1.2
+    linewidth = 1.2
   ) +  # Plot predicted lines
   scale_color_manual(values = palette) +
   scale_fill_manual(values = palette) +
@@ -895,7 +896,7 @@ ggplot() +
   geom_point(
     data = long_data, 
     aes(x = age, y = gm), 
-    color = "gray", size = 1
+    color = "gray", linewidth = 1
   ) +  # Add scatter points
   geom_ribbon(
     data = predictions, 
@@ -906,7 +907,7 @@ ggplot() +
   geom_line(
     data = predictions, 
     aes(x = age, y = predicted, color = superager_factor), 
-    size = 1.2
+    linewidth = 1.2
   ) +  # Plot predicted lines
   scale_color_manual(values = palette_1) +
   scale_fill_manual(values = palette_1) +  # Match line & fill colors
