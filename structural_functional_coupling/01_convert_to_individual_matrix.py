@@ -87,10 +87,6 @@ def create_individual_matrices(input_file, output_dir, ses, is_functional=False)
                     conn_matrix[idx1, idx2] = value
                     conn_matrix[idx2, idx1] = value  # Make it symmetric
         
-        # For functional connectivity, replace negative values with 0
-        # if is_functional:
-        #     conn_matrix[conn_matrix < 0] = 0
-        
         # Zero out the diagonal
         np.fill_diagonal(conn_matrix, 0)
 
