@@ -8,6 +8,118 @@ import pandas as pd
 from pathlib import Path
 import os
 import re
+import numpy as np
+import pandas as pd
+from dataclasses import dataclass
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import GridSearchCV, StratifiedGroupKFold
+from sklearn.metrics import roc_auc_score, balanced_accuracy_score
+
+class Residualizer:
+    """
+    Regresses each column of X on confounds (with intercept) using OLS.
+    Fit ONLY on training data inside each outer fold; apply to train/test.
+    """
+    def fit(self, X, confounds):
+        C = np.c_[np.ones((confounds.shape[0], 1)), confounds]
+        # solve C * B = X → B = argmin ||C B - X||
+        self.B_ = np.linalg.lstsq(C, X, rcond=None)[0]  # shape: (c+1, p)
+        return self
+    def transform(self, X, confounds):
+        C = np.c_[np.ones((confounds.shape[0], 1)), confounds]
+        return X - C @ self.B_
+
+@dataclass
+class NestedENetResult:
+    oof_pred: np.ndarray
+    oof_fold: np.ndarray
+    fold_auc: list
+    mean_auc: float
+    coef_by_fold: np.ndarray
+    coef_stability: pd.Series
+    best_params: list
+
+def run_nested_enet_logistic_cv(
+    X, y, groups, confounds, connectivity_type, 
+    l1_ratio_grid=(0.1, 0.5, 0.9),
+    C_grid=(0.01, 0.1, 1.0, 10.0),
+    n_outer=10, n_inner=5, random_state=42, max_iter=5000
+) -> NestedENetResult:
+    """
+    Elastic-net logistic with nested, subject-grouped CV.
+    - Outer loop → unbiased performance
+    - Inner loop → tunes C, l1_ratio
+    - Residualization (X ~ confounds) done INSIDE outer loop
+    """
+    print(f"Running ENet for {connectivity_type} with {n_outer} outer folds and {n_inner} inner folds...")
+
+    outer = StratifiedGroupKFold(n_splits=n_outer, shuffle=True, random_state=random_state)
+    inner = StratifiedGroupKFold(n_splits=n_inner, shuffle=True, random_state=random_state+1)
+
+    # storage
+    oof_pred = np.zeros_like(y, dtype=float)
+    oof_fold = np.zeros_like(y, dtype=int)
+    fold_auc = []
+    best_params = []
+    coef_by_fold = []
+
+    # model pipeline (scaler→elastic-net logistic)
+    pipe = Pipeline([
+        ("scale", StandardScaler(with_mean=True, with_std=True)),
+        ("clf", LogisticRegression(
+            penalty="elasticnet", solver="saga",
+            class_weight="balanced", max_iter=max_iter, n_jobs=-1
+        ))
+    ])
+    param_grid = {"clf__C": list(C_grid), "clf__l1_ratio": list(l1_ratio_grid)}
+
+    resid = Residualizer()
+    fold_id = 0
+
+    for tr, te in outer.split(X, y, groups):
+        fold_id += 1
+        # --- residualize features on confounds using ONLY outer-train
+        resid.fit(X[tr], confounds[tr])
+        Xtr = resid.transform(X[tr], confounds[tr])
+        Xte = resid.transform(X[te], confounds[te])
+
+        # --- inner CV for hyperparams (scaler fits inside inner splits automatically)
+        grid = GridSearchCV(
+            estimator=pipe, param_grid=param_grid,
+            cv=inner.split(Xtr, y[tr], groups[tr]),
+            scoring="roc_auc", n_jobs=-1, refit=True
+        )
+        grid.fit(Xtr, y[tr])
+        best = grid.best_estimator_
+        best_params.append(grid.best_params_)
+
+        # --- evaluate once on untouched outer-test
+        proba = best.predict_proba(Xte)[:, 1]
+        oof_pred[te] = proba
+        oof_fold[te] = fold_id
+
+        # store fold AUC and coefficients
+        auc = roc_auc_score(y[te], proba)
+        fold_auc.append(auc)
+        coef_by_fold.append(best.named_steps["clf"].coef_.ravel())
+
+    coef_by_fold = np.vstack(coef_by_fold)  # shape: (n_outer, p)
+
+    # stability = fraction of outer folds where coef != 0
+    stab = (coef_by_fold != 0).sum(axis=0) / len(fold_auc)
+    coef_stability = pd.Series(stab, index=np.arange(X.shape[1]))
+
+    return NestedENetResult(
+        oof_pred=oof_pred,
+        oof_fold=oof_fold,
+        fold_auc=fold_auc,
+        mean_auc=float(np.mean(fold_auc)),
+        coef_by_fold=coef_by_fold,
+        coef_stability=coef_stability,
+        best_params=best_params
+    )
 
 def get_subjects_to_process(output_folder, ses, id_csv_path):
     """
@@ -64,7 +176,7 @@ def flatten_connectivity_csv(matrix_csv, measure_col="pearson_rho"):
     return df_out
 
 
-def save_grouped_roi_averages(csv_path, output_path, group_level="ROI"):
+def save_grouped_roi_averages(csv_path, output_path, group_level="network"):
     """
     Reads a subject's connectivity CSV (SFC/FC/SC),
     then groups & averages pearson_rho either:
@@ -323,156 +435,10 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
     # 7) generate a stacked version of tp1 and tp2 features
     X_all = np.hstack([X_t1, X_t2, X_slope])   # shape: (N_subjects, 2 * len(roi_names))
 
-    return X_t1, X_t2, y_t1, y_t2, X_slope, y_slope, age_diff, superager_vec, y_t1_resid, y_t2_adj_resid, y_slope_adj_resid, y_t2_resid, y_slope_resid, X_all
-
-def bootstrap_stability_enet(
-        X, y, roi_names, connectivity_type, timepoint, 
-        max_iter=5000,
-        stab_threshold=0.80,         
-        n_boot=500,
-        random_state=42,
-        l1_grid=(0.1, 0.5, 0.9),
-        alpha_grid=np.logspace(-2, 1, 10)):
-    """
-    Bootstraps subjects, refits ElasticNetCV, returns selection probability
-    and prints extra diagnostics.
-
-    Args:
-        X (np.ndarray): Feature matrix of averaged feature values for connectivity.
-        y (np.ndarray): Target variable (e.g. memory scores).
-        roi_names (list): List of ROI names corresponding to features in X.
-        connectivity_type (str): Type of connectivity data (e.g. "SFC", "FC", "SC").
-        timepoint (str): Timepoint of the data being processed (e.g. "tp1", "tp2", "slope").
-        stab_threshold (float): Threshold for stability selection (default 0.80).
-        n_boot (int): Number of bootstrap iterations (default 500).
-        random_state (int): Random seed for reproducibility.
-        l1_grid (tuple): Tuple of l1_ratio values to test in ElasticNetCV
-            1 is pure Lasso, 0 is pure Ridge.
-        alpha_grid (np.ndarray): Array of alpha values to test in ElasticNetCV.
-            used to create lambda.
-    """
-    # Generates random number
-    rng = np.random.default_rng(random_state) 
-    p   = X.shape[1] # p is number of features
-    counts  = np.zeros(p, dtype=int)
-    coefs   = np.zeros((n_boot, p))
-
-    for b in range(n_boot):
-        idx = rng.integers(X.shape[0], size=X.shape[0])  # Subject bootstrap
-        X_b, y_b = X[idx], y[idx] # X_b and y_b are bootstrapped samples
-
-        en = ElasticNetCV(
-            l1_ratio=l1_grid,
-            alphas=alpha_grid,
-            cv=5,
-            max_iter=max_iter,
-            n_jobs      = 8, # Parallelization
-            random_state=rng.integers(1e9)
-        ).fit(X_b, y_b)
-
-        counts += (en.coef_ != 0)
-        coefs[b] = en.coef_
-
-    # Calculate stability
-    stab = counts / n_boot
-    stab_series = pd.Series(stab, index=roi_names).sort_values(ascending=False)
-
-    # Add extra metrics 
-    stable_mask = stab_series >= stab_threshold
-    n_stable    = stable_mask.sum()
-    med_abs_coef = np.median(np.abs(coefs[:, stable_mask])
-                    if n_stable else np.nan)
-    
-    print(f"\nStability-selection summary for {connectivity_type} for {timepoint} (threshold ≥ {stab_threshold:.2f})")
-    print(f"  • Stable ROIs      : {n_stable} / {p}")
-
-    rows = []
-    for j, roi in enumerate(roi_names):
-        sel_mask = coefs[:, j] != 0
-        p_select = sel_mask.mean()           # same as stab[j]
-        if p_select < stab_threshold:
-            continue                         # skip unstable ROIs
-
-        # Calculate statistics for selected ROIs
-        med_all   = np.median(coefs[:, j])
-        signs     = np.sign(coefs[sel_mask, j])
-        sign_cons = (signs == 1).sum() - (signs == -1).sum()
-        sign_cons /= (signs.size or 1)
-
-        # Add confidence intervals for non-zero coefficients
-        nonzero_coefs = coefs[sel_mask, j]
-        med_nz   = np.median(nonzero_coefs)
-        ci_low, ci_high = np.percentile(nonzero_coefs, [2.5, 97.5])
-
-        # Determine direction now that CI no longer includes the zeros
-        if ci_low > 0:
-            direction = 'positive'
-        elif ci_high < 0:
-            direction = 'negative'
-        else:
-            direction = 'uncertain'
-
-        rows.append({
-            'ROI'            : roi,
-            'stab'           : p_select,
-            'sign_consist'   : sign_cons,
-            'med_coef_all'   : med_all,
-            'med_coef_sel'   : med_nz,
-            'ci_low_sel'     : ci_low,
-            'ci_high_sel'    : ci_high,
-            'direction'      : direction
-        })
-
-    stable_df = pd.DataFrame(rows)
-    if not stable_df.empty:
-        stable_df = stable_df.sort_values('stab', ascending=False)
-        print(f"\nStable ROIs (stab ≥ {stab_threshold}):")
-        for _, r in stable_df.iterrows():
-            print(f"  • {r.ROI:<25} "
-                  f"stab={r.stab:.2f}   "
-                  f"β̃_sel={r.med_coef_sel:+.3f}   "
-                  f"CI_sel=[{r.ci_low_sel:+.3f},{r.ci_high_sel:+.3f}]   "
-                  f"dir={r.direction}")
-    else:
-        print(f"\nStable ROIs (stab ≥ {stab_threshold}):")
-        print("  none")
-
-    # Now run a permutation test on the stable features
-    stable_mask = stab_series.values >= stab_threshold
-    stable_rois = stab_series.index[stable_mask].tolist()
-    if stable_mask.sum() == 0:
-        print("\nNo stable features—skipping reduced‐model permutation test.")
-    else:
-        # Subset X to just the stable columns
-        X_stable = X[:, stable_mask]
-
-        # Build the same pipeline
-        full_pipe = ElasticNetCV(
-            l1_ratio   = l1_grid,
-            alphas     = alpha_grid,
-            cv         = 5,
-            max_iter   = max_iter,
-            n_jobs     = 8,  # Parallelization
-            random_state=random_state
-        )
-        cv = KFold(n_splits=5, shuffle=True, random_state=random_state)
-
-        # Permutation test on the reduced feature set
-        score_red, perm_scores_red, pval_red = permutation_test_score(
-            full_pipe, X_stable, y,
-            scoring       = 'r2',
-            cv            = cv,
-            n_permutations=1000,
-            random_state  = random_state,
-            n_jobs        = 4
-        )
-
-        print(f"\nReduced‐model permutation test (using {len(stable_rois)} stable features):")
-        print(f"  • Features tested: {stable_rois}")
-        print(f"  • CV R² (true labels)   : {score_red:.3f}")
-        print(f"  • permutation p-value   : {pval_red:.3f}")
-
-    return stab_series
+    subjects_used = df['id'].values  # keeps exact order used for X_t1/X_t2/...
+    return (X_t1, X_t2, y_t1, y_t2, X_slope, y_slope, age_diff, superager_vec,
+            y_t1_resid, y_t2_adj_resid, y_slope_adj_resid, y_t2_resid, y_slope_resid, X_all,
+            subjects_used, covs_t1, covs_t2)
 
 def main():
     # Just a note that running all may lead to problems with colinearity
@@ -511,7 +477,7 @@ def main():
                 grouped_output = fc_output_dir / f"{sub}_{ses}_functional_connectivity_grouped.csv"
                 # Adding group_level="network" allows looking at all of the DMN for example rather than individual ROIs
                 # Adding group_level="streamline" allows at a predefined subset of ROIs important in memory
-                save_grouped_roi_averages(fc_output, grouped_output, group_level = "streamline") 
+                save_grouped_roi_averages(fc_output, grouped_output, group_level = "network") 
 
             # ── Structural connectivity ──
             sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix.csv"
@@ -526,7 +492,7 @@ def main():
 
                 # Group the flattened CSV by ROI
                 grouped_output = sc_output_dir / f"{sub}_{ses}_structural_connectivity_grouped.csv"
-                save_grouped_roi_averages(sc_output, grouped_output, group_level = "streamline") 
+                save_grouped_roi_averages(sc_output, grouped_output, group_level = "network") 
 
             else:
                 print(f"Missing SC CSV at path: {sc_csv}")
@@ -538,11 +504,30 @@ def main():
             csv_path = ses_path / f"{sub}_{ses}_structure_function_coupling.csv"
             output_path = ses_path / f"{sub}_{ses}_structure_function_coupling_grouped.csv"
             if csv_path.is_file():
-                save_grouped_roi_averages(csv_path, output_path, group_level = "streamline")
+                save_grouped_roi_averages(csv_path, output_path, group_level = "network")
                 
     # Prepare the data for analysis
-    X_t1, X_t2, y_t1, y_t2, X_slope, y_slope, age_diff, superager_vec, y_t1_resid, y_t2_adj_resid, y_slope_adj_resid, y_t2_resid, y_slope_resid, X_all = prep_data(
-        subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type)
+    (X_t1, X_t2, y_t1, y_t2, X_slope, y_slope, age_diff, superager_vec,
+    y_t1_resid, y_t2_adj_resid, y_slope_adj_resid, y_t2_resid, y_slope_resid, X_all,
+    subjects_used, covs_t1, covs_t2) = prep_data(
+        subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type
+    )
+
+    # Choose which feature set to test (baseline, follow-up, or change)
+    X = X_t1          # or X_t2, or X_slope, or X_all
+    conf = covs_t1    # use covs_t2 if X = X_t2; use covs_t1 for slope/change
+    y_cls = superager_vec
+    groups = subjects_used
+
+    res = run_nested_enet_logistic_cv(
+        X=X, y=y_cls, groups=groups, confounds=conf, connectivity_type=connectivity_type,
+        l1_ratio_grid=(0.1, 0.5, 0.9),
+        C_grid=(0.01, 0.1, 1.0, 10.0),
+        n_outer=10, n_inner=5, random_state=42
+    )
+
+    print(f"\nOuter-CV AUCs per fold: {np.round(res.fold_auc, 3)}")
+    print(f"Mean AUC (outer CV): {res.mean_auc:.3f}")
 
     # Map feature indices back to ROI names 
     roi_names_path = root_path / "ses-01" / "individual_coupling_matrices" / f"{subjects[0]}_ses-01_structure_function_coupling_grouped.csv"
@@ -560,41 +545,24 @@ def main():
     roi_names_tp2 = [f"{r}_2" for r in roi_names]
     roi_names_slope = [f"{r}_slope" for r in roi_names]
     all_roi_names = roi_names_tp1 + roi_names_tp2 + roi_names_slope
+
+    if X is X_t1:
+        roi_names_used = roi_names_tp1
+    elif X is X_t2:
+        roi_names_used = roi_names_tp2
+    elif X is X_slope:
+        roi_names_used = roi_names_slope
+    elif X is X_all:
+        roi_names_used = all_roi_names
+    else:
+        raise ValueError("Unknown feature set for mapping ROI names.")
+
+    # Check for length mismatch
+    if len(roi_names_used) != res.coef_stability.shape[0]:
+        raise ValueError(f"ROI name list length ({len(roi_names_used)}) does not match number of features ({res.coef_stability.shape[0]})")
+
+    stab_named = res.coef_stability.rename(index=dict(zip(range(len(roi_names_used)), roi_names_used)))
+    print(stab_named.sort_values(ascending=False).head(20))
     
-    print(f"Running bootstrap stability analysis for {connectivity_type}...")
-
-    # # 1) Stability analysis for Time 1
-    # bootstrap_stability_enet(
-    #         X_t1, y_t1_resid, 
-    #         roi_names=roi_names, 
-    #         connectivity_type=connectivity_type,
-    #         timepoint="tp1",
-    #         max_iter=20000,
-    #         stab_threshold=0.80,
-    #         n_boot=500,
-    #         random_state=42)
-
-    # # 2) Stability analysis for Time 2
-    # bootstrap_stability_enet(
-    #         X_t2, y_t2_resid,
-    #         roi_names=roi_names,
-    #         connectivity_type=connectivity_type,
-    #         timepoint="tp2",
-    #         max_iter=20000,
-    #         stab_threshold=0.80,
-    #         n_boot=500,
-    #         random_state=42)
-
-    # 3) Stability analysis for slope
-    bootstrap_stability_enet(
-            X_t1, y_slope_resid,
-            roi_names=roi_names,
-            connectivity_type=connectivity_type,
-            timepoint="slope",
-            max_iter=20000,
-            stab_threshold=0.80,
-            n_boot=500,
-            random_state=42)
-
 if __name__ == "__main__":
     main()
