@@ -11,6 +11,7 @@ This repository contains the analysis scripts for our study on superagers, which
   - [structural_analysis](#structural_analysis)
   - [structural_functional_coupling](#structural_functional_coupling)
 - [Analysis Scripts](#analysis-scripts)
+- [Misc Scripts](#misc-scripts)
 
 ## Folders
 
@@ -37,6 +38,7 @@ This repository contains the analysis scripts for our study on superagers, which
     - `02_subcortical_to_t1.py`: Extracts subcortical regions from FreeSurfer's aseg.mgz files for each subject, creating labeled volumetric masks T1 space.
     - `03_combine_t1_atlases.py`: Merges left and right Schaefer cortical and subcortical masks into a single subject-specific atlas in T1 space, handling overlaps and preserving all 214 brain regions.
     - `04_t1_to_dwi_bold.py`: Transforms the Schaefer/subcortical atlases from T1 space into native DWI and BOLD spaces, generating native-space masks for downstream structural and functional analyses. It uses FSL's FLIRT. 
+    - `run_pipeline.py`: Runs all scripts above, looping through each timepoint and cohort.  
 
 ### fmri_analysis
 - **Purpose:** These scripts scrub the preprocessed fMRI data, extract timeseries data, compute functional connectivity correlations and conduct statistical significance testing on the correlations. 
@@ -47,20 +49,16 @@ This repository contains the analysis scripts for our study on superagers, which
     - `03_compute_subject_functional_connectivity.py`: Computes various functional connectivity metrics for subjects from the timeseries data. The script processes timeseries data, computes functional connectivity with and without Fisher z-transformation, and saves the results to CSV files.
         - Uses the functions in the script `compute_functional_connectivity.py`.
     - `04_compute_group_connectivity`: Computes the average functional connectivy for given groups (e.g., superagers or non-superagers) cross-sectionally.
-    - `05_stats_test_thresholded.py`: Thresholds connectivity matrices and runs t-tests to compare connectivity by group. This thresholds the data by group (e.g. top 15% for superagers, top 15% for non-superagers and then keeps the *all* columns that survive thresholding from both groups)
-    - `05_stats_test`: Runs t-tests to compare unthresholded connectivity by group. 
-    - `05_threshold_all_subjects.py`: Thresholds connectivity matrices and runs t-tests to compare connectivity by group. This thresholds the data for the whole cohort (e.g. top 15% for the whole cohort) 
 - **Notes:**
     - The scripts used to preprocesses the fMRI data used here are available in another [repository](https://github.com/rachmorse/fmri_preprocessing).
 
 ### structural_analysis
-- **Purpose:** These scripts extract the structural data using FreeSurfer. 
+- **Purpose:** These scripts extract the structural connectivity matrices data using MRTrix. 
 - **Scripts:**
-    - `extract_freesurfer_stats.py`: Extracts the structural data following the recon-all processing including hippocampal volumes and white matter hypointensities.
     - `generate_structural_matrices.py`: Computes various structural connectivity matrices from the MRTrix data include all-to-all ROI and network specific matrices. Also, visualizes the matrices. 
         - Uses functions from the script `compute_functional_connectivity.py`.
 - **Notes:**
-    - The script uses subprocess and a wrapper to run in Python 2 to be compatable with Freesurfer 6.
+    - The scripts used in DWI preprocessing are available in another [repository](https://github.com/rachmorse/dwi_preprocessing) and the multishell mutitissue constrained spherical deconvolution for calculated white matter tracts scripts are not publically available. 
 
 ### structural_functional_coupling
 - **Purpose:** These scripts run prepare and calculate the structural functional coupling (SFC) metrics. To calculate SFC, we use the Pearson correlation coefficient between the row for a given ROI in the structural connectome and the corresponding row in the functional connectome. We exclude self-connections and any connections where either the structural or functional connectivity values equal zero (method from this [paper](https://doi.org/10.1038/s41467-023-41686-9)).
@@ -74,14 +72,10 @@ This repository contains the analysis scripts for our study on superagers, which
 
 ## Analysis Scripts
 
-1. **`calculate_adj_hippocampus.R`**
-    - **Purpose:** Calculates the adjusted hippocampal volume as well as white matter hypointensity and hippocampal slopes.
-2. **`AAIC Superager Abstract.R`**
-    - **Purpose:** Conducts analysis of the longitudinal memory trajectories and structural trajectories for all groups (e.g., non-superager decliners, superager maintainers)
-3. **`analysis.ipynb`**
-    - **Purpose:** The first exploritory analysis. Similar to `AAIC Superager Abstract.R` but a few steps behind and with some additional analyses not used for the AAIC abstract 
-4. **`gephi_visualization_prep.py`**
-    - **Purpose:** Reorganizes the connectivty matrices data to be able to be used for creating Gephi figures. 
+1. **`draft_analysis_2.R`**
+    - **Purpose:** The first exploritory analysis.  
+2. **`elastic_net.py`**
+    - **Purpose:** Run an elastic net analysis to extract ROIs that are most important in memory. 
 
 ## Misc Scripts
 1. **`missing_subs.py`**
