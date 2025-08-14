@@ -21,12 +21,12 @@ This repository contains the analysis scripts for our study on superagers, which
     - `check_invalid_nps`: Prepares BBHI and BBHI senior raw data, filtering for those with comments about their neuropsychological data. It saves the comments, so they can be read manually to exclude subjects with invalid data. 
     - `cleaning_bbhi_data.ipynb`: Cleans BBHI data for merge.
     - `cleaning_bbhi_senior_data.ipynb`: Cleans BBHI senior data for merge.
-    - `superager_classification.ipynb`: Classifies participants as superagers or non-superagers using modified [Sun et al. (2016)](https://pubmed.ncbi.nlm.nih.gov/27629716/) criteria:
+    - `superager_classification.ipynb`: Classifies participants as superagers or non-superagers using modified [Sun et al. (2016)](https://pubmed.ncbi.nlm.nih.gov/27629716/) and [Rogalski et al. (2013)](https://pmc.ncbi.nlm.nih.gov/articles/PMC3541673/)] criteria:
         - All participants must:
-            - Have an MMSE score >= 27 
+            - Have an MMSE score >= 27 at baseline
         - Superagers must:
-            - Score at or above the mean for age 16-29 year olds on the RAVLT long delay free recall based on normative data from [Schmidt (1996)](https://scholar.google.co.uk/scholar?hl=en&as_sdt=0%2C5&q=Schmidt%2C+M.+%281996%29.+Rey+Auditory+and+Verbal+Learning+Test%3A+A+handbook.+Los+Angeles%2C+CA%3A+Western+Psychological+Services&btnG=).
-            - Score above 1 SD below the norm for age and education on the TMT B, inverse digits and semantic fluency based on the neuronorma data from [Peña-Casanova et al. (2009a)](https://pubmed.ncbi.nlm.nih.gov/19661109/) with Spanish adults.
+            - Score at or above the mean for age 16-29 year olds on the RAVLT long delay free recall based on normative data from [Schmidt (1996)](https://scholar.google.co.uk/scholar?hl=en&as_sdt=0%2C5&q=Schmidt%2C+M.+%281996%29.+Rey+Auditory+and+Verbal+Learning+Test%3A+A+handbook.+Los+Angeles%2C+CA%3A+Western+Psychological+Services&btnG=) at baseline and follow-up. 
+            - Score within 1 SD of the norm for age and education on the TMT B, inverse digits and semantic fluency based on the neuronorma data from [Peña-Casanova et al. (2009a)](https://pubmed.ncbi.nlm.nih.gov/19661109/) with Spanish adults at baseline and follow-up. 
     - `maintainer_classification.ipynb`: Classifies participants as maintainers or decliners. 
         - Maintainers must: 
             - Have memory change and baseline memory that are greater than the average.
@@ -61,7 +61,7 @@ This repository contains the analysis scripts for our study on superagers, which
     - The scripts used in DWI preprocessing are available in another [repository](https://github.com/rachmorse/dwi_preprocessing) and the multishell mutitissue constrained spherical deconvolution for calculated white matter tracts scripts are not publically available. 
 
 ### structural_functional_coupling
-- **Purpose:** These scripts run prepare and calculate the structural functional coupling (SFC) metrics. To calculate SFC, we use the Pearson correlation coefficient between the row for a given ROI in the structural connectome and the corresponding row in the functional connectome. We exclude self-connections and any connections where either the structural or functional connectivity values equal zero (method from this [paper](https://doi.org/10.1038/s41467-023-41686-9)).
+- **Purpose:** These scripts run prepare and calculate the structural functional coupling (SFC) metrics. To calculate SFC, we use the Pearson's correlation coefficient between the row for a given ROI in the structural connectome and the corresponding row in the functional connectome. We exclude self-connections and any connections where either the structural or functional connectivity value equaled zero (method from this [paper](https://doi.org/10.1038/s41467-023-41686-9)).
  
 - **Scripts:**
     - `01_convert_to_individual_matrix.py`: Converts the functional and structural connectivity data from a shared CSV with all participants into individual 214x214 matrices. 
