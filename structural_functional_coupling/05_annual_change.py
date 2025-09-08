@@ -104,6 +104,13 @@ def main():
     print(merged_data.sample(5))
     merged_data.to_csv(age_dir / 'clean_data_all.csv', index=False)
 
+    # Print summary statistics
+    print(f"Number of participants: {len(merged_data)}")
+    print(f"Age at timepoint 1: {merged_data['age_1'].mean():.2f} ± {merged_data['age_1'].std():.2f}")
+    print(f"Percentage female: {merged_data['sex'].value_counts(normalize=True).get('female', 0) * 100:.2f}%")
+    print(f"Mean follow-up time: {merged_data['fu_time'].mean():.2f} ± {merged_data['fu_time'].std():.2f} years")
+    print(f"Number of superagers: {merged_data['superager'].sum()}")
+
 if __name__ == "__main__":
     main()
 
