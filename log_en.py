@@ -397,8 +397,8 @@ def run_elastic_net(
 
     # Hyperparameter grid (log10 C from 1e-2 to 1e2; l1_ratio in (0,1])
     param_grid = {
-        "clf__C": np.logspace(-2, 2, 9),
-        "clf__l1_ratio": [0.2, 0.4, 0.6, 0.8, 1.0],
+        "clf__C": np.logspace(-2, 1, 6),
+        "clf__l1_ratio": [0.2, 0.5, 0.8],
     }
 
     # Storage for outer-CV results
@@ -592,8 +592,8 @@ def main():
 
                 # Group the flattened CSV by ROI
                 grouped_output = fc_output_dir / f"{sub}_{ses}_functional_connectivity_grouped.csv"
-                # Adding group_level="network" allows looking at all of the DMN for example rather than individual ROIs
-                save_grouped_roi_averages(fc_output, grouped_output, group_level = "ROI", subject=sub, ses=ses) 
+                # # Adding group_level="network" allows looking at all of the DMN for example rather than individual ROIs
+                # save_grouped_roi_averages(fc_output, grouped_output, group_level = "ROI", subject=sub, ses=ses) 
 
             # ── Structural connectivity ──
             sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix.csv"
@@ -606,9 +606,9 @@ def main():
                 sc_output = sc_output_dir / f"{sub}_{ses}_structural_connectivity_flat.csv"
                 sc_flat.to_csv(sc_output, index=False)  # Save the flattened version
 
-                # Group the flattened CSV by ROI
-                grouped_output = sc_output_dir / f"{sub}_{ses}_structural_connectivity_grouped.csv"
-                save_grouped_roi_averages(sc_output, grouped_output, group_level = "ROI", subject=sub, ses=ses)
+                # # Group the flattened CSV by ROI
+                # grouped_output = sc_output_dir / f"{sub}_{ses}_structural_connectivity_grouped.csv"
+                # save_grouped_roi_averages(sc_output, grouped_output, group_level = "ROI", subject=sub, ses=ses)
 
             else:
                 print(f"Missing SC CSV at path: {sc_csv}")
@@ -619,8 +619,8 @@ def main():
             ses_path = root_path / ses / "individual_coupling_matrices"
             csv_path = ses_path / f"{sub}_{ses}_structure_function_coupling.csv"
             output_path = ses_path / f"{sub}_{ses}_structure_function_coupling_grouped.csv"
-            if csv_path.is_file():
-                save_grouped_roi_averages(csv_path, output_path, group_level = "ROI", subject=sub, ses=ses)
+            # if csv_path.is_file():
+            #     save_grouped_roi_averages(csv_path, output_path, group_level = "ROI", subject=sub, ses=ses)
 
     # Prepare the data for analysis
     X_t1, X_t2, X_slope, age_diff, superager_vec, X_all = prep_data(
@@ -665,25 +665,25 @@ def main():
     print(f"Training RF on {which_features} features "
           f"({X_use.shape[1]} predictors) for connectivity_type={connectivity_type}...")
 
-    # import time
+    import time
 
-    # t0 = time.time()
-    # results = run_elastic_net(
-    #     X_use, superager_vec, feat_names_use,
-    #     n_permutations=100,
-    #     n_repeats_importance=1,
-    #     class_weight=None,        
-    #     random_state=7,
-    #     verbose=1
-    # )
+    t0 = time.time()
+    results = run_elastic_net(
+        X_use, superager_vec, feat_names_use,
+        n_permutations=5,
+        n_repeats_importance=1,
+        class_weight=None,        
+        random_state=7,
+        verbose=1
+    )
 
-    # print(results["observed"])
-    # print("Model-level p-value:", results["permutation_test"]["p_value"])
-    # results["perm_importance"].head(10)
+    print(results["observed"])
+    print("Model-level p-value:", results["permutation_test"]["p_value"])
+    results["perm_importance"].head(10)
     
-    # dt = time.time() - t0
+    dt = time.time() - t0
     
-    # print(f"Mini-run took {dt:.2f}s")
+    print(f"Mini-run took {dt:.2f}s")
 
     # import seaborn as sns
     # import matplotlib.pyplot as plt
