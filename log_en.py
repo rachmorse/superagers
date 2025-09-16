@@ -367,7 +367,7 @@ def run_elastic_net(
         )),
     ])
 
-    # Hyperparameter grid (log10 C from 1e-2 to 1e2; l1_ratio in (0,1])
+    # Hyperparameter grid 
     param_grid = {
         "clf__C": np.logspace(-2, 2, 9), # higher c = less regularization, may be overfit
         "clf__l1_ratio": [0.2, 0.4, 0.6, 0.8, 1.0], # l1_ratio=1 is fully Lasso where some coeffs = 0
@@ -555,7 +555,8 @@ def run_elastic_net(
 
 def main():
     # Just a note that running all may lead to problems with colinearity
-    connectivity_type = "SFC"  # Options: "SFC", "FC", "SC", "all"
+    connectivity_type = "SC"  # Options: "SFC", "FC", "SC", "all"
+    which_features = 'all' # Options: 't1', 't2', 'slope', 't1_t2', 'all'
     sessions = ["ses-01", "ses-02"] 
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
@@ -639,10 +640,7 @@ def main():
     roi_names_slope = [f"{r}_slope" for r in roi_names]
     all_roi_names = roi_names_tp1 + roi_names_tp2 + roi_names_slope
     
-    # Choose which feature matrix to use in classification
-    # Options: 't1', 't2', 'slope', or 'all' (stacked: t1 + t2 + slope)
-    which_features = 'all'
-
+    # Select which features to use, matching them to ROI names
     if which_features == 't1':
         X_use = X_t1
         feat_names_use = roi_names           # e.g., 59 streamline ROIs
@@ -654,20 +652,21 @@ def main():
         feat_names_use = roi_names
     elif which_features == 'all':
         X_use = X_all
-        feat_names_use = all_roi_names       # tp1 + tp2 + slope (with suffixes)
+        feat_names_use = all_roi_names      # e.g., 59*3 = 177 features
     elif which_features == 't1_t2':
         X_use = X_t1_t2
         feat_names_use = roi_names_tp1 + roi_names_tp2
     else:
-        raise ValueError("which_features must be one of: 't1', 't2', 'slope', 'all'")
+        raise ValueError("which_features must be one of: 't1', 't2', 'slope', 'all', 't1_t2'")
 
     print(f"Training EN on {which_features} features "
           f"({X_use.shape[1]} predictors) for connectivity_type={connectivity_type}...")
 
     t0 = time.time()
+    print("Starting time:", time.ctime(t0))
     results = run_elastic_net(
         X_use, superager_vec, feat_names_use,
-        n_permutations=100,
+        n_permutations=500,
         n_repeats_importance=20,
         class_weight=None,        
         random_state=7,
@@ -676,10 +675,9 @@ def main():
 
     print(results["observed"])
     print("Model-level p-value:", results["permutation_test"]["p_value"])
-    print(results["perm_importance"].head(10))
-
+    with pd.option_context("display.max_columns", None):
+        print(results["perm_importance"].head(10))
     dt = time.time() - t0
-    
     print(f"Run took {dt:.2f}s")
 
     # import seaborn as sns
