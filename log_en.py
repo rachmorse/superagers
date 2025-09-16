@@ -1,12 +1,12 @@
 import numpy as np
-from scipy.stats import linregress
-from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import KFold, permutation_test_score
+import time
+# import scipy.stats  # linregress not used
+# from sklearn.linear_model import LinearRegression  # not used
+# from sklearn.model_selection import KFold, permutation_test_score  # not used
 from sklearn.inspection import permutation_importance
 import pandas as pd
 from pathlib import Path
-import os
-import re
+import os, re
 import nibabel as nib
 from collections import Counter
 from nilearn.datasets import fetch_atlas_schaefer_2018
@@ -15,23 +15,19 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold, GridSearchCV
-from sklearn.metrics import (
-    roc_auc_score,
-    average_precision_score,
-    brier_score_loss,
-    balanced_accuracy_score
-)
+from sklearn.metrics import roc_auc_score, average_precision_score, brier_score_loss, balanced_accuracy_score
 from sklearn.utils import check_random_state
 
 
 def get_subjects_to_process(output_folder, ses, id_csv_path):
     """
-    Generate a list of subjects to process, ensuring each subject is also in the id column of the provided CSV.
+    Generate a list of subjects to process ensuring each subject is also in the id column of the CSV.
 
     Args:
         output_folder (Path): Path to the directory coupling results
         ses (str): Session ID (format: ses-01).
         id_csv_path (Path or str): Path to CSV file with 'id' column.
+
     Returns:
         list: List of subject IDs to process.
     """
@@ -81,8 +77,7 @@ def flatten_connectivity_csv(matrix_csv, measure_col="pearson_rho"):
 
 _SCHAEFER_LABEL_TO_COUNT = None
 def _get_schaefer_label_to_count():
-    """
-    Cached mapping of Schaefer 200 ROIs to their voxel counts
+    """Cached mapping of Schaefer 200 ROIs to their voxel counts
     to speed up weighted averaging.
 
     Returns:
@@ -101,8 +96,7 @@ def _get_schaefer_label_to_count():
 
 @lru_cache(maxsize=None) 
 def _get_subcort_counts(subject: str, ses: str):
-    """
-    Load and cache the voxel counts for subcortical ROIs from the subject's aseg.mgz file.
+    """Load and cache the voxel counts for subcortical ROIs from the subject's aseg.mgz file.
     
     Args:
         subject (str): Subject ID (e.g. "sub-1234").
@@ -120,8 +114,7 @@ def _get_subcort_counts(subject: str, ses: str):
     return Counter(aseg[aseg > 0].ravel())
 
 def save_grouped_roi_averages(csv_path, output_path, group_level, subject, ses):
-    """
-    Reads a subject's connectivity CSV (SFC/FC/SC),
+    """Reads a subject's connectivity CSV (SFC/FC/SC),
     then groups & averages the coefficients either:
       • by ROI prefix (strip trailing _<digits>), or
       • by network (for cortical: 3rd "_" field; for subcortical: region name).
@@ -210,8 +203,7 @@ def save_grouped_roi_averages(csv_path, output_path, group_level, subject, ses):
     grouped.to_csv(output_path, index=False)
 
 def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type):
-    """
-    Prepares the data for analysis by extracting features, memory outcomes, and superager status
+    """Prepares the data for analysis by extracting features, memory outcomes, and superager status
     from the specified directories and memory data.
 
     Args:
@@ -303,7 +295,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
     # 2) Make a superager vector 
     superager_vec = df['superager'].values.astype(int)
 
-    # 3) generate a stacked version of tp1 and tp2 features
+    # 3) Generate a stacked version of tp1 and tp2 features
     X_all = np.hstack([X_t1, X_t2, X_slope])   # shape: (N_subjects, 2 * len(roi_names))
 
     return X_t1, X_t2, X_slope, age_diff, superager_vec, X_all
@@ -314,56 +306,36 @@ def run_elastic_net(
     y,
     feature_names: list,
     n_permutations: int = 1000,
-    n_repeats_importance: int = 1,
+    n_repeats_importance: int = 20,
     class_weight=None,
     random_state: int = 42,
     verbose: int = 1,
 ):
-    """
-    Train/evaluate an Elastic-Net logistic classifier with:
-      - Nested CV (inner tuning, outer evaluation)
-      - Out-of-fold predictions and fold-level metrics
-      - Model-level permutation test via label shuffling
-      - Out-of-fold permutation importance aggregated across folds
+    """Train and evaluate an Elastic-Net logistic classifier with nested cross-validation,
+    out-of-fold predictions, permutation testing, and permutation-based feature importance.
 
-    Parameters
-    ----------
-    X : np.ndarray
-        Feature matrix (n_samples, n_features).
-    y : array-like
-        Binary labels (0=typical, 1=superager).
-    feature_names : list[str]
-        Names for features (len == n_features).
-    n_permutations : int
-        Number of label permutations to build the null distribution (model-level p-value).
-    n_repeats_importance : int
-        Repeats per feature for permutation importance (on each outer test fold).
-    class_weight : {'balanced', dict, None}
-        Class weighting for LogisticRegression.
-    random_state : int
-        RNG seed for splits and shuffles.
-    verbose : int
-        Verbosity; prints ~10% progress during permutations if >0.
+    Args:
+        X (np.ndarray): Feature matrix of shape (n_samples, n_features).
+        y (array-like): Binary labels (0 = non-superager, 1 = superager).
+        feature_names (list[str]): Names of features (length = n_features).
+        n_permutations (int): Number of label permutations for building the null distribution
+            (used to compute model-level p-value).
+        n_repeats_importance (int): Number of repeats per feature for permutation importance
+            (evaluated on each outer test fold).
+        class_weight ({dict, None}): Class weighting for LogisticRegression.
+        random_state (int): Seed for random number generation in splits and shuffles.
+        verbose (int): Verbosity level; prints ~10% progress during permutations if > 0.
 
-    Returns
-    -------
-    results : dict
-        {
-          'observed': {'auc', 'pr_auc', 'brier', 'balanced_acc'},
-          'cv_fold_metrics': pd.DataFrame,
-          'oof': {'y_true', 'y_prob', 'test_index'},
-          'best_params_per_fold': list[dict],
-          'coef_mean': np.ndarray,
-          'coef_std': np.ndarray,
-          'perm_importance': pd.DataFrame,   # feature-wise mean/std across folds
-          'permutation_test': {'aucs': np.ndarray, 'p_value': float},
-        }
-
-    Notes
-    -----
-    • If you duplicated subjects across rows (e.g., TP1 & TP2 stacked), replace
-      StratifiedKFold with GroupKFold and pass subject IDs to both outer and inner CV
-      so that no subject appears in both train and test within a fold.
+    Returns:
+        dict containing:
+            - "observed": with metrics {"auc", "pr_auc", "brier", "balanced_acc"}.
+            - "cv_fold_metrics": with metrics per cross-validation fold.
+            - "oof": with {"y_true", "y_prob", "test_index"} for out-of-fold predictions.
+            - "best_params_per_fold": with best hyperparameters per fold.
+            - "coef_mean": with mean coefficients across folds.
+            - "coef_std": with coefficient standard deviations across folds.
+            - "perm_importance": with feature-wise mean/std permutation importance.
+            - "permutation_test": with {"aucs": np.ndarray, "p_value": float}.
     """
     # Create reproducible splits
     rng = check_random_state(random_state)
@@ -379,16 +351,17 @@ def run_elastic_net(
     OUTER_SPLITS = 10
     INNER_SPLITS = 5
 
+    # Stratified K-Folds keeps the same number of superagers/non-superagers in each fold
     outer_cv = StratifiedKFold(n_splits=OUTER_SPLITS, shuffle=True, random_state=random_state)
     inner_cv = StratifiedKFold(n_splits=INNER_SPLITS, shuffle=True, random_state=random_state + 1)
 
     # Pipeline: scaling + Elastic-Net logistic 
     pipe = Pipeline([
-        ("scaler", StandardScaler(with_mean=True, with_std=True)),
+        ("scaler", StandardScaler(with_mean=True, with_std=True)), # EN requires scaling
         ("clf", LogisticRegression(
             penalty="elasticnet",
-            solver="saga",
-            max_iter=20000,
+            solver="saga", # only solver in scikit-learn that supports EN
+            max_iter=20000, # increased because of convergence warnings at 5,000
             class_weight=class_weight,
             random_state=random_state,
             n_jobs=1
@@ -397,8 +370,8 @@ def run_elastic_net(
 
     # Hyperparameter grid (log10 C from 1e-2 to 1e2; l1_ratio in (0,1])
     param_grid = {
-        "clf__C": np.logspace(-2, 1, 6),
-        "clf__l1_ratio": [0.2, 0.5, 0.8],
+        "clf__C": np.logspace(-2, 2, 9), # higher c = less regularization, may be overfit
+        "clf__l1_ratio": [0.2, 0.4, 0.6, 0.8, 1.0], # l1_ratio=1 is fully Lasso where some coeffs = 0
     }
 
     # Storage for outer-CV results
@@ -414,20 +387,20 @@ def run_elastic_net(
     # Precompute and cache outer splits 
     outer_splits = list(outer_cv.split(X, y))
 
-    # Outer CV loop 
+    # Outer CV - for each outer split holds out X_te/y_te as the final test set
     for fold_id, (tr_idx, te_idx) in enumerate(outer_splits, start=1):
-        X_tr, X_te = X[tr_idx], X[te_idx]
+        X_tr, X_te = X[tr_idx], X[te_idx] # X_tr is the outer training set, X_te is the test set
         y_tr, y_te = y[tr_idx], y[te_idx]
 
-        gs = GridSearchCV(
+        gs = GridSearchCV( # splits X_tr into inner train and validation sets
             estimator=pipe,
             param_grid=param_grid,
             scoring="roc_auc",
-            cv=inner_cv,
-            refit=True,
+            cv=inner_cv, # runs inner CV on X_tr split into inner train/val sets
+            refit=True, # fits the best model on the whole X_tr after tuning
             n_jobs=14,
         )
-        gs.fit(X_tr, y_tr)
+        gs.fit(X_tr, y_tr) 
 
         best = gs.best_estimator_
         best_params_per_fold.append(gs.best_params_)
@@ -439,11 +412,12 @@ def run_elastic_net(
 
         # Fold metrics
         auc = roc_auc_score(y_te, prob_te)
-        pr_auc = average_precision_score(y_te, prob_te)
-        brier = brier_score_loss(y_te, prob_te)
-        y_hat = (prob_te >= 0.5).astype(int)
-        bal_acc = balanced_accuracy_score(y_te, y_hat)
+        pr_auc = average_precision_score(y_te, prob_te) # average precision = area under PR curve
+        brier = brier_score_loss(y_te, prob_te) # measures calibration (lower is better) - how close are predicted probs to reality
+        y_hat = (prob_te >= 0.5).astype(int) 
+        bal_acc = balanced_accuracy_score(y_te, y_hat) # average of sensitivity and specificity
 
+        # Metrics from the refit on the outer test set
         fold_metrics.append({
             "fold": fold_id,
             "n_train": len(tr_idx),
@@ -454,30 +428,30 @@ def run_elastic_net(
             "balanced_acc": bal_acc
         })
 
-        # Coefficients (after scaling): for interpretability, store as-is
+        # Coefficients from the refit/best model 
         coef = best.named_steps["clf"].coef_.ravel()
-        # Align in case something odd happens:
         assert coef.shape[0] == X.shape[1]
         coefs.append(coef)
 
-        # Permutation importance on the outer test set (no leakage)
-        # Using ROC-AUC scorer; repeats kept small per your note
+        # Now determine the importance of features
+        # Permutation importance on the outer test set from the refit/best model
+        # Idea remove one feature at a time and see how much the model performance drops
         pi = permutation_importance(
             best, X_te, y_te,
-            scoring="roc_auc",
+            scoring="roc_auc", # Considers sensitivity and specificity across all thresholds
             n_repeats=n_repeats_importance,
             random_state=random_state + fold_id,
             n_jobs=14
         )
         perm_importance_accumulator.append(pi.importances_mean)
 
-    # Aggregate observed performance
+    # Metrics for how well the EN model did overall (on all out-of-fold predictions)
     observed_auc = roc_auc_score(y_true_oof, y_prob_oof)
     observed_pr_auc = average_precision_score(y_true_oof, y_prob_oof)
     observed_brier = brier_score_loss(y_true_oof, y_prob_oof)
     observed_bal_acc = balanced_accuracy_score(y_true_oof, (y_prob_oof >= 0.5).astype(int))
 
-    # Aggregate coefficients and permutation importances
+    # Metrics for how important each feature was overall
     coefs = np.vstack(coefs)
     coef_mean = coefs.mean(axis=0)
     coef_std = coefs.std(axis=0, ddof=1)
@@ -495,29 +469,26 @@ def run_elastic_net(
         "abs_coef_mean": np.abs(coef_mean)
     }).sort_values(["perm_importance_mean", "abs_coef_mean"], ascending=False).reset_index(drop=True)
 
-    # Model-level permutation test (label shuffling) 
-    # Train inside each outer split with permuted labels (train) and evaluate on true test labels.
-    perm_aucs = np.empty(n_permutations, dtype=float)
-
-    # Progress cadence (~10% updates)
-    progress_every = max(1, n_permutations // 10)
-
+    # Model-level permutation test - now build the null distribution training the models on shuffled labels
+    perm_aucs = np.empty(n_permutations, dtype=float) # save the AUCs from each permutation
+    progress_every = max(1, n_permutations // 10) # report progress after every 10%
+ 
     for p in range(n_permutations):
-        # Shuffle labels globally once per permutation
+        # For each permutation, shuffle the labels randomly
         y_perm = rng.permutation(y)
 
-        # Accumulate permuted out-of-fold predictions for the true test sets
+        # Save the out-of-fold predictions for each permutation
         perm_oof = np.zeros_like(y, dtype=float)
 
         for (tr_idx, te_idx) in outer_splits:
             X_tr, X_te = X[tr_idx], X[te_idx]
             y_tr_perm = y_perm[tr_idx]       # permuted labels for training
-            # Tune & fit on permuted labels
+            # Train and run on permuted labels
             gs_perm = GridSearchCV(
                 estimator=pipe,
                 param_grid=param_grid,
                 scoring="roc_auc",
-                cv=inner_cv,
+                cv=inner_cv, # runs inner CV search grid to make the comparisons fair
                 refit=True,
                 n_jobs=14,
             )
@@ -531,6 +502,7 @@ def run_elastic_net(
             print(f"[Permutation {p+1}/{n_permutations}] Null AUC (mean so far): {perm_aucs[:p+1].mean():.3f}")
 
     # One-sided p-value (>= observed AUC), add 1 to numerator/denominator for stability
+    # Must run a sufficient number of permutations to get a good estimate of the p-value 
     p_value = (np.sum(perm_aucs >= observed_auc) + 1.0) / (n_permutations + 1.0)
 
     results = {
@@ -643,9 +615,9 @@ def main():
     roi_names_slope = [f"{r}_slope" for r in roi_names]
     all_roi_names = roi_names_tp1 + roi_names_tp2 + roi_names_slope
     
-    # --- Choose which feature matrix to classify on ---
+    # Choose which feature matrix to use in classification
     # Options: 't1', 't2', 'slope', or 'all' (stacked: t1 + t2 + slope)
-    which_features = 'all'  # <- change here as needed
+    which_features = 'all' 
 
     if which_features == 't1':
         X_use = X_t1
@@ -662,10 +634,8 @@ def main():
     else:
         raise ValueError("which_features must be one of: 't1', 't2', 'slope', 'all'")
 
-    print(f"Training RF on {which_features} features "
+    print(f"Training EN on {which_features} features "
           f"({X_use.shape[1]} predictors) for connectivity_type={connectivity_type}...")
-
-    import time
 
     t0 = time.time()
     results = run_elastic_net(
@@ -683,7 +653,7 @@ def main():
     
     dt = time.time() - t0
     
-    print(f"Mini-run took {dt:.2f}s")
+    print(f"Run took {dt:.2f}s")
 
     # import seaborn as sns
     # import matplotlib.pyplot as plt
