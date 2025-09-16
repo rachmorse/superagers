@@ -1,8 +1,5 @@
 import numpy as np
 import time
-# import scipy.stats  # linregress not used
-# from sklearn.linear_model import LinearRegression  # not used
-# from sklearn.model_selection import KFold, permutation_test_score  # not used
 from sklearn.inspection import permutation_importance
 import pandas as pd
 from pathlib import Path
@@ -17,6 +14,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold, GridSearchCV
 from sklearn.metrics import roc_auc_score, average_precision_score, brier_score_loss, balanced_accuracy_score
 from sklearn.utils import check_random_state
+from statsmodels.stats.multitest import multipletests
 
 
 def get_subjects_to_process(output_folder, ses, id_csv_path):
@@ -297,8 +295,9 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
 
     # 3) Generate a stacked version of tp1 and tp2 features
     X_all = np.hstack([X_t1, X_t2, X_slope])   # shape: (N_subjects, 2 * len(roi_names))
+    X_t1_t2 = np.hstack([X_t1, X_t2])  
 
-    return X_t1, X_t2, X_slope, age_diff, superager_vec, X_all
+    return X_t1, X_t2, X_slope, X_t1_t2, age_diff, superager_vec, X_all
 
 
 def run_elastic_net(
@@ -463,14 +462,15 @@ def run_elastic_net(
     perm_importance_df = pd.DataFrame({
         "feature": feature_names,
         "perm_importance_mean": pi_mean,
-        "perm_importance_std": pi_std,
-        "coef_mean": coef_mean,
-        "coef_std": coef_std,
+        # "perm_importance_std": pi_std,
+        # "coef_mean": coef_mean,
+        # "coef_std": coef_std,
         "abs_coef_mean": np.abs(coef_mean)
     }).sort_values(["perm_importance_mean", "abs_coef_mean"], ascending=False).reset_index(drop=True)
 
     # Model-level permutation test - now build the null distribution training the models on shuffled labels
     perm_aucs = np.empty(n_permutations, dtype=float) # save the AUCs from each permutation
+    pi_null = np.zeros((n_permutations, X.shape[1]), dtype=float) # save feature level null importance
     progress_every = max(1, n_permutations // 10) # report progress after every 10%
  
     for p in range(n_permutations):
@@ -479,6 +479,7 @@ def run_elastic_net(
 
         # Save the out-of-fold predictions for each permutation
         perm_oof = np.zeros_like(y, dtype=float)
+        per_fold_imps = []
 
         for (tr_idx, te_idx) in outer_splits:
             X_tr, X_te = X[tr_idx], X[te_idx]
@@ -496,7 +497,22 @@ def run_elastic_net(
             best_perm = gs_perm.best_estimator_
             perm_oof[te_idx] = best_perm.predict_proba(X_te)[:, 1]
 
-        perm_aucs[p] = roc_auc_score(y_true_oof, perm_oof)
+            # Now calculate the importance of features in this permutation
+            pi_perm = permutation_importance(
+                best_perm, X_te, y[te_idx],
+                scoring="roc_auc",
+                n_repeats=n_repeats_importance,
+                random_state=random_state + 10_000 + p,
+                n_jobs=14,
+            )
+            per_fold_imps.append(pi_perm.importances_mean)
+        
+        perm_aucs[p] = roc_auc_score(y, perm_oof)
+        # Average feature importances across outer folds for this permutation
+        if per_fold_imps:
+            pi_null[p, :] = np.mean(np.vstack(per_fold_imps), axis=0)
+        else:
+            pi_null[p, :] = 0.0 
 
         if verbose and ((p + 1) % progress_every == 0 or (p + 1) == n_permutations):
             print(f"[Permutation {p+1}/{n_permutations}] Null AUC (mean so far): {perm_aucs[:p+1].mean():.3f}")
@@ -504,6 +520,14 @@ def run_elastic_net(
     # One-sided p-value (>= observed AUC), add 1 to numerator/denominator for stability
     # Must run a sufficient number of permutations to get a good estimate of the p-value 
     p_value = (np.sum(perm_aucs >= observed_auc) + 1.0) / (n_permutations + 1.0)
+
+    # Feature-level p-values corrected FDR
+    pvals = ((pi_null >= pi_mean).sum(axis=0) + 1.0) / (n_permutations + 1.0)
+    rej, pvals_fdr, _, _ = multipletests(pvals, alpha=0.05, method='fdr_bh')
+
+    perm_importance_df["p_value"] = pvals
+    perm_importance_df["p_fdr"] = pvals_fdr
+    perm_importance_df.sort_values(["p_value", "perm_importance_mean"], ascending=[True, False], inplace=True)
 
     results = {
         "observed": {
@@ -595,7 +619,7 @@ def main():
             #     save_grouped_roi_averages(csv_path, output_path, group_level = "ROI", subject=sub, ses=ses)
 
     # Prepare the data for analysis
-    X_t1, X_t2, X_slope, age_diff, superager_vec, X_all = prep_data(
+    X_t1, X_t2, X_slope, X_t1_t2, age_diff, superager_vec, X_all = prep_data(
         subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type)
 
     # Map feature indices back to ROI names 
@@ -617,7 +641,7 @@ def main():
     
     # Choose which feature matrix to use in classification
     # Options: 't1', 't2', 'slope', or 'all' (stacked: t1 + t2 + slope)
-    which_features = 'all' 
+    which_features = 'all'
 
     if which_features == 't1':
         X_use = X_t1
@@ -631,6 +655,9 @@ def main():
     elif which_features == 'all':
         X_use = X_all
         feat_names_use = all_roi_names       # tp1 + tp2 + slope (with suffixes)
+    elif which_features == 't1_t2':
+        X_use = X_t1_t2
+        feat_names_use = roi_names_tp1 + roi_names_tp2
     else:
         raise ValueError("which_features must be one of: 't1', 't2', 'slope', 'all'")
 
@@ -640,8 +667,8 @@ def main():
     t0 = time.time()
     results = run_elastic_net(
         X_use, superager_vec, feat_names_use,
-        n_permutations=5,
-        n_repeats_importance=1,
+        n_permutations=100,
+        n_repeats_importance=20,
         class_weight=None,        
         random_state=7,
         verbose=1
@@ -649,8 +676,8 @@ def main():
 
     print(results["observed"])
     print("Model-level p-value:", results["permutation_test"]["p_value"])
-    results["perm_importance"].head(10)
-    
+    print(results["perm_importance"].head(10))
+
     dt = time.time() - t0
     
     print(f"Run took {dt:.2f}s")
