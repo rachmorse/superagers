@@ -311,6 +311,7 @@ def run_elastic_net(
     random_state: int = 42,
     verbose: int = 1,
     checkpoint_n=None,
+    connectivity_type=None
 ):
     """Train and evaluate an Elastic-Net logistic classifier with nested cross-validation,
     out-of-fold predictions, permutation testing, and permutation-based feature importance.
@@ -326,6 +327,7 @@ def run_elastic_net(
         class_weight ({dict, None}): Class weighting for LogisticRegression.
         random_state (int): Seed for random number generation in splits and shuffles.
         verbose (int): Verbosity level; prints ~10% progress during permutations if > 0.
+        connectivity_type (str): Type of connectivity data ("SFC", "FC", "SC", or "all") for naming outputs.
 
     Returns:
         dict containing:
@@ -472,7 +474,7 @@ def run_elastic_net(
 
     # Model-level permutation test - now build the null distribution training the models on shuffled labels
     # Start by adding a check point for if the server crashes while this is running, not all progress is lost 
-    checkpoint_file = "perm_results.pkl"
+    checkpoint_file = f"{connectivity_type}_perm_results.pkl"
     save_every = checkpoint_n
     start_p = 0
 
@@ -480,17 +482,37 @@ def run_elastic_net(
     if os.path.exists(checkpoint_file):
         with open(checkpoint_file, "rb") as f:
             saved = pickle.load(f)
-        perm_aucs = saved["perm_aucs"]
-        pi_null = saved["pi_null"]
-        start_p = saved["last_p"] + 1
-        print(f"Resuming from permutation {start_p}")
+
+        completed = saved.get("last_p", -1) + 1              
+        old_total = saved["perm_aucs"].shape[0]               
+        n_features = X.shape[1]
+        target_total = max(n_permutations, old_total) 
+
+        if old_total < target_total:
+            # Expand arrays to the new total and copy old data
+            perm_aucs = np.empty(target_total, dtype=float); perm_aucs[:] = np.nan
+            pi_null   = np.zeros((target_total, n_features), dtype=float)
+            perm_aucs[:old_total] = saved["perm_aucs"]
+            pi_null[:old_total, :] = saved["pi_null"]
+            print(f"Expanding from {old_total} → {target_total} total permutations.")
+        else:
+            # Reuse existing arrays
+            perm_aucs = saved["perm_aucs"]
+            pi_null   = saved["pi_null"]
+            target_total = old_total
+            print(f"Using existing {old_total} total permutations.")
+
+        start_p = completed
     else:
-        perm_aucs = np.empty(n_permutations, dtype=float) # save the AUCs from each permutation
-        pi_null = np.zeros((n_permutations, X.shape[1]), dtype=float) # save feature level null importance
+        print(f"Starting permutations from scratch, running {n_permutations} total.")
+        target_total = n_permutations
+        perm_aucs = np.empty(target_total, dtype=float); perm_aucs[:] = np.nan
+        pi_null   = np.zeros((target_total, X.shape[1]), dtype=float)
+        start_p = 0
+
+    progress_every = max(1, target_total // 10) # report progress after every 10%
     
-    progress_every = max(1, n_permutations // 10) # report progress after every 10%
-    
-    for p in range(start_p, n_permutations):
+    for p in range(start_p, target_total):
         # For each permutation, shuffle the labels randomly
         y_perm = rng.permutation(y)
 
@@ -532,15 +554,25 @@ def run_elastic_net(
         else:
             pi_null[p, :] = 0.0 
 
-        if verbose and ((p + 1) % progress_every == 0 or (p + 1) == n_permutations):
-            print(f"[Permutation {p+1}/{n_permutations}] Null AUC (mean so far): {perm_aucs[:p+1].mean():.3f}")
+        if (p + 1) % save_every == 0 or (p + 1) == target_total:
+            with open(checkpoint_file, "wb") as f:
+                pickle.dump({
+                    "last_p": p,
+                    "perm_aucs": perm_aucs,
+                    "pi_null": pi_null,
+                    "feature": feature_names,   # safe mid-run
+                }, f)
+            print(f"Checkpoint saved at permutation {p+1}")
+
+        if verbose and ((p + 1) % progress_every == 0 or (p + 1) == target_total):
+            print(f"[Permutation {p+1}/{target_total}] Null AUC (mean so far): {perm_aucs[:p+1].mean():.3f}")
 
     # One-sided p-value (>= observed AUC), add 1 to numerator/denominator for stability
-    # Must run a sufficient number of permutations to get a good estimate of the p-value 
-    p_value = (np.sum(perm_aucs >= observed_auc) + 1.0) / (n_permutations + 1.0)
+    # Must run a sufficient number of permutations to get a good estimate of the p-value
+    p_value = (np.sum(perm_aucs >= observed_auc) + 1.0) / (target_total + 1.0)
 
     # Feature-level p-values corrected FDR
-    pvals = ((pi_null >= pi_mean).sum(axis=0) + 1.0) / (n_permutations + 1.0)
+    pvals = ((pi_null >= pi_mean).sum(axis=0) + 1.0) / (target_total + 1.0)
     rej, pvals_fdr, _, _ = multipletests(pvals, alpha=0.05, method='fdr_bh')
 
     perm_importance_df["p_value"] = pvals
@@ -548,18 +580,17 @@ def run_elastic_net(
     perm_importance_df.sort_values(["p_value", "perm_importance_mean"], ascending=[True, False], inplace=True)
 
     # Save results at each checkpoint_n permutations
-    for p in range(start_p, n_permutations):
-        if (p + 1) % save_every == 0 or (p + 1) == n_permutations:
-            with open("perm_results.pkl", "wb") as f:
-                pickle.dump({
-                    "last_p": n_permutations - 1,
-                    "perm_aucs": perm_aucs,
-                    "pi_null": pi_null,
-                    "feature": feature_names,
-                    "p_value": pvals,
-                    "p_fdr": pvals_fdr
-                }, f)
-            print(f"Checkpoint saved at permutation {p+1}")
+    with open(f"{checkpoint_file}", "wb") as f:
+        pickle.dump({
+            "last_p": target_total - 1,
+            "perm_aucs": perm_aucs,
+            "pi_null": pi_null,
+            "feature": feature_names,
+            "p_value": p_value,   # model-level p
+            "pvals": pvals,       # feature-wise raw p
+            "p_fdr": pvals_fdr    # feature-wise FDR
+        }, f)
+    print(f"Final checkpoint saved at permutation {p+1}")
 
     results = {
         "observed": {
@@ -589,7 +620,6 @@ def main():
     # Just a note that running all may lead to problems with colinearity
     connectivity_type = "SC"  # Options: "SFC", "FC", "SC", "all"
     which_features = 'all' # Options: 't1', 't2', 'slope', 't1_t2', 'all'
-    checkpoint_n = 1 # Save checkpoint every n permutations
     sessions = ["ses-01", "ses-02"] 
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
@@ -699,12 +729,13 @@ def main():
     print("Starting time:", time.ctime(t0))
     results = run_elastic_net(
         X_use, superager_vec, feat_names_use,
-        n_permutations=25,
+        n_permutations=400,
         n_repeats_importance=20,
         class_weight=None,        
         random_state=7,
         verbose=1,
-        checkpoint_n=checkpoint_n,
+        checkpoint_n=1,
+        connectivity_type=connectivity_type
     )
 
     print(results["observed"])
