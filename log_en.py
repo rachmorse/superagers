@@ -532,15 +532,6 @@ def run_elastic_net(
         else:
             pi_null[p, :] = 0.0 
 
-        if (p + 1) % save_every == 0 or (p + 1) == n_permutations:
-            with open(checkpoint_file, "wb") as f:
-                pickle.dump({
-                    "last_p": p,
-                    "perm_aucs": perm_aucs,
-                    "pi_null": pi_null
-                }, f)
-            print(f"Checkpoint saved at permutation {p+1}")
-
         if verbose and ((p + 1) % progress_every == 0 or (p + 1) == n_permutations):
             print(f"[Permutation {p+1}/{n_permutations}] Null AUC (mean so far): {perm_aucs[:p+1].mean():.3f}")
 
@@ -556,15 +547,19 @@ def run_elastic_net(
     perm_importance_df["p_fdr"] = pvals_fdr
     perm_importance_df.sort_values(["p_value", "perm_importance_mean"], ascending=[True, False], inplace=True)
 
-    with open(checkpoint_file, "wb") as f:
-        pickle.dump({
-            "last_p": n_permutations - 1,
-            "perm_aucs": perm_aucs,
-            "pi_null": pi_null,
-            "feature": feature_names,
-            "p_value": pvals,
-            "p_fdr": pvals_fdr
-        }, f)
+    # Save results at each checkpoint_n permutations
+    for p in range(start_p, n_permutations):
+        if (p + 1) % save_every == 0 or (p + 1) == n_permutations:
+            with open("perm_results.pkl", "wb") as f:
+                pickle.dump({
+                    "last_p": n_permutations - 1,
+                    "perm_aucs": perm_aucs,
+                    "pi_null": pi_null,
+                    "feature": feature_names,
+                    "p_value": pvals,
+                    "p_fdr": pvals_fdr
+                }, f)
+            print(f"Checkpoint saved at permutation {p+1}")
 
     results = {
         "observed": {
@@ -704,7 +699,7 @@ def main():
     print("Starting time:", time.ctime(t0))
     results = run_elastic_net(
         X_use, superager_vec, feat_names_use,
-        n_permutations=5,
+        n_permutations=25,
         n_repeats_importance=20,
         class_weight=None,        
         random_state=7,
