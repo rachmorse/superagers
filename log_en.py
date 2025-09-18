@@ -1,5 +1,6 @@
 import numpy as np
 import time
+import pickle
 from sklearn.inspection import permutation_importance
 import pandas as pd
 from pathlib import Path
@@ -309,6 +310,7 @@ def run_elastic_net(
     class_weight=None,
     random_state: int = 42,
     verbose: int = 1,
+    checkpoint_n=None,
 ):
     """Train and evaluate an Elastic-Net logistic classifier with nested cross-validation,
     out-of-fold predictions, permutation testing, and permutation-based feature importance.
@@ -469,11 +471,26 @@ def run_elastic_net(
     }).sort_values(["perm_importance_mean", "abs_coef_mean"], ascending=False).reset_index(drop=True)
 
     # Model-level permutation test - now build the null distribution training the models on shuffled labels
-    perm_aucs = np.empty(n_permutations, dtype=float) # save the AUCs from each permutation
-    pi_null = np.zeros((n_permutations, X.shape[1]), dtype=float) # save feature level null importance
+    # Start by adding a check point for if the server crashes while this is running, not all progress is lost 
+    checkpoint_file = "perm_results.pkl"
+    save_every = checkpoint_n
+    start_p = 0
+
+    # Resume if checkpoint exists (ie from a previous crash)
+    if os.path.exists(checkpoint_file):
+        with open(checkpoint_file, "rb") as f:
+            saved = pickle.load(f)
+        perm_aucs = saved["perm_aucs"]
+        pi_null = saved["pi_null"]
+        start_p = saved["last_p"] + 1
+        print(f"Resuming from permutation {start_p}")
+    else:
+        perm_aucs = np.empty(n_permutations, dtype=float) # save the AUCs from each permutation
+        pi_null = np.zeros((n_permutations, X.shape[1]), dtype=float) # save feature level null importance
+    
     progress_every = max(1, n_permutations // 10) # report progress after every 10%
- 
-    for p in range(n_permutations):
+    
+    for p in range(start_p, n_permutations):
         # For each permutation, shuffle the labels randomly
         y_perm = rng.permutation(y)
 
@@ -508,11 +525,21 @@ def run_elastic_net(
             per_fold_imps.append(pi_perm.importances_mean)
         
         perm_aucs[p] = roc_auc_score(y, perm_oof)
+
         # Average feature importances across outer folds for this permutation
         if per_fold_imps:
             pi_null[p, :] = np.mean(np.vstack(per_fold_imps), axis=0)
         else:
             pi_null[p, :] = 0.0 
+
+        if (p + 1) % save_every == 0 or (p + 1) == n_permutations:
+            with open(checkpoint_file, "wb") as f:
+                pickle.dump({
+                    "last_p": p,
+                    "perm_aucs": perm_aucs,
+                    "pi_null": pi_null
+                }, f)
+            print(f"Checkpoint saved at permutation {p+1}")
 
         if verbose and ((p + 1) % progress_every == 0 or (p + 1) == n_permutations):
             print(f"[Permutation {p+1}/{n_permutations}] Null AUC (mean so far): {perm_aucs[:p+1].mean():.3f}")
@@ -528,6 +555,16 @@ def run_elastic_net(
     perm_importance_df["p_value"] = pvals
     perm_importance_df["p_fdr"] = pvals_fdr
     perm_importance_df.sort_values(["p_value", "perm_importance_mean"], ascending=[True, False], inplace=True)
+
+    with open(checkpoint_file, "wb") as f:
+        pickle.dump({
+            "last_p": n_permutations - 1,
+            "perm_aucs": perm_aucs,
+            "pi_null": pi_null,
+            "feature": feature_names,
+            "p_value": pvals,
+            "p_fdr": pvals_fdr
+        }, f)
 
     results = {
         "observed": {
@@ -557,6 +594,7 @@ def main():
     # Just a note that running all may lead to problems with colinearity
     connectivity_type = "SC"  # Options: "SFC", "FC", "SC", "all"
     which_features = 'all' # Options: 't1', 't2', 'slope', 't1_t2', 'all'
+    checkpoint_n = 1 # Save checkpoint every n permutations
     sessions = ["ses-01", "ses-02"] 
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
@@ -666,11 +704,12 @@ def main():
     print("Starting time:", time.ctime(t0))
     results = run_elastic_net(
         X_use, superager_vec, feat_names_use,
-        n_permutations=500,
+        n_permutations=5,
         n_repeats_importance=20,
         class_weight=None,        
         random_state=7,
-        verbose=1
+        verbose=1,
+        checkpoint_n=checkpoint_n,
     )
 
     print(results["observed"])
