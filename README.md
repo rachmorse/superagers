@@ -76,6 +76,10 @@ This repository contains the analysis scripts for our study on superagers, which
     - **Purpose:** The first exploritory analysis.  
 2. **`elastic_net.py`**
     - **Purpose:** Run an elastic net analysis to extract ROIs that are most important in memory. 
+2. **`prep_data_for_en.py`**
+    - **Purpose:** Prepares data by generating voxel‑weighted, grouped ROI connectivity summaries for later Elastic Net analysis. 
+2. **`log_en.py`**
+    - **Purpose:** Run a logistic elastic‑net classification to predict superager status using cross-validation and permutation testing. Provides model level metrics including p-value and feature level p-values. 
 
 ## Misc Scripts
 1. **`missing_subs.py`**
