@@ -359,16 +359,15 @@ def run_elastic_net(
             saved = pickle.load(f)
 
         completed = int(np.count_nonzero(~np.isnan(saved["perm_aucs"])))
-        old_total = saved["perm_aucs"].shape[0]               
         n_features = X.shape[1]
         target_total = max(n_permutations, completed) 
 
-        if old_total < target_total:
+        if completed < target_total:
             # Expand arrays to the new total and copy old data
             perm_aucs = np.empty(target_total, dtype=float); perm_aucs[:] = np.nan
             pi_null   = np.zeros((target_total, n_features), dtype=float)
-            perm_aucs[:old_total] = saved["perm_aucs"]
-            pi_null[:old_total, :] = saved["pi_null"]
+            perm_aucs[:len(saved["perm_aucs"])] = saved["perm_aucs"]
+            pi_null[:len(saved["pi_null"])] = saved["pi_null"]
             print(f"Expanding from {completed} → {target_total} total permutations.")
         else:
             # Reuse existing arrays
@@ -387,7 +386,6 @@ def run_elastic_net(
 
     progress_every = max(1, target_total // 10) # report progress after every 10%
     
-    print(f"completed total = {completed}, target total = {target_total}, start_p = {start_p}")
     if completed >= target_total:
         print("All requested permutations already done.")
     else:
@@ -457,7 +455,7 @@ def run_elastic_net(
 
     perm_importance_df["p_value"] = pvals
     perm_importance_df["p_fdr"] = pvals_fdr
-    perm_importance_df.sort_values(["perm_importance_mean", "p_value"], ascending=[False, True], inplace=True)
+    perm_importance_df.sort_values(["p_value", "perm_importance_mean"], ascending=[True, False], inplace=True)
 
     # Save results at each checkpoint_n permutations
     with open(f"{checkpoint_file}", "wb") as f:
@@ -561,7 +559,7 @@ def main():
     print("Starting time:", time.ctime(t0))
     results = run_elastic_net(
         X_use, superager_vec, feat_names_use,
-        n_permutations=140,
+        n_permutations=1000,
         n_repeats_importance=20,
         class_weight=None,        
         random_state=7,
