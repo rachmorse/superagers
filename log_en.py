@@ -126,7 +126,9 @@ def run_elastic_net(
     random_state: int = 42,
     verbose: int = 1,
     checkpoint_n=None,
-    connectivity_type=None
+    connectivity_type=None,
+    group_level=None,
+    which_features=None
 ):
     """Train and evaluate an Elastic-Net logistic classifier with nested cross-validation,
     out-of-fold predictions, permutation testing, and permutation-based feature importance.
@@ -143,6 +145,9 @@ def run_elastic_net(
         random_state (int): Seed for random number generation in splits and shuffles.
         verbose (int): Verbosity level; prints ~10% progress during permutations if > 0.
         connectivity_type (str): Type of connectivity data ("SFC", "FC", "SC", or "all") for naming outputs.
+        group_level (str): Grouping level for ROI averaging ("ROI" or "network") for naming outputs.
+        checkpoint_n (int): Save progress every `checkpoint_n` permutations to a pickle file.
+        which_features (str): Which features are being used ('t1', 't2', 'slope', 't1_t2', 'all') for naming outputs.
 
     Returns:
         dict containing:
@@ -288,8 +293,8 @@ def run_elastic_net(
     }).sort_values(["perm_importance_mean", "abs_coef_mean"], ascending=False).reset_index(drop=True)
 
     # Model-level permutation test - now build the null distribution training the models on shuffled labels
-    # Start by adding a check point for if the server crashes while this is running, not all progress is lost 
-    checkpoint_file = f"{connectivity_type}_perm_results.pkl"
+    # Start by adding a check point for if the server crashes while this is running, not all progress is lost
+    checkpoint_file = f"{connectivity_type}_{group_level}_{which_features}perm_results.pkl"
     save_every = checkpoint_n
     start_p = 0
 
@@ -298,12 +303,12 @@ def run_elastic_net(
         with open(checkpoint_file, "rb") as f:
             saved = pickle.load(f)
 
-        completed = saved.get("last_p", -1) + 1              
+        completed = int(np.count_nonzero(~np.isnan(saved["perm_aucs"])))
         old_total = saved["perm_aucs"].shape[0]               
         n_features = X.shape[1]
         target_total = max(n_permutations, old_total) 
 
-        if old_total < target_total:
+        if old_total <= target_total:
             # Expand arrays to the new total and copy old data
             perm_aucs = np.empty(target_total, dtype=float); perm_aucs[:] = np.nan
             pi_null   = np.zeros((target_total, n_features), dtype=float)
@@ -432,8 +437,9 @@ def run_elastic_net(
     return results
 
 def main():
-    connectivity_type = "SC"  # Options: "SFC", "FC", "SC", "all"
+    connectivity_type = "FC"  # Options: "SFC", "FC", "SC", "all"
     which_features = 'all' # Options: 't1', 't2', 'slope', 't1_t2', 'all'
+    group_level = "ROI"
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
     sc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
@@ -448,10 +454,10 @@ def main():
 
     # Prepare the data for analysis
     X_t1, X_t2, X_slope, X_t1_t2, age_diff, superager_vec, X_all = prep_data(
-        subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type)
+        subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type, group_level)
 
     # Map feature indices back to ROI names 
-    roi_names_path = root_path / "ses-01" / "individual_coupling_matrices" / f"{subjects[0]}_ses-01_structure_function_coupling_grouped.csv"
+    roi_names_path = root_path / "ses-01" / "individual_coupling_matrices" / f"{subjects[0]}_ses-01_structure_function_coupling_grouped_by_{group_level}.csv"
     roi_names_pre = pd.read_csv(roi_names_path)['ROI_name'].tolist()
 
     if connectivity_type in ["SFC", "SC", "FC"]:
@@ -499,7 +505,9 @@ def main():
         random_state=7,
         verbose=1,
         checkpoint_n=25,
-        connectivity_type=connectivity_type
+        connectivity_type=connectivity_type,
+        group_level=group_level,
+        which_features=which_features
     )
 
     print(results["observed"])
