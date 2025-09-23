@@ -13,6 +13,7 @@ from sklearn.metrics import roc_auc_score, average_precision_score, brier_score_
 from sklearn.utils import check_random_state
 from statsmodels.stats.multitest import multipletests
 from prep_data_for_en import get_subjects_to_process
+from sklearn.linear_model import LinearRegression
 
 
 def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type, group_level):
@@ -27,6 +28,17 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
         memory_data (pd.DataFrame): DataFrame containing memory outcomes and demographics.
         connectivity_type (str): Type of connectivity data to process ("SFC", "FC", or "SC").
         group_level (str): Grouping level for ROI averaging ("ROI" or "network").
+
+    Returns:
+        X_t1 (np.ndarray): Feature matrix for timepoint 1.
+        X_t2 (np.ndarray): Feature matrix for timepoint 2.
+        X_slope (np.ndarray): Feature matrix representing the slope between timepoints.
+        X_t1_t2 (np.ndarray): Combined feature matrix for timepoints 1 and 2.
+        superager_vec (np.ndarray): Binary vector indicating superager status.
+        X_all (np.ndarray): Combined feature matrix for all features.
+        age1 (np.ndarray): Ages at timepoint 1.
+        YoE (np.ndarray): Years of education.
+        sex (np.ndarray): Sex of the subjects.
     """
     # Prepare the data 
     def load_modality(sub, mod):
@@ -86,6 +98,9 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
         YoE = row.iloc[0]['YoE']
         sex = row.iloc[0]['sex']
 
+        # Convert sex to binary 0/1
+        sex = 1 if sex == 'male' else 0
+
         records.append({
             'id'        : sub,
             'feat1'     : feat1,
@@ -105,6 +120,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
     X_t2 = np.stack(df['feat2'].values)
     age_diff = (df['age2'] - df['age1']).values
     X_slope = (X_t2 - X_t1) / age_diff[:, None]
+    covariates = np.vstack([df['age1'].values, df['YoE'].values, df['sex'].values]).T   
 
     # 2) Make a superager vector 
     superager_vec = df['superager'].values.astype(int)
@@ -113,8 +129,37 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
     X_all = np.hstack([X_t1, X_t2, X_slope])   # shape: (N_subjects, 2 * len(roi_names))
     X_t1_t2 = np.hstack([X_t1, X_t2])  
 
-    return X_t1, X_t2, X_slope, X_t1_t2, age_diff, superager_vec, X_all
+    return X_t1, X_t2, X_slope, X_t1_t2, superager_vec, X_all, covariates
 
+
+def take_residuals_covars(X, covariates):
+    """
+    Takes the residuals of ROI features using covariates (i.e., age, YoE, sex).
+    For each feature column, fits a linear regression using the covariates,
+    and the residuals (feature minus predicted component) returned. This
+    ensures that downstream models operate only on variance unexplained by
+    the covariates.
+
+    Args:
+        X (np.ndarray): Feature matrix of shape (n_samples, n_features).
+        covariates (np.ndarray): Matrix of covariates of shape (n_samples, n_covariates).
+
+    Returns:
+        np.ndarray: Residualized feature matrix of shape (n_samples, n_features),
+                    where each column has been adjusted for the covariates.
+    """
+    n_samples, n_features = X.shape
+    X_resid = np.zeros_like(X)
+
+    for j in range(n_features):
+        # Fit linear regression of feature j on covariates
+        model = LinearRegression().fit(covariates, X[:, j])
+        # Predicted values from covariates
+        pred = model.predict(covariates)
+        # Residuals = observed - predicted
+        X_resid[:, j] = X[:, j] - pred
+
+    return X_resid
 
 def run_elastic_net(
     X: np.ndarray,
@@ -128,7 +173,8 @@ def run_elastic_net(
     checkpoint_n=None,
     connectivity_type=None,
     group_level=None,
-    which_features=None
+    which_features=None,
+    covariates: np.ndarray=None,
 ):
     """Train and evaluate an Elastic-Net logistic classifier with nested cross-validation,
     out-of-fold predictions, permutation testing, and permutation-based feature importance.
@@ -148,6 +194,7 @@ def run_elastic_net(
         group_level (str): Grouping level for ROI averaging ("ROI" or "network") for naming outputs.
         checkpoint_n (int): Save progress every `checkpoint_n` permutations to a pickle file.
         which_features (str): Which features are being used ('t1', 't2', 'slope', 't1_t2', 'all') for naming outputs.
+        covariates (np.ndarray): Covariate matrix of shape (n_samples, n_covariates) for residualization.
 
     Returns:
         dict containing:
@@ -213,6 +260,13 @@ def run_elastic_net(
     # Outer CV - for each outer split holds out X_te/y_te as the final test set
     for fold_id, (tr_idx, te_idx) in enumerate(outer_splits, start=1):
         X_tr, X_te = X[tr_idx], X[te_idx] # X_tr is the outer training set, X_te is the test set
+
+        # Residualize ROI features against covariates inside the outer split
+        cov_tr = covariates[tr_idx]   # age1, YoE, sex for training subjects
+        cov_te = covariates[te_idx]   # covariates for test subjects
+        X_tr = take_residuals_covars(X_tr, cov_tr)
+        X_te = take_residuals_covars(X_te, cov_te)
+
         y_tr, y_te = y[tr_idx], y[te_idx]
 
         gs = GridSearchCV( # splits X_tr into inner train and validation sets
@@ -294,12 +348,13 @@ def run_elastic_net(
 
     # Model-level permutation test - now build the null distribution training the models on shuffled labels
     # Start by adding a check point for if the server crashes while this is running, not all progress is lost
-    checkpoint_file = f"{connectivity_type}_{group_level}_{which_features}perm_results.pkl"
+    checkpoint_file = f"{connectivity_type}_{group_level}_{which_features}_perm_results.pkl"
     save_every = checkpoint_n
     start_p = 0
 
     # Resume if checkpoint exists (ie from a previous crash)
     if os.path.exists(checkpoint_file):
+        print(f"Checkpoint file found")
         with open(checkpoint_file, "rb") as f:
             saved = pickle.load(f)
 
@@ -308,7 +363,7 @@ def run_elastic_net(
         n_features = X.shape[1]
         target_total = max(n_permutations, old_total) 
 
-        if old_total <= target_total:
+        if old_total < target_total:
             # Expand arrays to the new total and copy old data
             perm_aucs = np.empty(target_total, dtype=float); perm_aucs[:] = np.nan
             pi_null   = np.zeros((target_total, n_features), dtype=float)
@@ -397,7 +452,7 @@ def run_elastic_net(
 
     perm_importance_df["p_value"] = pvals
     perm_importance_df["p_fdr"] = pvals_fdr
-    perm_importance_df.sort_values(["p_value", "perm_importance_mean"], ascending=[True, False], inplace=True)
+    perm_importance_df.sort_values(["perm_importance_mean", "p_value"], ascending=[False, True], inplace=True)
 
     # Save results at each checkpoint_n permutations
     with open(f"{checkpoint_file}", "wb") as f:
@@ -410,7 +465,9 @@ def run_elastic_net(
             "pvals": pvals,       # feature-wise raw p
             "p_fdr": pvals_fdr    # feature-wise FDR
         }, f)
-    print(f"Final checkpoint saved at permutation {p+1}")
+         
+    if start_p < target_total:  
+        print(f"Final checkpoint saved at permutation {p+1}")
 
     results = {
         "observed": {
@@ -453,7 +510,7 @@ def main():
     print(f"Subjects: {len(subjects)}")
 
     # Prepare the data for analysis
-    X_t1, X_t2, X_slope, X_t1_t2, age_diff, superager_vec, X_all = prep_data(
+    X_t1, X_t2, X_slope, X_t1_t2, superager_vec, X_all, covariates = prep_data(
         subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type, group_level)
 
     # Map feature indices back to ROI names 
@@ -499,7 +556,7 @@ def main():
     print("Starting time:", time.ctime(t0))
     results = run_elastic_net(
         X_use, superager_vec, feat_names_use,
-        n_permutations=1,
+        n_permutations=0,
         n_repeats_importance=20,
         class_weight=None,        
         random_state=7,
@@ -507,13 +564,14 @@ def main():
         checkpoint_n=25,
         connectivity_type=connectivity_type,
         group_level=group_level,
-        which_features=which_features
+        which_features=which_features,
+        covariates=covariates
     )
 
     print(results["observed"])
     print("Model-level p-value:", results["permutation_test"]["p_value"])
     with pd.option_context("display.max_columns", None):
-        print(results["perm_importance"].head(10))
+        print(results["perm_importance"].head(50))
     dt = time.time() - t0
     print(f"Run took {dt:.2f}s")
 
