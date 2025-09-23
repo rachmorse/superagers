@@ -354,14 +354,14 @@ def run_elastic_net(
 
     # Resume if checkpoint exists (ie from a previous crash)
     if os.path.exists(checkpoint_file):
-        print(f"Checkpoint file found")
+        print(f"Checkpoint file found: {checkpoint_file}")
         with open(checkpoint_file, "rb") as f:
             saved = pickle.load(f)
 
         completed = int(np.count_nonzero(~np.isnan(saved["perm_aucs"])))
         old_total = saved["perm_aucs"].shape[0]               
         n_features = X.shape[1]
-        target_total = max(n_permutations, old_total) 
+        target_total = max(n_permutations, completed) 
 
         if old_total < target_total:
             # Expand arrays to the new total and copy old data
@@ -369,13 +369,13 @@ def run_elastic_net(
             pi_null   = np.zeros((target_total, n_features), dtype=float)
             perm_aucs[:old_total] = saved["perm_aucs"]
             pi_null[:old_total, :] = saved["pi_null"]
-            print(f"Expanding from {old_total} → {target_total} total permutations.")
+            print(f"Expanding from {completed} → {target_total} total permutations.")
         else:
             # Reuse existing arrays
             perm_aucs = saved["perm_aucs"]
             pi_null   = saved["pi_null"]
-            target_total = old_total
-            print(f"Using existing {old_total} total permutations.")
+            target_total = max(n_permutations, completed)
+            print(f"Using existing {completed} total permutations.")
 
         start_p = completed
     else:
@@ -387,39 +387,43 @@ def run_elastic_net(
 
     progress_every = max(1, target_total // 10) # report progress after every 10%
     
-    for p in range(start_p, target_total):
-        # For each permutation, shuffle the labels randomly
-        y_perm = rng.permutation(y)
+    print(f"completed total = {completed}, target total = {target_total}, start_p = {start_p}")
+    if completed >= target_total:
+        print("All requested permutations already done.")
+    else:
+        for p in range(start_p, target_total):
+            # For each permutation, shuffle the labels randomly
+            y_perm = rng.permutation(y)
 
-        # Save the out-of-fold predictions for each permutation
-        perm_oof = np.zeros_like(y, dtype=float)
-        per_fold_imps = []
+            # Save the out-of-fold predictions for each permutation
+            perm_oof = np.zeros_like(y, dtype=float)
+            per_fold_imps = []
 
-        for (tr_idx, te_idx) in outer_splits:
-            X_tr, X_te = X[tr_idx], X[te_idx]
-            y_tr_perm = y_perm[tr_idx]       # permuted labels for training
-            # Train and run on permuted labels
-            gs_perm = GridSearchCV(
-                estimator=pipe,
-                param_grid=param_grid,
-                scoring="roc_auc",
-                cv=inner_cv, # runs inner CV search grid to make the comparisons fair
-                refit=True,
-                n_jobs=14,
-            )
-            gs_perm.fit(X_tr, y_tr_perm)
-            best_perm = gs_perm.best_estimator_
-            perm_oof[te_idx] = best_perm.predict_proba(X_te)[:, 1]
+            for (tr_idx, te_idx) in outer_splits:
+                X_tr, X_te = X[tr_idx], X[te_idx]
+                y_tr_perm = y_perm[tr_idx]       # permuted labels for training
+                # Train and run on permuted labels
+                gs_perm = GridSearchCV(
+                    estimator=pipe,
+                    param_grid=param_grid,
+                    scoring="roc_auc",
+                    cv=inner_cv, # runs inner CV search grid to make the comparisons fair
+                    refit=True,
+                    n_jobs=14,
+                )
+                gs_perm.fit(X_tr, y_tr_perm)
+                best_perm = gs_perm.best_estimator_
+                perm_oof[te_idx] = best_perm.predict_proba(X_te)[:, 1]
 
-            # Now calculate the importance of features in this permutation
-            pi_perm = permutation_importance(
-                best_perm, X_te, y[te_idx],
-                scoring="roc_auc",
-                n_repeats=n_repeats_importance,
-                random_state=random_state + 10_000 + p,
-                n_jobs=14,
-            )
-            per_fold_imps.append(pi_perm.importances_mean)
+                # Now calculate the importance of features in this permutation
+                pi_perm = permutation_importance(
+                    best_perm, X_te, y[te_idx],
+                    scoring="roc_auc",
+                    n_repeats=n_repeats_importance,
+                    random_state=random_state + 10_000 + p,
+                    n_jobs=14,
+                )
+                per_fold_imps.append(pi_perm.importances_mean)
         
         perm_aucs[p] = roc_auc_score(y, perm_oof)
 
@@ -447,7 +451,8 @@ def run_elastic_net(
     p_value = (np.sum(perm_aucs >= observed_auc) + 1.0) / (target_total + 1.0)
 
     # Feature-level p-values corrected FDR
-    pvals = ((pi_null >= pi_mean).sum(axis=0) + 1.0) / (target_total + 1.0)
+    completed = np.count_nonzero(~np.isnan(perm_aucs))
+    pvals = ((pi_null[:completed] >= pi_mean).sum(axis=0) + 1.0) / (completed + 1.0)
     rej, pvals_fdr, _, _ = multipletests(pvals, alpha=0.05, method='fdr_bh')
 
     perm_importance_df["p_value"] = pvals
@@ -494,9 +499,9 @@ def run_elastic_net(
     return results
 
 def main():
-    connectivity_type = "FC"  # Options: "SFC", "FC", "SC", "all"
-    which_features = 'all' # Options: 't1', 't2', 'slope', 't1_t2', 'all'
-    group_level = "ROI"
+    connectivity_type = "SFC"  # Options: "SFC", "FC", "SC", "all"
+    which_features = 't1_t2' # Options: 't1', 't2', 'slope', 't1_t2', 'all'
+    group_level = "ROI" # Options: "ROI", "network"
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
     sc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
@@ -556,7 +561,7 @@ def main():
     print("Starting time:", time.ctime(t0))
     results = run_elastic_net(
         X_use, superager_vec, feat_names_use,
-        n_permutations=0,
+        n_permutations=140,
         n_repeats_importance=20,
         class_weight=None,        
         random_state=7,
