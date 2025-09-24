@@ -441,7 +441,7 @@ def run_elastic_net(
                 print(f"Checkpoint saved at permutation {p+1}")
 
             if verbose and ((p + 1) % progress_every == 0 or (p + 1) == target_total):
-                print(f"[Permutation {p+1}/{target_total}] Null AUC (mean so far): {perm_aucs[:p+1].mean():.3f}")
+                print(f"[Permutation {p+1}/{target_total}] Null AUC (mean so far): {np.nanmean(perm_aucs):.3f}")
 
     # One-sided p-value (>= observed AUC), add 1 to numerator/denominator for stability
     # Must run a sufficient number of permutations to get a good estimate of the p-value
@@ -533,26 +533,27 @@ def main():
     all_roi_names = roi_names_tp1 + roi_names_tp2 + roi_names_slope
     
     # Select which features to use, matching them to ROI names
-    if which_features == 't1':
-        X_use = X_t1
-        feat_names_use = roi_names           # e.g., 59 streamline ROIs
-    elif which_features == 't2':
-        X_use = X_t2
-        feat_names_use = roi_names
-    elif which_features == 'slope':
-        X_use = X_slope
-        feat_names_use = roi_names
-    elif which_features == 'all':
-        X_use = X_all
-        feat_names_use = all_roi_names      # e.g., 59*3 = 177 features
-    elif which_features == 't1_t2':
-        X_use = X_t1_t2
-        feat_names_use = roi_names_tp1 + roi_names_tp2
-    else:
-        raise ValueError("which_features must be one of: 't1', 't2', 'slope', 'all', 't1_t2'")
+    match which_features:
+        case 't1':
+            X_use = X_t1
+            feat_names_use = roi_names           # e.g., 59 streamline ROIs
+        case 't2':
+            X_use = X_t2
+            feat_names_use = roi_names
+        case 'slope':
+            X_use = X_slope
+            feat_names_use = roi_names
+        case 'all':
+            X_use = X_all
+            feat_names_use = all_roi_names      # e.g., 59*3 = 177 features
+        case 't1_t2':
+            X_use = X_t1_t2
+            feat_names_use = roi_names_tp1 + roi_names_tp2
+        case _:
+            raise ValueError("which_features must be one of: 't1', 't2', 'slope', 'all', 't1_t2'")
 
     print(f"Training EN on {which_features} features "
-          f"({X_use.shape[1]} predictors) for connectivity_type={connectivity_type}...")
+          f"({X_use.shape[1]} predictors) for {connectivity_type=}...")
 
     t0 = time.time()
     print("Starting time:", time.ctime(t0))
