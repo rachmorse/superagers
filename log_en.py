@@ -349,7 +349,6 @@ def run_elastic_net(
     # Model-level permutation test - now build the null distribution training the models on shuffled labels
     # Start by adding a check point for if the server crashes while this is running, not all progress is lost
     checkpoint_file = f"{connectivity_type}_{group_level}_{which_features}_perm_results.pkl"
-    save_every = checkpoint_n
     start_p = 0
 
     # Resume if checkpoint exists (ie from a previous crash)
@@ -423,26 +422,26 @@ def run_elastic_net(
                 )
                 per_fold_imps.append(pi_perm.importances_mean)
         
-        perm_aucs[p] = roc_auc_score(y, perm_oof)
+            perm_aucs[p] = roc_auc_score(y, perm_oof)
 
-        # Average feature importances across outer folds for this permutation
-        if per_fold_imps:
-            pi_null[p, :] = np.mean(np.vstack(per_fold_imps), axis=0)
-        else:
-            pi_null[p, :] = 0.0 
+            # Average feature importances across outer folds for this permutation
+            if per_fold_imps:
+                pi_null[p, :] = np.mean(np.vstack(per_fold_imps), axis=0)
+            else:
+                pi_null[p, :] = 0.0 
 
-        if (p + 1) % save_every == 0 or (p + 1) == target_total:
-            with open(checkpoint_file, "wb") as f:
-                pickle.dump({
-                    "last_p": p,
-                    "perm_aucs": perm_aucs,
-                    "pi_null": pi_null,
-                    "feature": feature_names,   # safe mid-run
-                }, f)
-            print(f"Checkpoint saved at permutation {p+1}")
+            if (p + 1) % checkpoint_n == 0 or (p + 1) == target_total:
+                with open(checkpoint_file, "wb") as f:
+                    pickle.dump({
+                        "last_p": p,
+                        "perm_aucs": perm_aucs,
+                        "pi_null": pi_null,
+                        "feature": feature_names,   # safe mid-run
+                    }, f)
+                print(f"Checkpoint saved at permutation {p+1}")
 
-        if verbose and ((p + 1) % progress_every == 0 or (p + 1) == target_total):
-            print(f"[Permutation {p+1}/{target_total}] Null AUC (mean so far): {perm_aucs[:p+1].mean():.3f}")
+            if verbose and ((p + 1) % progress_every == 0 or (p + 1) == target_total):
+                print(f"[Permutation {p+1}/{target_total}] Null AUC (mean so far): {perm_aucs[:p+1].mean():.3f}")
 
     # One-sided p-value (>= observed AUC), add 1 to numerator/denominator for stability
     # Must run a sufficient number of permutations to get a good estimate of the p-value
