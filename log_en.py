@@ -275,7 +275,7 @@ def run_elastic_net(
             scoring="roc_auc",
             cv=inner_cv, # runs inner CV on X_tr split into inner train/val sets
             refit=True, # fits the best model on the whole X_tr after tuning
-            n_jobs=14,
+            n_jobs=9,
         )
         gs.fit(X_tr, y_tr) 
 
@@ -318,7 +318,7 @@ def run_elastic_net(
             scoring="roc_auc", # Considers sensitivity and specificity across all thresholds
             n_repeats=n_repeats_importance,
             random_state=random_state + fold_id,
-            n_jobs=14
+            n_jobs=9
         )
         perm_importance_accumulator.append(pi.importances_mean)
 
@@ -406,7 +406,7 @@ def run_elastic_net(
                     scoring="roc_auc",
                     cv=inner_cv, # runs inner CV search grid to make the comparisons fair
                     refit=True,
-                    n_jobs=14,
+                    n_jobs=9,
                 )
                 gs_perm.fit(X_tr, y_tr_perm)
                 best_perm = gs_perm.best_estimator_
@@ -418,7 +418,7 @@ def run_elastic_net(
                     scoring="roc_auc",
                     n_repeats=n_repeats_importance,
                     random_state=random_state + 10_000 + p,
-                    n_jobs=14,
+                    n_jobs=9,
                 )
                 per_fold_imps.append(pi_perm.importances_mean)
         
@@ -496,7 +496,7 @@ def run_elastic_net(
     return results
 
 def main():
-    connectivity_type = "SFC"  # Options: "SFC", "FC", "SC", "all"
+    connectivity_type = "FC"  # Options: "SFC", "FC", "SC", "all"
     which_features = 't1_t2' # Options: 't1', 't2', 'slope', 't1_t2', 'all'
     group_level = "ROI" # Options: "ROI", "network"
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
@@ -559,7 +559,7 @@ def main():
     print("Starting time:", time.ctime(t0))
     results = run_elastic_net(
         X_use, superager_vec, feat_names_use,
-        n_permutations=1000,
+        n_permutations=2000,
         n_repeats_importance=20,
         class_weight=None,        
         random_state=7,
