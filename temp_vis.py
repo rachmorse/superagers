@@ -264,7 +264,7 @@ def main(output_directory_group, ses, output_group_connectivity_file):
     
 
 if __name__ == "__main__":
-    sessions = ["avg"]
+    sessions = ["01"]
     group_names = ["superagers", "non_superagers"] # This is to loop through the visualization
 
     base_dir = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
