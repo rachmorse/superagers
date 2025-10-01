@@ -91,8 +91,8 @@ def calculate_network_metrics(subject, ses, func_dir, struct_dir, sfc_dir):
     metrics = {'subject': subject}
     
     # Load connectivity matrices
-    func_file = func_dir / f"{subject}_ses-0{ses}_functional_connectivity_matrix.csv"
-    struct_file = struct_dir / f"{subject}_ses-0{ses}_structural_connectivity_matrix.csv"
+    func_file = func_dir / f"{subject}_ses-0{ses}_functional_connectivity_matrix_fisher_z.csv"
+    struct_file = struct_dir / f"{subject}_ses-0{ses}_structural_connectivity_matrix_normalized.csv"
     sfc_file = sfc_dir / f"{subject}_ses-0{ses}_structure_function_coupling.csv"
     
     try:
@@ -332,8 +332,8 @@ def main(ses, func_base_dir, struct_base_dir, sfc_base_dir, output_dir):
     sfc_dir = sfc_base_dir / f"ses-0{ses}/individual_coupling_matrices"
     
     # Get all subject files
-    func_files = list(func_dir.glob("sub-*_ses-*_functional_connectivity_matrix.csv"))
-    struct_files = list(struct_dir.glob("sub-*_ses-*_structural_connectivity_matrix.csv"))
+    func_files = list(func_dir.glob("sub-*_ses-*_functional_connectivity_matrix_fisher_z.csv"))
+    struct_files = list(struct_dir.glob("sub-*_ses-*_structural_connectivity_matrix_normalized.csv"))
     sfc_files = list(sfc_dir.glob("sub-*_ses-*_structure_function_coupling.csv"))
 
     # Get unique subject IDs

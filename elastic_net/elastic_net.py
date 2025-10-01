@@ -514,7 +514,7 @@ def main():
                 save_grouped_roi_averages(fc_output, grouped_output, group_level = "streamline") 
 
             # ── Structural connectivity ──
-            sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix.csv"
+            sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix_normalized.csv"
             if sc_csv.is_file():
                 sc_flat = flatten_connectivity_csv(sc_csv, measure_col="pearson_rho")
 
