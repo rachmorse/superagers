@@ -212,7 +212,7 @@ def main():
             ses_path_sc = sc_root_path / ses / "individual_connectivity_matrices"
 
             # ── Functional connectivity ──
-            fc_csv = ses_path_fc / f"{sub}_{ses}_functional_connectivity_matrix.csv"
+            fc_csv = ses_path_fc / f"{sub}_{ses}_functional_connectivity_matrix_fisher_z.csv"
             if fc_csv.is_file():
                 fc_flat = flatten_connectivity_csv(fc_csv, measure_col="pearson_rho")
 
@@ -229,7 +229,7 @@ def main():
                 save_grouped_roi_averages(fc_output, grouped_output, group_level = group_level, subject=sub, ses=ses) 
 
             # ── Structural connectivity ──
-            sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix.csv"
+            sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix_normalized.csv"
             if sc_csv.is_file():
                 sc_flat = flatten_connectivity_csv(sc_csv, measure_col="pearson_rho")
 
