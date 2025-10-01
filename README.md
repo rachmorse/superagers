@@ -70,16 +70,19 @@ This repository contains the analysis scripts for our study on superagers, which
     - `04_calculate_network_metrics.py`: Calculates average within- and between-network functional and structural connectivity, and structure-function coupling for each of the 7 Schaefer networks.
     - `05_annual_change.py`: Calculates annual change slopes for all connectivity and SFC network metrics and merges these slopes with the memory and demographic data, creating a clean dataframe with all data for analysis. 
 
+### elastic_net
+- **Purpose:** These scripts run prepare and run a logistic elastic net to classify participants as superagers or non-superagers
+ 
+- **Scripts:**
+    `prep_data_for_en.py`: Prepares data by generating voxel‑weighted, grouped ROI connectivity summaries for later Elastic Net analysis. 
+    `log_en.py`: Run a logistic elastic‑net classification to predict superager status using cross-validation and permutation testing. Provides model level metrics including p-value and feature level p-values. 
+
 ## Analysis Scripts
 
 1. **`draft_analysis_2.R`**
     - **Purpose:** The first exploritory analysis.  
 2. **`elastic_net.py`**
     - **Purpose:** Run an elastic net analysis to extract ROIs that are most important in memory. 
-2. **`prep_data_for_en.py`**
-    - **Purpose:** Prepares data by generating voxel‑weighted, grouped ROI connectivity summaries for later Elastic Net analysis. 
-2. **`log_en.py`**
-    - **Purpose:** Run a logistic elastic‑net classification to predict superager status using cross-validation and permutation testing. Provides model level metrics including p-value and feature level p-values. 
 
 ## Misc Scripts
 1. **`missing_subs.py`**
