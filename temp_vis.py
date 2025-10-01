@@ -13,7 +13,7 @@ from typing import List
 from fnmatch import fnmatchcase 
 
 
-def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0.15, vmax=0.41, rois_to_plot: List[str] | None = None):
+def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0.15, vmax=0.41, binarize=True, rois_to_plot: List[str] | None = None):
     """
     Create multi-view brain surface visualizations of structure-function coupling from a DataFrame
     
@@ -23,6 +23,7 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0.15, vm
         output_dir (str or Path): Directory to save visualizations
         vmin, vmax (float): Min and max values for color scaling
         ses (str): Session identifier
+        binarize (bool): Whether to binarize the coupling values for visualization
         rois_to_plot (list[str] | None): Optional list of ROI name patterns to plot.
     """
     coupling_csv = Path(f"{coupling_file}/{group_name}_average.csv")
@@ -99,6 +100,12 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0.15, vm
             print(f"Warning: Could not find a matching atlas ROI for {my_roi_name}")
 
     print(f"Successfully mapped {mapped_count} out of {len(coupling_df.index)} ROIs")
+
+    # If binarize is True, convert to binary presence/absence
+    if binarize:
+        coupling_vol = (coupling_vol > 0).astype(int)
+        rho_values = np.unique(coupling_vol)
+        vmin, vmax = 0, 1
         
     # Debug output
     print(f"Coupling values shape: {rho_values.shape}, min: {np.min(rho_values)}, max: {np.max(rho_values)}")
@@ -259,6 +266,7 @@ def main(output_directory_group, ses, output_group_connectivity_file):
             ses=ses,
             vmin=None, 
             vmax=None,
+            binarize=True,  # Set to True to visualize presence/absence
             rois_to_plot=["7Networks_LH_DorsAttn_Post_*", "7Networks_LH_Cont_OFC_*", "7Networks_LH_Cont_Temp_*", "7Networks_RH_Cont_PFCv_*"]  
         )
     

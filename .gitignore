@@ -16,3 +16,4 @@ test_diff.py
 *.idea
 *.pkl
 temp.py
+*.nii.gz
