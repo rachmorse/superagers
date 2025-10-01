@@ -7,7 +7,6 @@ from collections import Counter
 from nilearn.datasets import fetch_atlas_schaefer_2018
 from functools import lru_cache
 
-
 def get_subjects_to_process(output_folder, ses, id_csv_path):
     """
     Generate a list of subjects to process ensuring each subject is also in the id column of the CSV.
@@ -36,6 +35,32 @@ def get_subjects_to_process(output_folder, ses, id_csv_path):
             subjects.append(subject)
 
     return subjects
+
+def split_subject_csv_to_long(input_csv, output_dir, ses):
+    """
+    Reads the fisher-z transformed SFC data (rows=subjects, cols=ROIs), 
+    and writes one CSV per subject (cols='ROI_name', 'pearson_rho'].
+    
+    Args:
+        input_csv (Path): Path to the Fisher-z CSV 
+        output_dir (Path): Directory to write per-subject CSVs.
+        ses (str): Session ID (e.g. "ses-01").
+    """
+    input_csv = Path(input_csv)
+    output_dir = Path(output_dir)
+
+    # Load the df
+    df = pd.read_csv(input_csv, index_col=0)
+
+    # Write one csv per subject
+    for subj, row in df.iterrows():
+        out = pd.DataFrame({
+            "ROI_name": row.index,
+            "pearson_rho": row.values
+        })
+        out_path = output_dir / f"{subj}_{ses}_structure_function_connectivity_matrix_fisher_z.csv"
+        out.to_csv(out_path, index=False)
+
 
 def flatten_connectivity_csv(matrix_csv, measure_col="pearson_rho"):
     """
@@ -194,6 +219,7 @@ def save_grouped_roi_averages(csv_path, output_path, group_level, subject, ses):
 
 def main():
     sessions = ["ses-01", "ses-02"] 
+    group_level = "ROI"
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
     sc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
@@ -205,54 +231,63 @@ def main():
     subjects = sorted(set(subjects_tp1) & set(subjects_tp2))
     print(f"Subjects: {len(subjects)}")
 
-    # Make the flattened FC and SC CSVs for each subject
-    for sub in subjects:
-        for ses in sessions:
-            ses_path_fc = fc_root_path / ses / "individual_connectivity_matrices"
-            ses_path_sc = sc_root_path / ses / "individual_connectivity_matrices"
+    # # Make the flattened FC and SC CSVs for each subject
+    # for sub in subjects:
+    #     for ses in sessions:
+    #         ses_path_fc = fc_root_path / ses / "individual_connectivity_matrices"
+    #         ses_path_sc = sc_root_path / ses / "individual_connectivity_matrices"
 
-            # ── Functional connectivity ──
-            fc_csv = ses_path_fc / f"{sub}_{ses}_functional_connectivity_matrix_fisher_z.csv"
-            if fc_csv.is_file():
-                fc_flat = flatten_connectivity_csv(fc_csv, measure_col="pearson_rho")
+    #         # Functional connectivity 
+    #         fc_csv = ses_path_fc / f"{sub}_{ses}_functional_connectivity_matrix_fisher_z.csv"
+    #         if fc_csv.is_file():
+    #             fc_flat = flatten_connectivity_csv(fc_csv, measure_col="pearson_rho")
 
-                fc_output_dir = ses_path_fc / "grouped_rois"
-                fc_output_dir.mkdir(parents=True, exist_ok=True)  # Ensure dir exists
+    #             fc_output_dir = ses_path_fc / "grouped_rois"
+    #             fc_output_dir.mkdir(parents=True, exist_ok=True)  # Ensure dir exists
 
-                fc_output = fc_output_dir / f"{sub}_{ses}_functional_connectivity_flat.csv"
-                fc_flat.to_csv(fc_output, index=False)  # Save the flattened version
+    #             fc_output = fc_output_dir / f"{sub}_{ses}_functional_connectivity_flat.csv"
+    #             fc_flat.to_csv(fc_output, index=False)  # Save the flattened version
 
-                # Group the flattened CSV by ROI
-                group_level = "ROI"  
-                grouped_output = fc_output_dir / f"{sub}_{ses}_functional_connectivity_grouped_by_{group_level}.csv"
-                # Adding group_level="network" allows looking at all of the DMN for example rather than individual ROIs
-                save_grouped_roi_averages(fc_output, grouped_output, group_level = group_level, subject=sub, ses=ses) 
+    #             # Group the flattened CSV by ROI
+    #             grouped_output = fc_output_dir / f"{sub}_{ses}_functional_connectivity_grouped_by_{group_level}.csv"
+    #             # Adding group_level="network" allows looking at all of the DMN for example rather than individual ROIs
+    #             save_grouped_roi_averages(fc_output, grouped_output, group_level = group_level, subject=sub, ses=ses) 
 
-            # ── Structural connectivity ──
-            sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix_normalized.csv"
-            if sc_csv.is_file():
-                sc_flat = flatten_connectivity_csv(sc_csv, measure_col="pearson_rho")
+    #         # Structural connectivity 
+    #         sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix_normalized.csv"
+    #         if sc_csv.is_file():
+    #             sc_flat = flatten_connectivity_csv(sc_csv, measure_col="pearson_rho")
 
-                sc_output_dir = ses_path_sc / "grouped_rois"
-                sc_output_dir.mkdir(parents=True, exist_ok=True)  # Ensure dir exists
+    #             sc_output_dir = ses_path_sc / "grouped_rois"
+    #             sc_output_dir.mkdir(parents=True, exist_ok=True)  # Ensure dir exists
 
-                sc_output = sc_output_dir / f"{sub}_{ses}_structural_connectivity_flat.csv"
-                sc_flat.to_csv(sc_output, index=False)  # Save the flattened version
+    #             sc_output = sc_output_dir / f"{sub}_{ses}_structural_connectivity_flat.csv"
+    #             sc_flat.to_csv(sc_output, index=False)  # Save the flattened version
 
-                # Group the flattened CSV by ROI
-                group_level = "ROI"
-                grouped_output = sc_output_dir / f"{sub}_{ses}_structural_connectivity_grouped_by_{group_level}.csv"
-                save_grouped_roi_averages(sc_output, grouped_output, group_level = group_level, subject=sub, ses=ses)
+    #             # Group the flattened CSV by ROI
+    #             grouped_output = sc_output_dir / f"{sub}_{ses}_structural_connectivity_grouped_by_{group_level}.csv"
+    #             save_grouped_roi_averages(sc_output, grouped_output, group_level = group_level, subject=sub, ses=ses)
 
-            else:
-                print(f"Missing SC CSV at path: {sc_csv}")
+    #         else:
+    #             print(f"Missing SC CSV at path: {sc_csv}")
+
+    # Before processing SFC data, make individual fisher-z transformed matrices 
+    for ses in sessions:
+        sfc_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/{ses}")
+        sfc_matrix = sfc_dir / "all_to_all_roi_matrices" / f"fisher_z_all_sfc_{ses}.csv"
+        sfc_output_dir = sfc_dir / "individual_coupling_matrices"
+        
+        # Process SFC connectivity matrices
+        print(f"Processing structure-function fisher-z connectivity matrices for {ses}...")
+        split_subject_csv_to_long(sfc_matrix, sfc_output_dir, ses)
+
+        print(f"Conversion complete for {ses}!")
 
     # Make the grouped averages for each subject's SFC CSV   
     for sub in subjects:
         for ses in sessions:
             ses_path = root_path / ses / "individual_coupling_matrices"
-            csv_path = ses_path / f"{sub}_{ses}_structure_function_coupling.csv"
-            group_level = "ROI"
+            csv_path = ses_path / f"{sub}_{ses}_structure_function_connectivity_matrix_fisher_z.csv"
             output_path = ses_path / f"{sub}_{ses}_structure_function_coupling_grouped_by_{group_level}.csv"
             if csv_path.is_file():
                 save_grouped_roi_averages(csv_path, output_path, group_level = group_level, subject=sub, ses=ses)
