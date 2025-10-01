@@ -277,7 +277,7 @@ def run_elastic_net(
             scoring="roc_auc",
             cv=inner_cv, # runs inner CV on X_tr split into inner train/val sets
             refit=True, # fits the best model on the whole X_tr after tuning
-            n_jobs=18,
+            n_jobs=9,
         )
         gs.fit(X_tr, y_tr) 
 
@@ -320,7 +320,7 @@ def run_elastic_net(
             scoring="roc_auc", # Considers sensitivity and specificity across all thresholds
             n_repeats=n_repeats_importance,
             random_state=random_state + fold_id,
-            n_jobs=18
+            n_jobs=9
         )
         perm_importance_accumulator.append(pi.importances_mean)
 
@@ -362,14 +362,16 @@ def run_elastic_net(
 
         completed = int(np.count_nonzero(~np.isnan(saved["perm_aucs"])))
         n_features = X.shape[1]
-        target_total = max(n_permutations, completed) 
+        target_total = max(n_permutations, completed)
 
         if completed < target_total:
             # Expand arrays to the new total and copy old data
             perm_aucs = np.empty(target_total, dtype=float); perm_aucs[:] = np.nan
             pi_null   = np.zeros((target_total, n_features), dtype=float)
-            perm_aucs[:len(saved["perm_aucs"])] = saved["perm_aucs"]
-            pi_null[:len(saved["pi_null"])] = saved["pi_null"]
+            valid_mask = ~np.isnan(saved["perm_aucs"])
+            n_valid = valid_mask.sum()
+            perm_aucs[:n_valid] = saved["perm_aucs"][valid_mask]
+            pi_null[:n_valid]   = saved["pi_null"][valid_mask]
             print(f"Expanding from {completed} → {target_total} total permutations.")
         else:
             # Reuse existing arrays
@@ -409,7 +411,7 @@ def run_elastic_net(
                     scoring="roc_auc",
                     cv=inner_cv, # runs inner CV search grid to make the comparisons fair
                     refit=True,
-                    n_jobs=18,
+                    n_jobs=9,
                 )
                 gs_perm.fit(X_tr, y_tr_perm)
                 best_perm = gs_perm.best_estimator_
@@ -421,7 +423,7 @@ def run_elastic_net(
                     scoring="roc_auc",
                     n_repeats=n_repeats_importance,
                     random_state=random_state + 10_000 + p,
-                    n_jobs=18,
+                    n_jobs=9,
                 )
                 per_fold_imps.append(pi_perm.importances_mean)
         
@@ -562,12 +564,12 @@ def main():
     print("Starting time:", time.ctime(t0))
     results = run_elastic_net(
         X_use, superager_vec, feat_names_use,
-        n_permutations=2000,
+        n_permutations=1000,
         n_repeats_importance=20,
         class_weight=None,        
         random_state=7,
         verbose=1,
-        checkpoint_n=25,
+        checkpoint_n=10,
         connectivity_type=connectivity_type,
         group_level=group_level,
         which_features=which_features,
