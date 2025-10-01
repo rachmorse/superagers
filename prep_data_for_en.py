@@ -223,7 +223,7 @@ def main():
                 fc_flat.to_csv(fc_output, index=False)  # Save the flattened version
 
                 # Group the flattened CSV by ROI
-                group_level = "network"  
+                group_level = "ROI"  
                 grouped_output = fc_output_dir / f"{sub}_{ses}_functional_connectivity_grouped_by_{group_level}.csv"
                 # Adding group_level="network" allows looking at all of the DMN for example rather than individual ROIs
                 save_grouped_roi_averages(fc_output, grouped_output, group_level = group_level, subject=sub, ses=ses) 
@@ -240,7 +240,7 @@ def main():
                 sc_flat.to_csv(sc_output, index=False)  # Save the flattened version
 
                 # Group the flattened CSV by ROI
-                group_level = "network"
+                group_level = "ROI"
                 grouped_output = sc_output_dir / f"{sub}_{ses}_structural_connectivity_grouped_by_{group_level}.csv"
                 save_grouped_roi_averages(sc_output, grouped_output, group_level = group_level, subject=sub, ses=ses)
 
@@ -252,7 +252,7 @@ def main():
         for ses in sessions:
             ses_path = root_path / ses / "individual_coupling_matrices"
             csv_path = ses_path / f"{sub}_{ses}_structure_function_coupling.csv"
-            group_level = "network"
+            group_level = "ROI"
             output_path = ses_path / f"{sub}_{ses}_structure_function_coupling_grouped_by_{group_level}.csv"
             if csv_path.is_file():
                 save_grouped_roi_averages(csv_path, output_path, group_level = group_level, subject=sub, ses=ses)

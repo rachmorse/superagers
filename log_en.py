@@ -277,7 +277,7 @@ def run_elastic_net(
             scoring="roc_auc",
             cv=inner_cv, # runs inner CV on X_tr split into inner train/val sets
             refit=True, # fits the best model on the whole X_tr after tuning
-            n_jobs=9,
+            n_jobs=18,
         )
         gs.fit(X_tr, y_tr) 
 
@@ -320,7 +320,7 @@ def run_elastic_net(
             scoring="roc_auc", # Considers sensitivity and specificity across all thresholds
             n_repeats=n_repeats_importance,
             random_state=random_state + fold_id,
-            n_jobs=9
+            n_jobs=18
         )
         perm_importance_accumulator.append(pi.importances_mean)
 
@@ -330,148 +330,149 @@ def run_elastic_net(
     observed_brier = brier_score_loss(y_true_oof, y_prob_oof)
     observed_bal_acc = balanced_accuracy_score(y_true_oof, (y_prob_oof >= 0.5).astype(int))
 
-    # # Metrics for how important each feature was overall
-    # coefs = np.vstack(coefs)
-    # coef_mean = coefs.mean(axis=0)
-    # coef_std = coefs.std(axis=0, ddof=1)
+    # Metrics for how important each feature was overall
+    coefs = np.vstack(coefs)
+    coef_mean = coefs.mean(axis=0)
+    coef_std = coefs.std(axis=0, ddof=1)
 
-    # perm_importance_accumulator = np.vstack(perm_importance_accumulator)
-    # pi_mean = perm_importance_accumulator.mean(axis=0)
-    # pi_std = perm_importance_accumulator.std(axis=0, ddof=1)
+    perm_importance_accumulator = np.vstack(perm_importance_accumulator)
+    pi_mean = perm_importance_accumulator.mean(axis=0)
+    pi_std = perm_importance_accumulator.std(axis=0, ddof=1)
 
-    # perm_importance_df = pd.DataFrame({
-    #     "feature": feature_names,
-    #     "perm_importance_mean": pi_mean,
-    #     # "perm_importance_std": pi_std,
-    #     # "coef_mean": coef_mean,
-    #     # "coef_std": coef_std,
-    #     "abs_coef_mean": np.abs(coef_mean)
-    # }).sort_values(["perm_importance_mean", "abs_coef_mean"], ascending=False).reset_index(drop=True)
+    perm_importance_df = pd.DataFrame({
+        "feature": feature_names,
+        "perm_importance_mean": pi_mean,
+        # "perm_importance_std": pi_std,
+        # "coef_mean": coef_mean,
+        # "coef_std": coef_std,
+        "abs_coef_mean": np.abs(coef_mean)
+    }).sort_values(["perm_importance_mean", "abs_coef_mean"], ascending=False).reset_index(drop=True)
 
-    # # Model-level permutation test - now build the null distribution training the models on shuffled labels
-    # # Start by adding a check point for if the server crashes while this is running, not all progress is lost
-    # checkpoint_file = f"{connectivity_type}_{group_level}_{which_features}_perm_results.pkl"
-    # start_p = 0
+    # Model-level permutation test - now build the null distribution training the models on shuffled labels
+    # Start by adding a check point for if the server crashes while this is running, not all progress is lost
+    checkpoint_file = f"{connectivity_type}_{group_level}_{which_features}_perm_results.pkl"
+    start_p = 0
+    completed = 0
 
-    # # Resume if checkpoint exists (ie from a previous crash)
-    # if os.path.exists(checkpoint_file):
-    #     print(f"Checkpoint file found: {checkpoint_file}")
-    #     with open(checkpoint_file, "rb") as f:
-    #         saved = pickle.load(f)
+    # Resume if checkpoint exists (ie from a previous crash)
+    if os.path.exists(checkpoint_file):
+        print(f"Checkpoint file found: {checkpoint_file}")
+        with open(checkpoint_file, "rb") as f:
+            saved = pickle.load(f)
 
-    #     completed = int(np.count_nonzero(~np.isnan(saved["perm_aucs"])))
-    #     n_features = X.shape[1]
-    #     target_total = max(n_permutations, completed) 
+        completed = int(np.count_nonzero(~np.isnan(saved["perm_aucs"])))
+        n_features = X.shape[1]
+        target_total = max(n_permutations, completed) 
 
-    #     if completed < target_total:
-    #         # Expand arrays to the new total and copy old data
-    #         perm_aucs = np.empty(target_total, dtype=float); perm_aucs[:] = np.nan
-    #         pi_null   = np.zeros((target_total, n_features), dtype=float)
-    #         perm_aucs[:len(saved["perm_aucs"])] = saved["perm_aucs"]
-    #         pi_null[:len(saved["pi_null"])] = saved["pi_null"]
-    #         print(f"Expanding from {completed} → {target_total} total permutations.")
-    #     else:
-    #         # Reuse existing arrays
-    #         perm_aucs = saved["perm_aucs"]
-    #         pi_null   = saved["pi_null"]
-    #         target_total = max(n_permutations, completed)
-    #         print(f"Using existing {completed} total permutations.")
+        if completed < target_total:
+            # Expand arrays to the new total and copy old data
+            perm_aucs = np.empty(target_total, dtype=float); perm_aucs[:] = np.nan
+            pi_null   = np.zeros((target_total, n_features), dtype=float)
+            perm_aucs[:len(saved["perm_aucs"])] = saved["perm_aucs"]
+            pi_null[:len(saved["pi_null"])] = saved["pi_null"]
+            print(f"Expanding from {completed} → {target_total} total permutations.")
+        else:
+            # Reuse existing arrays
+            perm_aucs = saved["perm_aucs"]
+            pi_null   = saved["pi_null"]
+            target_total = max(n_permutations, completed)
+            print(f"Using existing {completed} total permutations.")
 
-    #     start_p = completed
-    # else:
-    #     print(f"Starting permutations from scratch, running {n_permutations} total.")
-    #     target_total = n_permutations
-    #     perm_aucs = np.empty(target_total, dtype=float); perm_aucs[:] = np.nan
-    #     pi_null   = np.zeros((target_total, X.shape[1]), dtype=float)
-    #     start_p = 0
+        start_p = completed
+    else:
+        print(f"Starting permutations from scratch, running {n_permutations} total.")
+        target_total = n_permutations
+        perm_aucs = np.empty(target_total, dtype=float); perm_aucs[:] = np.nan
+        pi_null   = np.zeros((target_total, X.shape[1]), dtype=float)
+        start_p = 0
 
-    # progress_every = max(1, target_total // 10) # report progress after every 10%
+    progress_every = max(1, target_total // 10) # report progress after every 10%
     
-    # if completed >= target_total:
-    #     print("All requested permutations already done.")
-    # else:
-    #     for p in range(start_p, target_total):
-    #         # For each permutation, shuffle the labels randomly
-    #         y_perm = rng.permutation(y)
+    if completed >= target_total:
+        print("All requested permutations already done.")
+    else:
+        for p in range(start_p, target_total):
+            # For each permutation, shuffle the labels randomly
+            y_perm = rng.permutation(y)
 
-    #         # Save the out-of-fold predictions for each permutation
-    #         perm_oof = np.zeros_like(y, dtype=float)
-    #         per_fold_imps = []
+            # Save the out-of-fold predictions for each permutation
+            perm_oof = np.zeros_like(y, dtype=float)
+            per_fold_imps = []
 
-    #         for (tr_idx, te_idx) in outer_splits:
-    #             X_tr, X_te = X[tr_idx], X[te_idx]
-    #             y_tr_perm = y_perm[tr_idx]       # permuted labels for training
-    #             # Train and run on permuted labels
-    #             gs_perm = GridSearchCV(
-    #                 estimator=pipe,
-    #                 param_grid=param_grid,
-    #                 scoring="roc_auc",
-    #                 cv=inner_cv, # runs inner CV search grid to make the comparisons fair
-    #                 refit=True,
-    #                 n_jobs=9,
-    #             )
-    #             gs_perm.fit(X_tr, y_tr_perm)
-    #             best_perm = gs_perm.best_estimator_
-    #             perm_oof[te_idx] = best_perm.predict_proba(X_te)[:, 1]
+            for (tr_idx, te_idx) in outer_splits:
+                X_tr, X_te = X[tr_idx], X[te_idx]
+                y_tr_perm = y_perm[tr_idx]       # permuted labels for training
+                # Train and run on permuted labels
+                gs_perm = GridSearchCV(
+                    estimator=pipe,
+                    param_grid=param_grid,
+                    scoring="roc_auc",
+                    cv=inner_cv, # runs inner CV search grid to make the comparisons fair
+                    refit=True,
+                    n_jobs=18,
+                )
+                gs_perm.fit(X_tr, y_tr_perm)
+                best_perm = gs_perm.best_estimator_
+                perm_oof[te_idx] = best_perm.predict_proba(X_te)[:, 1]
 
-    #             # Now calculate the importance of features in this permutation
-    #             pi_perm = permutation_importance(
-    #                 best_perm, X_te, y[te_idx],
-    #                 scoring="roc_auc",
-    #                 n_repeats=n_repeats_importance,
-    #                 random_state=random_state + 10_000 + p,
-    #                 n_jobs=9,
-    #             )
-    #             per_fold_imps.append(pi_perm.importances_mean)
+                # Now calculate the importance of features in this permutation
+                pi_perm = permutation_importance(
+                    best_perm, X_te, y[te_idx],
+                    scoring="roc_auc",
+                    n_repeats=n_repeats_importance,
+                    random_state=random_state + 10_000 + p,
+                    n_jobs=18,
+                )
+                per_fold_imps.append(pi_perm.importances_mean)
         
-    #         perm_aucs[p] = roc_auc_score(y, perm_oof)
+            perm_aucs[p] = roc_auc_score(y, perm_oof)
 
-    #         # Average feature importances across outer folds for this permutation
-    #         if per_fold_imps:
-    #             pi_null[p, :] = np.mean(np.vstack(per_fold_imps), axis=0)
-    #         else:
-    #             pi_null[p, :] = 0.0 
+            # Average feature importances across outer folds for this permutation
+            if per_fold_imps:
+                pi_null[p, :] = np.mean(np.vstack(per_fold_imps), axis=0)
+            else:
+                pi_null[p, :] = 0.0 
 
-    #         if (p + 1) % checkpoint_n == 0 or (p + 1) == target_total:
-    #             with open(checkpoint_file, "wb") as f:
-    #                 pickle.dump({
-    #                     "last_p": p,
-    #                     "perm_aucs": perm_aucs,
-    #                     "pi_null": pi_null,
-    #                     "feature": feature_names,   # safe mid-run
-    #                 }, f)
-    #             print(f"Checkpoint saved at permutation {p+1}")
+            if (p + 1) % checkpoint_n == 0 or (p + 1) == target_total:
+                with open(checkpoint_file, "wb") as f:
+                    pickle.dump({
+                        "last_p": p,
+                        "perm_aucs": perm_aucs,
+                        "pi_null": pi_null,
+                        "feature": feature_names,   # safe mid-run
+                    }, f)
+                print(f"Checkpoint saved at permutation {p+1}")
 
-    #         if verbose and ((p + 1) % progress_every == 0 or (p + 1) == target_total):
-    #             print(f"[Permutation {p+1}/{target_total}] Null AUC (mean so far): {np.nanmean(perm_aucs):.3f}")
+            if verbose and ((p + 1) % progress_every == 0 or (p + 1) == target_total):
+                print(f"[Permutation {p+1}/{target_total}] Null AUC (mean so far): {np.nanmean(perm_aucs):.3f}")
 
-    # # One-sided p-value (>= observed AUC), add 1 to numerator/denominator for stability
-    # # Must run a sufficient number of permutations to get a good estimate of the p-value
-    # p_value = (np.sum(perm_aucs >= observed_auc) + 1.0) / (target_total + 1.0)
+    # One-sided p-value (>= observed AUC), add 1 to numerator/denominator for stability
+    # Must run a sufficient number of permutations to get a good estimate of the p-value
+    p_value = (np.sum(perm_aucs >= observed_auc) + 1.0) / (target_total + 1.0)
 
-    # # Feature-level p-values corrected FDR
-    # completed = np.count_nonzero(~np.isnan(perm_aucs))
-    # pvals = ((pi_null[:completed] >= pi_mean).sum(axis=0) + 1.0) / (completed + 1.0)
-    # rej, pvals_fdr, _, _ = multipletests(pvals, alpha=0.05, method='fdr_bh')
+    # Feature-level p-values corrected FDR
+    completed = np.count_nonzero(~np.isnan(perm_aucs))
+    pvals = ((pi_null[:completed] >= pi_mean).sum(axis=0) + 1.0) / (completed + 1.0)
+    rej, pvals_fdr, _, _ = multipletests(pvals, alpha=0.05, method='fdr_bh')
 
-    # perm_importance_df["p_value"] = pvals
-    # perm_importance_df["p_fdr"] = pvals_fdr
-    # perm_importance_df.sort_values(["p_value", "perm_importance_mean"], ascending=[True, False], inplace=True)
+    perm_importance_df["p_value"] = pvals
+    perm_importance_df["p_fdr"] = pvals_fdr
+    perm_importance_df.sort_values(["p_value", "perm_importance_mean"], ascending=[True, False], inplace=True)
 
-    # # Save results at each checkpoint_n permutations
-    # with open(f"{checkpoint_file}", "wb") as f:
-    #     pickle.dump({
-    #         "last_p": target_total - 1,
-    #         "perm_aucs": perm_aucs,
-    #         "pi_null": pi_null,
-    #         "feature": feature_names,
-    #         "p_value": p_value,   # model-level p
-    #         "pvals": pvals,       # feature-wise raw p
-    #         "p_fdr": pvals_fdr    # feature-wise FDR
-    #     }, f)
+    # Save results at each checkpoint_n permutations
+    with open(f"{checkpoint_file}", "wb") as f:
+        pickle.dump({
+            "last_p": target_total - 1,
+            "perm_aucs": perm_aucs,
+            "pi_null": pi_null,
+            "feature": feature_names,
+            "p_value": p_value,   # model-level p
+            "pvals": pvals,       # feature-wise raw p
+            "p_fdr": pvals_fdr    # feature-wise FDR
+        }, f)
          
-    # if start_p < target_total:  
-    #     print(f"Final checkpoint saved at permutation {p+1}")
+    if start_p < target_total:  
+        print(f"Final checkpoint saved at permutation {p+1}")
 
     results = {
         "observed": {
@@ -480,25 +481,25 @@ def run_elastic_net(
             "brier": observed_brier,
             "balanced_acc": observed_bal_acc
         },
-        # "cv_fold_metrics": pd.DataFrame(fold_metrics),
-        # "oof": {
-        #     "y_true": y_true_oof,
-        #     "y_prob": y_prob_oof,
-        #     "test_index": test_index_oof
-        # },
-        # "best_params_per_fold": best_params_per_fold,
-        # "coef_mean": coef_mean,
-        # "coef_std": coef_std,
-        # "perm_importance": perm_importance_df,
-        # "permutation_test": {
-        #     "aucs": perm_aucs,
-        #     "p_value": float(p_value)
-        # }
+        "cv_fold_metrics": pd.DataFrame(fold_metrics),
+        "oof": {
+            "y_true": y_true_oof,
+            "y_prob": y_prob_oof,
+            "test_index": test_index_oof
+        },
+        "best_params_per_fold": best_params_per_fold,
+        "coef_mean": coef_mean,
+        "coef_std": coef_std,
+        "perm_importance": perm_importance_df,
+        "permutation_test": {
+            "aucs": perm_aucs,
+            "p_value": float(p_value)
+        }
     }
     return results
 
 def main():
-    connectivity_type = "SFC"  # Options: "SFC", "FC", "SC", "all"
+    connectivity_type = "FC"  # Options: "SFC", "FC", "SC", "all"
     which_features = 't1_t2' # Options: 't1', 't2', 'slope', 't1_t2', 'all'
     group_level = "ROI" # Options: "ROI", "network"
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
@@ -513,7 +514,7 @@ def main():
     subjects = sorted(set(subjects_tp1) & set(subjects_tp2))
     print(f"Subjects: {len(subjects)}")
 
-    # Prepare the data for analysis
+    # Prepare the data for analysis 
     X_t1, X_t2, X_slope, X_t1_t2, superager_vec, X_all, covariates = prep_data(
         subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type, group_level)
 
@@ -557,28 +558,28 @@ def main():
     print(f"Training EN on {which_features} features "
           f"({X_use.shape[1]} predictors) for {connectivity_type=}...")
 
-    # t0 = time.time()
-    # print("Starting time:", time.ctime(t0))
-    # results = run_elastic_net(
-    #     X_use, superager_vec, feat_names_use,
-    #     n_permutations=2000,
-    #     n_repeats_importance=20,
-    #     class_weight=None,        
-    #     random_state=7,
-    #     verbose=1,
-    #     checkpoint_n=25,
-    #     connectivity_type=connectivity_type,
-    #     group_level=group_level,
-    #     which_features=which_features,
-    #     covariates=covariates
-    # )
+    t0 = time.time()
+    print("Starting time:", time.ctime(t0))
+    results = run_elastic_net(
+        X_use, superager_vec, feat_names_use,
+        n_permutations=2000,
+        n_repeats_importance=20,
+        class_weight=None,        
+        random_state=7,
+        verbose=1,
+        checkpoint_n=25,
+        connectivity_type=connectivity_type,
+        group_level=group_level,
+        which_features=which_features,
+        covariates=covariates
+    )
 
-    # print(results["observed"])
-    # print("Model-level p-value:", results["permutation_test"]["p_value"])
-    # with pd.option_context("display.max_columns", None):
-    #     print(results["perm_importance"].head(50))
-    # dt = time.time() - t0
-    # print(f"Run took {dt:.2f}s")
+    print(results["observed"])
+    print("Model-level p-value:", results["permutation_test"]["p_value"])
+    with pd.option_context("display.max_columns", None):
+        print(results["perm_importance"].head(50))
+    dt = time.time() - t0
+    print(f"Run took {dt:.2f}s")
 
     # Build dataframe of features
     df_roi_values = pd.DataFrame(X_use, columns=feat_names_use)
@@ -601,7 +602,7 @@ def main():
             print(f"{roi}: missing one of t1/t2")
 
     
-    # --- choose timepoint and ROIs ---
+    # choose timepoint and ROIs ---
     sig_pairs_by_tp = [
         "7Networks_LH_DorsAttn_Post_1",
         "7Networks_LH_Cont_OFC_2",
