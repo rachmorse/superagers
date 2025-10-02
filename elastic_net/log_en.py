@@ -14,8 +14,8 @@ from sklearn.utils import check_random_state
 from statsmodels.stats.multitest import multipletests
 from prep_data_for_en import get_subjects_to_process
 from sklearn.linear_model import LinearRegression
-import matplotlib.pyplot as plt
-import seaborn as sns
+# import matplotlib.pyplot as plt
+# import seaborn as sns
 
 
 def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type, group_level):
@@ -206,7 +206,7 @@ def run_elastic_net(
             - "best_params_per_fold": with best hyperparameters per fold.
             - "coef_mean": with mean coefficients across folds.
             - "coef_std": with coefficient standard deviations across folds.
-            - "perm_importance": with feature-wise mean/std permutation importance.
+            - "feat_importance": with feature-wise mean/std permutation importance.
             - "permutation_test": with {"aucs": np.ndarray, "p_value": float}.
     """
     # Create reproducible splits
@@ -334,19 +334,21 @@ def run_elastic_net(
     coefs = np.vstack(coefs)
     coef_mean = coefs.mean(axis=0)
     coef_std = coefs.std(axis=0, ddof=1)
+    selection_freq = (coefs != 0).mean(axis=0)
 
+    # Permutation importance for calculating feature-level p-values
     perm_importance_accumulator = np.vstack(perm_importance_accumulator)
     pi_mean = perm_importance_accumulator.mean(axis=0)
-    pi_std = perm_importance_accumulator.std(axis=0, ddof=1)
 
-    perm_importance_df = pd.DataFrame({
+    feature_df = pd.DataFrame({
         "feature": feature_names,
         "perm_importance_mean": pi_mean,
         # "perm_importance_std": pi_std,
-        # "coef_mean": coef_mean,
-        # "coef_std": coef_std,
+        "coef_mean": coef_mean,
+        "coef_std": coef_std,
+        "selected_freq": selection_freq,
         "abs_coef_mean": np.abs(coef_mean)
-    }).sort_values(["perm_importance_mean", "abs_coef_mean"], ascending=False).reset_index(drop=True)
+    }).sort_values(["abs_coef_mean"], ascending=False)
 
     # Model-level permutation test - now build the null distribution training the models on shuffled labels
     # Start by adding a check point for if the server crashes while this is running, not all progress is lost
@@ -457,9 +459,9 @@ def run_elastic_net(
     pvals = ((pi_null[:completed] >= pi_mean).sum(axis=0) + 1.0) / (completed + 1.0)
     rej, pvals_fdr, _, _ = multipletests(pvals, alpha=0.05, method='fdr_bh')
 
-    perm_importance_df["p_value"] = pvals
-    perm_importance_df["p_fdr"] = pvals_fdr
-    perm_importance_df.sort_values(["p_value", "perm_importance_mean"], ascending=[True, False], inplace=True)
+    feature_df["p_value"] = pvals
+    feature_df["p_fdr"] = pvals_fdr
+    feature_df.sort_values(["p_value", "perm_importance_mean"], ascending=[True, False], inplace=True)
 
     # Save results at each checkpoint_n permutations
     with open(f"{checkpoint_file}", "wb") as f:
@@ -492,7 +494,7 @@ def run_elastic_net(
         "best_params_per_fold": best_params_per_fold,
         "coef_mean": coef_mean,
         "coef_std": coef_std,
-        "perm_importance": perm_importance_df,
+        "feat_importance": feature_df,
         "permutation_test": {
             "aucs": perm_aucs,
             "p_value": float(p_value)
@@ -564,7 +566,7 @@ def main():
     print("Starting time:", time.ctime(t0))
     results = run_elastic_net(
         X_use, superager_vec, feat_names_use,
-        n_permutations=1000,
+        n_permutations=2000,
         n_repeats_importance=20,
         class_weight=None,        
         random_state=7,
@@ -579,20 +581,18 @@ def main():
     print(results["observed"])
     print("Model-level p-value:", results["permutation_test"]["p_value"])
     with pd.option_context("display.max_columns", None):
-        print(results["perm_importance"].head(50))
+        print(results["feat_importance"].head(50))
     dt = time.time() - t0
     print(f"Run took {dt:.2f}s")
 
-    # Build dataframe of features
+    # Build dataframe of features to be able to look at correlation between timepoints for significant pairs
     df_roi_values = pd.DataFrame(X_use, columns=feat_names_use)
-    print(df_roi_values.head())
     df_roi_values["superager"] = superager_vec  # add the label
 
     sig_pairs = [
-        "7Networks_LH_DorsAttn_Post",
-        "7Networks_LH_Cont_OFC",
-        "7Networks_LH_Cont_Temp",
-        "7Networks_RH_Cont_PFCv",
+        "7Networks_RH_Cont_PFCl",
+        "7Networks_RH_Default_PFCdPFCm",
+        "Subcortical 213: Right Accumbens",
     ]
 
     for roi in sig_pairs:
@@ -603,18 +603,16 @@ def main():
         else:
             print(f"{roi}: missing one of t1/t2")
 
-    
-    # choose timepoint and ROIs ---
+    # Then look whether they vary between superagers and non-superagers
     sig_pairs_by_tp = [
-        "7Networks_LH_DorsAttn_Post_1",
-        "7Networks_LH_Cont_OFC_2",
-        "7Networks_LH_Cont_Temp_1",
-        "7Networks_RH_Cont_PFCv_1",
+        "7Networks_RH_Cont_PFCl_2",
+        "7Networks_RH_Default_PFCdPFCm_2",
+        "Subcortical 213: Right Accumbens_1",
+        "Subcortical 213: Right Accumbens_2",
     ]
-    rois_to_plot = sig_pairs_by_tp  # or roi_cols if you want all
+    rois_to_plot = sig_pairs_by_tp  
 
-
-    # ---------- build long df ----------
+    # Switch to long df
     plot_data = []
     for roi in rois_to_plot:
         col = f"{roi}"
@@ -625,9 +623,8 @@ def main():
                     "Value": row[col],
                     "Group": "Superager" if row["superager"] == 1 else "Non-superager"
                 })
-    plot_df = pd.DataFrame(plot_data)
 
-    # Print superager mean adn std for each ROI
+    # Print superager mean and std for each ROI
     for roi in rois_to_plot:
         col = f"{roi}"
         if col in df_roi_values:
