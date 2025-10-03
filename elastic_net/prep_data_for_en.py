@@ -36,31 +36,6 @@ def get_subjects_to_process(output_folder, ses, id_csv_path):
 
     return subjects
 
-def split_subject_csv_to_long(input_csv, output_dir, ses):
-    """
-    Reads the fisher-z transformed SFC data (rows=subjects, cols=ROIs), 
-    and writes one CSV per subject (cols='ROI_name', 'pearson_rho'].
-    
-    Args:
-        input_csv (Path): Path to the Fisher-z CSV 
-        output_dir (Path): Directory to write per-subject CSVs.
-        ses (str): Session ID (e.g. "ses-01").
-    """
-    input_csv = Path(input_csv)
-    output_dir = Path(output_dir)
-
-    # Load the df
-    df = pd.read_csv(input_csv, index_col=0)
-
-    # Write one csv per subject
-    for subj, row in df.iterrows():
-        out = pd.DataFrame({
-            "ROI_name": row.index,
-            "pearson_rho": row.values
-        })
-        out_path = output_dir / f"{subj}_{ses}_structure_function_connectivity_matrix_fisher_z.csv"
-        out.to_csv(out_path, index=False)
-
 
 def flatten_connectivity_csv(matrix_csv, measure_col="pearson_rho"):
     """
@@ -271,23 +246,12 @@ def main():
             else:
                 print(f"Missing SC CSV at path: {sc_csv}")
 
-    # Before processing SFC data, make individual fisher-z transformed matrices 
-    for ses in sessions:
-        sfc_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/{ses}")
-        sfc_matrix = sfc_dir / "all_to_all_roi_matrices" / f"fisher_z_all_sfc_{ses}.csv"
-        sfc_output_dir = sfc_dir / "individual_coupling_matrices"
-        
-        # Process SFC connectivity matrices
-        print(f"Processing structure-function fisher-z connectivity matrices for {ses}...")
-        split_subject_csv_to_long(sfc_matrix, sfc_output_dir, ses)
-
-        print(f"Conversion complete for {ses}!")
-
     # Make the grouped averages for each subject's SFC CSV   
     for sub in subjects:
         for ses in sessions:
             ses_path = root_path / ses / "individual_coupling_matrices"
-            csv_path = ses_path / f"{sub}_{ses}_structure_function_connectivity_matrix_fisher_z.csv"
+            csv_path = ses_path / f"{sub}_{ses}_structure_function_coupling.csv"
+            group_level = "ROI"
             output_path = ses_path / f"{sub}_{ses}_structure_function_coupling_grouped_by_{group_level}.csv"
             if csv_path.is_file():
                 save_grouped_roi_averages(csv_path, output_path, group_level = group_level, subject=sub, ses=ses)

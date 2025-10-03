@@ -208,10 +208,11 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
         str(mask_file), 
         str(temp_matrix_file),
         "-force",
-        "-zero_diagonal",  # Set diagonal elements to zero
-        "-symmetric"      # Ensure matrix is symmetric
+        "-zero_diagonal",   # Set diagonal elements to zero
+        "-symmetric",       # Ensure matrix is symmetric
+        "-scale_invnodevol" # Scale by the inverse size of each node that the streamlines connect to
     ]
-
+    
     try:
         print(f"Processing {subject} for ses-{ses}...")
         

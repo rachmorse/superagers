@@ -93,11 +93,21 @@ def create_individual_matrices(input_file, output_dir, ses, is_functional=False,
 
         # Normalize the structural connectivity matrix
         if not is_functional:
-            mat_min = conn_matrix.min()
-            mat_max = conn_matrix.max()
-            if mat_max > mat_min:
-                conn_matrix = (conn_matrix - mat_min) / (mat_max - mat_min)
-        
+            # mat_min = conn_matrix.min()
+            # mat_max = conn_matrix.max()
+            # if mat_max > mat_min:
+            #     conn_matrix = (conn_matrix - mat_min) / (mat_max - mat_min)
+            # Apply Gaussian normalization
+            mu = np.mean(conn_matrix)
+            sigma = np.std(conn_matrix)
+
+            if sigma > 0:
+                # Z-score (mean=0, std=1)
+                conn_matrix = (conn_matrix - mu) / sigma
+                
+                # Rescale to mean = 0.5, std = 0.1
+                conn_matrix = conn_matrix * 0.1 + 0.5
+
         # Convert to DataFrame with original ROI labels
         conn_df = pd.DataFrame(conn_matrix, index=roi_labels, columns=roi_labels)
 

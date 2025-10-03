@@ -343,7 +343,6 @@ def run_elastic_net(
     feature_df = pd.DataFrame({
         "feature": feature_names,
         "perm_importance_mean": pi_mean,
-        # "perm_importance_std": pi_std,
         "coef_mean": coef_mean,
         "coef_std": coef_std,
         "selected_freq": selection_freq,
@@ -503,7 +502,7 @@ def run_elastic_net(
     return results
 
 def main():
-    connectivity_type = "FC"  # Options: "SFC", "FC", "SC", "all"
+    connectivity_type = "SFC"  # Options: "SFC", "FC", "SC", "all"
     which_features = 't1_t2' # Options: 't1', 't2', 'slope', 't1_t2', 'all'
     group_level = "ROI" # Options: "ROI", "network"
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
@@ -566,7 +565,7 @@ def main():
     print("Starting time:", time.ctime(t0))
     results = run_elastic_net(
         X_use, superager_vec, feat_names_use,
-        n_permutations=2000,
+        n_permutations=1,
         n_repeats_importance=20,
         class_weight=None,        
         random_state=7,
