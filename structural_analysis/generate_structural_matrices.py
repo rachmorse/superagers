@@ -46,18 +46,21 @@ def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
     Returns:
         list: List of subject IDs to process.
     """
-    if not tractogram_dir.exists():
-        print(f"Tractogram directory {tractogram_dir} does not exist. Skipping.")
-        return []
-    
     subjects_to_process = []
-    
-    # Get all subjects with tractogram files
     tractogram_subjects = []
-    for file in os.listdir(tractogram_dir):
-        if file.endswith("_dwi_tractogram_1M_SIFT.tck"):
-            subject_id = file.split("_")[0]
-            tractogram_subjects.append(subject_id)
+    session_dir = f"ses-{ses}"
+    
+    # Find the subs with tractograms
+    for sub_dir in tractogram_dir.glob("sub-*"):
+        dwi_dir = sub_dir / session_dir / "dwi"
+        if not dwi_dir.is_dir():
+            continue
+        fname = f"{sub_dir.name}_{session_dir}_model-MSMTCSD_tractogram.tck"
+        full = dwi_dir / fname
+        if full.is_file():
+            tractogram_subjects.append(sub_dir.name)
+        else: 
+            print(f"Tractogram not found for {sub_dir.name} in {dwi_dir}")
     
     # Define output CSV paths
     all_to_all_csv = output_dir / f"ses-{ses}/all_to_all_roi_matrices/all_to_all_roi_matrix.csv"
@@ -65,6 +68,7 @@ def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
     # Load existing subjects from CSV if it exists
     existing_subjects = set()
     if all_to_all_csv.exists():
+        print("Output CSV exists. Checking for already processed subjects...")
         try:
             existing_df = pd.read_csv(all_to_all_csv, index_col="Unnamed: 0")
             existing_subjects = set(existing_df.index)
@@ -188,7 +192,8 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
     Returns:
         np.ndarray: The generated connectivity matrix.
     """
-    tractogram_file = tractogram_dir / f"{subject}_dwi_tractogram_1M_SIFT.tck"
+    tractogram_file = tractogram_dir / subject / f"ses-{ses}/dwi/{subject}_ses-{ses}_model-MSMTCSD_tractogram.tck"
+    print(f"Tractogram file: {tractogram_file}")
     mask_file = Path(f"{mask_dir}/ses-{ses}/{subject}/dwi_space_masks/{subject}_ses-{ses}_schaefer200_subcortical14_dwi_space.nii.gz")
     
     # Create output directories
@@ -388,15 +393,9 @@ def main():
             print("------------------------------")
 
             if cohort == "bbhi":
-                if ses == "01":
-                    tractogram_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_MSMTCSD_TP1")
-                else:  # ses-02
-                    tractogram_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_MSMTCSD_TP2")
+                tractogram_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/tracto_MSMTCSD")
             else:
-                if ses == "01":
-                    tractogram_dir = Path("/pool/guttmann/institut/UB/Superagers/MRI/tracto_MSMTCSD_TP1")
-                else:  
-                    tractogram_dir = Path("/pool/guttmann/institut/UB/Superagers/MRI/tracto_MSMTCSD_TP2")
+                tractogram_dir = Path("/pool/guttmann/institut/UB/Superagers/MRI/derivatives/tracto_MSMTCSD")
 
             # Setup MRTrix 
             os.environ["PATH"] = f"/home/rachel/miniconda3/bin:{os.environ['PATH']}"
@@ -408,7 +407,7 @@ def main():
             # Setup logging
             setup_logging(output_dir)
             
-            # Get subjects to process
+            # # Get subjects to process
             subjects = get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses)
             all_subjects.extend(subjects)
             
@@ -427,7 +426,7 @@ def main():
                         output_dir=output_dir,
                         ses=ses, 
                         labels_csv_path=labels_csv_path,
-                        run_visualization=False
+                        run_visualization=True
                     )
                     
                     # Check if processing was successful
