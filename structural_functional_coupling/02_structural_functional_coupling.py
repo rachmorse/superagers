@@ -36,7 +36,7 @@ def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, struct
         
         # Check if the required directory exists and hasn't been processed yet  
         func_conn_path = functional_dir / f"{subject}_{ses}_functional_connectivity_matrix.csv"
-        struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix_normalized.csv"
+        struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix.csv"
         output_file_path = output_folder / f"{subject}_{ses}_structure_function_coupling.csv"
 
         if func_conn_path.exists() and struct_conn_path.exists() and not output_file_path.exists():
@@ -49,8 +49,7 @@ def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, struct
     return subjects_to_process, already_processed
 
 def calculate_structure_function_coupling(structural_dir, functional_dir, subject, ses):
-    """
-    Calculate structure-function coupling for each ROI
+    """Calculate structure-function coupling for each ROI
     
     Args:
         subject (str): Subject identifier
@@ -64,13 +63,13 @@ def calculate_structure_function_coupling(structural_dir, functional_dir, subjec
     
     # Define paths using specific directory structure
     func_conn_path = functional_dir / f"{subject}_{ses}_functional_connectivity_matrix.csv"
-    struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix_normalized.csv"
+    struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix.csv"
 
     # Load connectivity matrices
     func_conn_df = pd.read_csv(func_conn_path)
     struct_conn_df = pd.read_csv(struct_conn_path)
 
-    # Extract region names from the first column (excluding the header row)
+    # Extract ROI names from the first column (excluding the header row)
     roi_names = func_conn_df.iloc[:, 0].tolist()
     
     # Drop the first row and column to get the numeric data only
@@ -115,8 +114,7 @@ def calculate_structure_function_coupling(structural_dir, functional_dir, subjec
 
 
 def save_coupling_results(coupling_dict, output_path):
-    """
-    Save coupling results to CSV files
+    """Save coupling results to CSV files
     
     Args:
         coupling_dict (dict): The coupling dictionary returned by calculate_structure_function_coupling
