@@ -237,8 +237,8 @@ def run_elastic_net(
 
     # Hyperparameter grid 
     param_grid = {
-        "clf__C": np.logspace(-2, 2, 9), # higher c = less regularization, may be overfit
-        "clf__l1_ratio": [0.2, 0.4, 0.6, 0.8, 1.0], # l1_ratio=1 is fully Lasso where some coeffs = 0
+        "clf__C": np.logspace(-4, 2, 10), # higher c = less regularization, may be overfit
+        "clf__l1_ratio": [0.01, 0.1, 0.3, 0.5], # l1_ratio=1 is fully Lasso where some coeffs = 0
     }
 
     # Storage for outer-CV results
@@ -497,7 +497,7 @@ def run_elastic_net(
     return results
 
 def main():
-    connectivity_type = "FC"  # Options: "SFC", "FC", "SC", "all"
+    connectivity_type = "SC"  # Options: "SFC", "FC", "SC", "all"
     which_features = 't1_t2' # Options: 't1', 't2', 'slope', 't1_t2', 'all'
     group_level = "ROI" # Options: "ROI", "network"
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")

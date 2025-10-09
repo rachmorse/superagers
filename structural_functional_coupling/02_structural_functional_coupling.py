@@ -35,8 +35,8 @@ def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, struct
             continue
         
         # Check if the required directory exists and hasn't been processed yet  
-        func_conn_path = functional_dir / f"{subject}_{ses}_functional_connectivity_matrix.csv"
-        struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix.csv"
+        func_conn_path = functional_dir / f"{subject}_{ses}_functional_connectivity_matrix_fisher_z.csv"
+        struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix_normalized.csv"
         output_file_path = output_folder / f"{subject}_{ses}_structure_function_coupling.csv"
 
         if func_conn_path.exists() and struct_conn_path.exists() and not output_file_path.exists():
@@ -62,8 +62,8 @@ def calculate_structure_function_coupling(structural_dir, functional_dir, subjec
     """
     
     # Define paths using specific directory structure
-    func_conn_path = functional_dir / f"{subject}_{ses}_functional_connectivity_matrix.csv"
-    struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix.csv"
+    func_conn_path = functional_dir / f"{subject}_{ses}_functional_connectivity_matrix_fisher_z.csv"
+    struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix_normalized.csv"
 
     # Load connectivity matrices
     func_conn_df = pd.read_csv(func_conn_path)

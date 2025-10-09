@@ -87,22 +87,19 @@ def create_individual_matrices(input_file, output_dir, ses, is_functional=False,
         # Zero out the diagonal
         np.fill_diagonal(conn_matrix, 0)
 
-        # # Normalize the structural connectivity matrix
-        # if not is_functional:
-        #     # mat_min = conn_matrix.min()
-        #     # mat_max = conn_matrix.max()
-        #     # if mat_max > mat_min:
-        #     #     conn_matrix = (conn_matrix - mat_min) / (mat_max - mat_min)
-        #     # Apply Gaussian normalization
-        #     mu = np.mean(conn_matrix)
-        #     sigma = np.std(conn_matrix)
+        # Normalize the structural connectivity matrix
+        if not is_functional:
 
-        #     if sigma > 0:
-        #         # Z-score (mean=0, std=1)
-        #         conn_matrix = (conn_matrix - mu) / sigma
+            # Apply Gaussian normalization
+            mu = np.mean(conn_matrix)
+            sigma = np.std(conn_matrix)
+
+            if sigma > 0:
+                # Z-score (mean=0, std=1)
+                conn_matrix = (conn_matrix - mu) / sigma
                 
-        #         # Rescale to mean = 0.5, std = 0.1
-        #         conn_matrix = conn_matrix * 0.1 + 0.5
+                # Rescale to mean = 0.5, std = 0.1
+                conn_matrix = conn_matrix * 0.1 + 0.5
 
         # Convert to DataFrame with original ROI labels
         conn_df = pd.DataFrame(conn_matrix, index=roi_labels, columns=roi_labels)
@@ -114,7 +111,7 @@ def create_individual_matrices(input_file, output_dir, ses, is_functional=False,
             else:
                 output_file = output_dir / f"{subject}_{ses}_functional_connectivity_matrix.csv"
         else:
-            output_file = output_dir / f"{subject}_{ses}_structural_connectivity_matrix.csv"
+            output_file = output_dir / f"{subject}_{ses}_structural_connectivity_matrix_normalized.csv"
         conn_df.to_csv(output_file)
 
 def main():
@@ -129,7 +126,7 @@ def main():
         structural_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structural_connectivity/{ses}")
         functional_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space/{ses}")
         structural_matrix = structural_dir / "all_to_all_roi_matrices" / "all_to_all_roi_matrix.csv"
-        is_fisher_z = False  # Set to True for getting fisher z values
+        is_fisher_z = True  # Set to True for getting fisher z values
         if is_fisher_z:
             func_matrix = functional_dir / "all_to_all_roi_matrices" / "fisher_z_all_to_all_roi_matrix.csv"
         else:
