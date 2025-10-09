@@ -7,20 +7,41 @@ from collections import Counter
 from nilearn.datasets import fetch_atlas_schaefer_2018
 from functools import lru_cache
 
-def get_subjects_to_process(output_folder, ses, id_csv_path):
-    """
-    Generate a list of subjects to process ensuring each subject is also in the id column of the CSV.
+def get_subjects_to_process(output_folder, ses, id_csv_path, age_dir):
+    """Generate a list of subjects to process ensuring each subject is 
+    also in the id column of the CSV. Also, filters for any subs with
+    <1.8 years follow-up time.
 
     Args:
         output_folder (Path): Path to the directory coupling results
         ses (str): Session ID (format: ses-01).
         id_csv_path (Path or str): Path to CSV file with 'id' column.
+        age_dir (Path): Path to the directory containing the age data CSV.
 
     Returns:
         list: List of subject IDs to process.
     """
-    # Load valid subject IDs from the CSV - this allows removing subs without sufficiently long follow-up
-    valid_ids = set(pd.read_csv(id_csv_path)['id'].astype(str))
+    # Load valid subject IDs from the CSV 
+    ids = set(pd.read_csv(id_csv_path)['id'].astype(str))
+
+    # Merge in the age data
+    age_data = pd.read_csv(age_dir / "maintainer_superager_data.csv")
+    age_data.columns = [re.sub(r"^w(\d)_(.*)", r"\2_\1", col) for col in age_data.columns] # Rename the columns
+    age_data['id'] = 'sub-' + age_data['id'].astype(str) # Add 'sub-' to the id
+    age_data_filt = age_data[['id', 'age_1', 'age_2']].copy() # Keep only the relevant columns
+
+    # Create a new fu_time variable
+    age_data_filt['fu_time'] = age_data_filt['age_2'] - age_data_filt['age_1'] 
+
+    # Drop participant with fu_time NA
+    age_data_filt = age_data_filt.dropna(subset=['fu_time'])
+
+    # Create a set of valid ids that have fu_time >1.8 years
+    valid_ids = set(age_data_filt[age_data_filt['fu_time'] > 1.8]['id'].astype(str))
+    print(f"Number of subs dropped due to <1.8 years follow-up time: {len(age_data_filt) - len(valid_ids)}")
+
+    # Subset ids to only those in valid_ids
+    ids = ids.intersection(valid_ids)
 
     subjects = []
     for fname in os.listdir(output_folder):
@@ -38,9 +59,10 @@ def get_subjects_to_process(output_folder, ses, id_csv_path):
 
 
 def flatten_connectivity_csv(matrix_csv, measure_col="pearson_rho"):
-    """
-    Reads an NxN connectivity CSV (214×214) and flattens it into a long DataFrame,
-    returning columns: ROI_name, measure_col.
+    """Reads an NxN connectivity CSV (214×214) and flattens it into a long DataFrame
+    by taking the row-wise mean to match the format of SFC data which takes the rho
+    of each ROI connection in the row, weighing them the same. Returns columns: 
+    ROI_name, measure_col.
 
     Args:
         matrix_csv (str or Path): Path to the NxN CSV.
@@ -85,7 +107,8 @@ def _get_schaefer_label_to_count():
 
 @lru_cache(maxsize=None) 
 def _get_subcort_counts(subject: str, ses: str):
-    """Load and cache the voxel counts for subcortical ROIs from the subject's aseg.mgz file.
+    """Load and cache the voxel counts for subcortical ROIs from the 
+    subject's aseg.mgz file.
     
     Args:
         subject (str): Subject ID (e.g. "sub-1234").
@@ -105,8 +128,8 @@ def _get_subcort_counts(subject: str, ses: str):
 def save_grouped_roi_averages(csv_path, output_path, group_level, subject, ses):
     """Reads a subject's connectivity CSV (SFC/FC/SC),
     then groups & averages the coefficients either:
-      • by ROI prefix (strip trailing _<digits>), or
-      • by network (for cortical: 3rd "_" field; for subcortical: region name).
+      - by ROI prefix (strip trailing _<digits>), or
+      - by network (for cortical: 3rd "_" field; for subcortical: region name).
 
     Args:
         csv_path (str or Path): Path to the input CSV file.
@@ -168,7 +191,7 @@ def save_grouped_roi_averages(csv_path, output_path, group_level, subject, ses):
                 region = " ".join(parts[3:]) # Combines the left and right hemispheres
                 return region
             else:
-                # Cortical case: "7Networks_RH_Cont_pCun"
+                # Cortical ROIs: "7Networks_RH_Cont_pCun"
                 parts = name.split("_")
                 if len(parts) >= 3:
                     return parts[2]
@@ -199,10 +222,11 @@ def main():
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
     sc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
     csv_path = Path("/home/rachel/Desktop/data/clean_data_all.csv")
+    age_dir = Path("/home/rachel/Desktop/data")
 
     # Get the list of subjects to process
-    subjects_tp1 = get_subjects_to_process(root_path / "ses-01" / "individual_coupling_matrices", "ses-01", csv_path)
-    subjects_tp2 = get_subjects_to_process(root_path / "ses-02" / "individual_coupling_matrices", "ses-02", csv_path)
+    subjects_tp1 = get_subjects_to_process(root_path / "ses-01" / "individual_coupling_matrices", "ses-01", csv_path, age_dir)
+    subjects_tp2 = get_subjects_to_process(root_path / "ses-02" / "individual_coupling_matrices", "ses-02", csv_path, age_dir)
     subjects = sorted(set(subjects_tp1) & set(subjects_tp2))
     print(f"Subjects: {len(subjects)}")
 
@@ -229,7 +253,7 @@ def main():
                 save_grouped_roi_averages(fc_output, grouped_output, group_level = group_level, subject=sub, ses=ses) 
 
             # Structural connectivity 
-            sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix_normalized.csv"
+            sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix.csv"
             if sc_csv.is_file():
                 sc_flat = flatten_connectivity_csv(sc_csv, measure_col="pearson_rho")
 

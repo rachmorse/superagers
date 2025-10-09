@@ -14,8 +14,6 @@ from sklearn.utils import check_random_state
 from statsmodels.stats.multitest import multipletests
 from prep_data_for_en import get_subjects_to_process
 from sklearn.linear_model import LinearRegression
-# import matplotlib.pyplot as plt
-# import seaborn as sns
 
 
 def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type, group_level):
@@ -38,9 +36,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
         X_t1_t2 (np.ndarray): Combined feature matrix for timepoints 1 and 2.
         superager_vec (np.ndarray): Binary vector indicating superager status.
         X_all (np.ndarray): Combined feature matrix for all features.
-        age1 (np.ndarray): Ages at timepoint 1.
-        YoE (np.ndarray): Years of education.
-        sex (np.ndarray): Sex of the subjects.
+        covariates (np.ndarray): Matrix of covariates (age, years of education, sex).
     """
     # Prepare the data 
     def load_modality(sub, mod):
@@ -55,7 +51,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
             f1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_grouped_by_{group_level}.csv"
             f2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_grouped_by_{group_level}.csv"
             col = 'pearson_rho' 
-        else:  # "SC"
+        else:  # SC
             f1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_grouped_by_{group_level}.csv"
             f2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_grouped_by_{group_level}.csv"
             col = 'pearson_rho'  
@@ -90,7 +86,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
             if feat1 is None:
                 continue
 
-        # Pull memory, ages, superager status from memory_data
+        # Pull demographics and superager status from memory_data
         row = memory_data[memory_data['id'] == sub]
         if row.empty:
             continue
@@ -135,8 +131,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
 
 
 def take_residuals_covars(X, covariates):
-    """
-    Takes the residuals of ROI features using covariates (i.e., age, YoE, sex).
+    """Takes the residuals of ROI features using covariates (age, YoE, sex).
     For each feature column, fits a linear regression using the covariates,
     and the residuals (feature minus predicted component) returned. This
     ensures that downstream models operate only on variance unexplained by
@@ -510,10 +505,11 @@ def main():
     sc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
     csv_path = Path("/home/rachel/Desktop/data/clean_data_all.csv")
     memory_data = pd.read_csv(csv_path)
+    age_dir = Path("/home/rachel/Desktop/data")
 
     # Get the list of subjects to process
-    subjects_tp1 = get_subjects_to_process(root_path / "ses-01" / "individual_coupling_matrices", "ses-01", csv_path)
-    subjects_tp2 = get_subjects_to_process(root_path / "ses-02" / "individual_coupling_matrices", "ses-02", csv_path)
+    subjects_tp1 = get_subjects_to_process(root_path / "ses-01" / "individual_coupling_matrices", "ses-01", csv_path, age_dir)
+    subjects_tp2 = get_subjects_to_process(root_path / "ses-02" / "individual_coupling_matrices", "ses-02", csv_path, age_dir)
     subjects = sorted(set(subjects_tp1) & set(subjects_tp2))
     print(f"Subjects: {len(subjects)}")
 

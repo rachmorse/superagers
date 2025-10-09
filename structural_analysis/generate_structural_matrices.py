@@ -86,6 +86,7 @@ def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
     print(f"Number of subjects to process: {len(subjects_to_process)}")
     return subjects_to_process
 
+
 def save_structural_connectivity(subject_id, label, matrix, roi_names, output_dir):
     """
     Save structural connectivity matrix without normalization.
@@ -134,6 +135,7 @@ def save_structural_connectivity(subject_id, label, matrix, roi_names, output_di
     except Exception as e:
             logging.error(f"{subject_id}: Error saving connectivity data: {str(e)}")
             return False
+
 
 def visualize_sc_data(subject_id, connectivity_matrix, output_directory, ses, cmap='RdBu_r'):
     """
@@ -407,7 +409,7 @@ def main():
             # Setup logging
             setup_logging(output_dir)
             
-            # # Get subjects to process
+            # Get subjects to process
             subjects = get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses)
             all_subjects.extend(subjects)
             
@@ -426,7 +428,7 @@ def main():
                         output_dir=output_dir,
                         ses=ses, 
                         labels_csv_path=labels_csv_path,
-                        run_visualization=True
+                        run_visualization=False
                     )
                     
                     # Check if processing was successful

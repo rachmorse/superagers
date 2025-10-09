@@ -67,14 +67,12 @@ This repository contains the analysis scripts for our study on superagers, which
     - `01_convert_to_individual_matrix.py`: Converts the functional and structural connectivity data from a shared CSV with all participants into individual 214x214 matrices. 
     - `02_structural_functional_coupling.py`: Computes and visualizes SFC using the normalized structural connectivity data and untransformed functional connectivity data. 
     - `03_group_means.py`: Consolidates individual SFC data into a single group matrix, applies Fisher z-transform, merges with superager/maintainer status, calculates and saves group means, and creates visualizations.
-    - `04_calculate_network_metrics.py`: Calculates average within- and between-network functional and structural connectivity, and structure-function coupling for each of the 7 Schaefer networks.
-    - `05_annual_change.py`: Calculates annual change slopes for all connectivity and SFC network metrics and merges these slopes with the memory and demographic data, creating a clean dataframe with all data for analysis. 
-
+   
 ### elastic_net
 - **Purpose:** These scripts run prepare and run a logistic elastic net to classify participants as superagers or non-superagers
  
 - **Scripts:**
-    `prep_data_for_en.py`: Prepares data by generating voxel‑weighted, grouped ROI connectivity summaries for later Elastic Net analysis. 
+    `prep_data_for_en.py`: Prepares data by generating voxel‑weighted, grouped ROI connectivity summaries for later Elastic Net analysis. Also, ensures the data used in the elastic net only includes subs with sufficiently long follow-up time. 
     `log_en.py`: Run a logistic elastic‑net classification to predict superager status using cross-validation and permutation testing. Provides model level metrics including p-value and feature level p-values. 
 
 ## Analysis Scripts
