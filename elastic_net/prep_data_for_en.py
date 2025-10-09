@@ -38,7 +38,6 @@ def get_subjects_to_process(output_folder, ses, id_csv_path, age_dir):
 
     # Create a set of valid ids that have fu_time >1.8 years
     valid_ids = set(age_data_filt[age_data_filt['fu_time'] > 1.8]['id'].astype(str))
-    print(f"Number of subs dropped due to <1.8 years follow-up time: {len(age_data_filt) - len(valid_ids)}")
 
     # Subset ids to only those in valid_ids
     ids = ids.intersection(valid_ids)
