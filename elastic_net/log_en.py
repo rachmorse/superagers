@@ -220,7 +220,7 @@ def run_elastic_net(
     assert X.shape[1] == len(feature_names), "feature_names length must match n_features."
 
     # Fixed CV configuration for stability
-    OUTER_SPLITS = 10
+    OUTER_SPLITS = 5
     INNER_SPLITS = 5
 
     # Stratified K-Folds keeps the same number of superagers/non-superagers in each fold
@@ -502,7 +502,7 @@ def run_elastic_net(
     return results
 
 def main():
-    connectivity_type = "SFC"  # Options: "SFC", "FC", "SC", "all"
+    connectivity_type = "FC"  # Options: "SFC", "FC", "SC", "all"
     which_features = 't1_t2' # Options: 't1', 't2', 'slope', 't1_t2', 'all'
     group_level = "ROI" # Options: "ROI", "network"
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
