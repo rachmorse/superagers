@@ -95,6 +95,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
         superager = row.iloc[0]['superager']
         YoE = row.iloc[0]['YoE']
         sex = row.iloc[0]['sex']
+        memory_slopes = row.iloc[0]['memory_slopes']
 
         # Convert sex to binary 0/1
         sex = 1 if sex == 'male' else 0
@@ -107,7 +108,8 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
             'age2'      : age2,
             'superager' : superager,
             'YoE'       : YoE,
-            'sex'       : sex
+            'sex'       : sex,
+            'memory_slopes': memory_slopes
              })
 
     # Build DataFrame
@@ -118,7 +120,17 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
     X_t2 = np.stack(df['feat2'].values)
     age_diff = (df['age2'] - df['age1']).values
     X_slope = (X_t2 - X_t1) / age_diff[:, None]
-    covariates = np.vstack([df['age1'].values, df['YoE'].values, df['sex'].values]).T   
+
+    # Look only at demographics
+    covariates = np.vstack([df['age1'].values, df['YoE'].values, df['sex'].values]).T  
+
+    # For tp2 control for age2 
+    # covariates = np.vstack([df['age2'].values, df['YoE'].values, df['sex'].values]).T 
+
+    # Look at demographics + a practice effect variable
+    # The thought is that the tp2 data in particular is influenced by practice effects
+    # because many people meet the superager definition at tp2 
+    # covariates = np.vstack([df['age1'].values, df['YoE'].values, df['sex'].values, df['memory_slopes'].values]).T
 
     # 2) Make a superager vector 
     superager_vec = df['superager'].values.astype(int)
@@ -455,7 +467,7 @@ def run_elastic_net(
 
     feature_df["p_value"] = pvals
     feature_df["p_fdr"] = pvals_fdr
-    feature_df.sort_values(["p_value", "perm_importance_mean"], ascending=[True, False], inplace=True)
+    feature_df.sort_values(["perm_importance_mean", "p_value"], ascending=[False, True], inplace=True)
 
     # Save results at each checkpoint_n permutations
     with open(f"{checkpoint_file}", "wb") as f:
@@ -498,7 +510,7 @@ def run_elastic_net(
 
 def main():
     connectivity_type = "FC"  # Options: "SFC", "FC", "SC", "all"
-    which_features = 't1_t2' # Options: 't1', 't2', 'slope', 't1_t2', 'all'
+    which_features = 't1' # Options: 't1', 't2', 'slope', 't1_t2', 'all'
     group_level = "ROI" # Options: "ROI", "network"
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
