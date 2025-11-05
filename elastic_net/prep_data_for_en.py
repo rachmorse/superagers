@@ -85,6 +85,7 @@ def flatten_connectivity_csv(matrix_csv, measure_col="pearson_rho"):
 
     return df_out
 
+
 _SCHAEFER_LABEL_TO_COUNT = None
 def _get_schaefer_label_to_count():
     """Cached mapping of Schaefer 200 ROIs to their voxel counts
@@ -104,6 +105,7 @@ def _get_schaefer_label_to_count():
                                     if 0 <= i < len(labels)}
     return _SCHAEFER_LABEL_TO_COUNT
 
+
 @lru_cache(maxsize=None) 
 def _get_subcort_counts(subject: str, ses: str):
     """Load and cache the voxel counts for subcortical ROIs from the 
@@ -118,11 +120,12 @@ def _get_subcort_counts(subject: str, ses: str):
     """
     cohort = "bbhi" if int(subject.split("-")[1]) > 5000 else "bbhi senior"
     if cohort == "bbhi":
-        aseg_file = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall/{subject}_{ses}_run-01/mri/aseg.mgz")
+        aseg_file = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall/{subject}_{ses}_run-01/mri/aseg.mgz")
     else:
-        aseg_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")
+        aseg_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")
     aseg = nib.load(aseg_file).get_fdata().astype(int)
     return Counter(aseg[aseg > 0].ravel())
+
 
 def save_grouped_roi_averages(csv_path, output_path, group_level, subject, ses):
     """Reads a subject's connectivity CSV (SFC/FC/SC),
