@@ -52,7 +52,9 @@ merged_bbhi_senior <- merged_bbhi_senior %>%
     !(
       (is.na(NP_elegible_comments) | NP_elegible_comments == "" | 
          NP_elegible_comments == "NA" | NP_elegible_comments == "ok" | 
-         NP_elegible_comments == "yes" | grepl("^sÃ", NP_elegible_comments)) 
+         NP_elegible_comments == "yes" | grepl("^sÃ", NP_elegible_comments)) &
+        (is.na(comments_np_w2) | comments_np_w2 == "" | comments_np_w2 == " --" |
+           comments_np_w2 == "A" | comments_np_w2 == "V")
     )
   )
 
