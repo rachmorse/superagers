@@ -22,14 +22,9 @@ This repository contains the analysis scripts for our study on superagers, which
     - `cleaning_bbhi_data.ipynb`: Cleans BBHI data for merge.
     - `cleaning_bbhi_senior_data.ipynb`: Cleans BBHI senior data for merge.
     - `superager_classification.ipynb`: Classifies participants as superagers or non-superagers using modified [Sun et al. (2016)](https://pubmed.ncbi.nlm.nih.gov/27629716/) and [Rogalski et al. (2013)](https://pmc.ncbi.nlm.nih.gov/articles/PMC3541673/)] criteria:
-        - All participants must:
-            - Have an MMSE score >= 27 at baseline
         - Superagers must:
             - Score at or above the mean for age 16-29 year olds on the RAVLT long delay free recall based on normative data from [Schmidt (1996)](https://scholar.google.co.uk/scholar?hl=en&as_sdt=0%2C5&q=Schmidt%2C+M.+%281996%29.+Rey+Auditory+and+Verbal+Learning+Test%3A+A+handbook.+Los+Angeles%2C+CA%3A+Western+Psychological+Services&btnG=) at baseline and follow-up. 
             - Score within 1 SD of the norm for age and education on the TMT B, inverse digits and semantic fluency based on the neuronorma data from [Peña-Casanova et al. (2009a)](https://pubmed.ncbi.nlm.nih.gov/19661109/) with Spanish adults at baseline and follow-up. 
-    - `maintainer_classification.ipynb`: Classifies participants as maintainers or decliners. 
-        - Maintainers must: 
-            - Have memory change and baseline memory that are greater than the average.
 
 ### fsaverage_masks
 - **Purpose:** These scripts transform the fsaverage Schaefer atlas and aseg parcellation to T1 native space then DWI and BOLD native space and combine the two atlases to have native space Schaefer + subcortical atlas for each subject. 
