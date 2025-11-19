@@ -81,10 +81,29 @@ def process_subject(output_folder, subject, ses):
         right_subcortical_path = subject_subcort_folder / f"{subject}_right_subcortical14_t1.nii.gz"
 
         # Load the individual brain atlas components with correct paths
-        left_cortical = nib.load(left_cortical_path).get_fdata()
-        right_cortical = nib.load(right_cortical_path).get_fdata()
-        left_subcortical = nib.load(left_subcortical_path).get_fdata()
-        right_subcortical = nib.load(right_subcortical_path).get_fdata()
+        left_cortical_img = nib.load(left_cortical_path)
+        right_cortical_img = nib.load(right_cortical_path)
+        left_subcortical_img = nib.load(left_subcortical_path)
+        right_subcortical_img = nib.load(right_subcortical_path)
+
+        left_cortical = left_cortical_img.get_fdata()
+        right_cortical = right_cortical_img.get_fdata()
+        left_subcortical = left_subcortical_img.get_fdata()
+        right_subcortical = right_subcortical_img.get_fdata()
+
+        # Ensure all volumes share the same shape and affine before combining
+        reference_shape = left_cortical.shape
+        reference_affine = left_cortical_img.affine
+        for img, label in [
+            (right_cortical_img, "right cortical"),
+            (left_subcortical_img, "left subcortical"),
+            (right_subcortical_img, "right subcortical"),
+        ]:
+            if img.shape != reference_shape or not np.allclose(img.affine, reference_affine):
+                raise ValueError(
+                    f"{subject}: {label} volume shape/affine mismatch prevents combining "
+                    f"(expected {reference_shape}, got {img.shape})"
+                )
         
         # Adjust values to create non-overlapping ranges for each region
         left_cortical_adj = np.where(left_cortical != 0, left_cortical, 0)                    # cortical: values from 1 to 100 (keeping 0 as 0)
@@ -93,7 +112,7 @@ def process_subject(output_folder, subject, ses):
         right_subcortical_adj = np.where(right_subcortical != 0, right_subcortical + 207, 0)  # rs: values from 208 to 214 (keeping 0 as 0)
         
         # Get the affine transformation matrix from the original image
-        affine = nib.load(left_cortical_path).affine
+        affine = reference_affine
         
         # Create a matrix to store the final result
         result = np.zeros_like(left_cortical)
@@ -114,8 +133,8 @@ def process_subject(output_folder, subject, ses):
         
         output_file = subject_subcort_folder / "overlap_values_percentages.txt"
         
-        # Open file in append mode
-        with open(output_file, "a") as file:
+        # Open file in write mode so each run overwrites previous logs
+        with open(output_file, "w") as file:
             # Iterate through each overlap instance
             for idx, voxel_values in enumerate(overlap_values[0], start=1):
                 left_cortical_value = voxel_values[0]
@@ -210,11 +229,13 @@ def main():
             if cohort == "bbhi":
                 # Keep only subjects whose numeric ID is >= 5000
                 subjects = [subject for subject in subjects if int(subject.split("-")[1]) >= 5000]
+                already_processed = [subject for subject in already_processed if int(subject.split("-")[1]) >= 5000]
             else:  # cohort == "bbhi senior"
                 subjects = [subject for subject in subjects if int(subject.split("-")[1]) < 5000]
+                already_processed = [subject for subject in already_processed if int(subject.split("-")[1]) < 5000]
             
-            print(f"Number of subjects to process: {len(subjects)}")
             print(f"Number of subjects already processed: {len(already_processed)}")
+            print(f"Number of subjects to process: {len(subjects)}")
 
             if not subjects:
                 logger.info("No subjects found that need processing.")
