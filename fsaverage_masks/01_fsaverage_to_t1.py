@@ -23,7 +23,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def get_subjects_to_process(reconall_dir, out_dir, ses, cohort):
+def get_subjects_to_process(reconall_dir, out_dir, ses):
     """Generate a list of subjects to process based on whether they have
     recon-all done for the specified timepoint.
 
@@ -31,7 +31,6 @@ def get_subjects_to_process(reconall_dir, out_dir, ses, cohort):
         reconall_dir (Path): Path to the directory containing the recon-all results.
         out_dir (Path): Path to the output directory where the results will be saved.
         ses (str): Session (e.g., ses-01).
-        cohort (str): Cohort name (e.g., 'bbhi', 'bbhi senior').
         
     Returns:
         list: List of subject IDs to process.
@@ -41,39 +40,43 @@ def get_subjects_to_process(reconall_dir, out_dir, ses, cohort):
 
     # If cohort is 'bbhi', read the CSV file to filter valid IDs
     valid_ids = None
-    if cohort == 'bbhi':
-        if ses == 'ses-02':
-            df_bbhi = pd.read_csv('/home/rachel/Desktop/data/clean_bbhi.csv')
-        else:
-            # This has IDs for tp1 that dont have tp2 data
-            df_bbhi = pd.read_csv('/home/rachel/Desktop/data/bbhi_ids_tp1.csv')
+    df = pd.read_csv('/home/rachel/Desktop/data/superager.csv')
+    required_superager_col = 'superager_tp2' if ses == 'ses-02' else 'superager_tp1'
 
-        # Convert ID column to string in case file has numeric IDs
-        valid_ids = set(df_bbhi['id'].astype(str).tolist())
+    if required_superager_col not in df.columns:
+        logger.warning(
+            "Column %s not found in superager.csv; cannot ensure participants have required data.",
+            required_superager_col,
+        )
+    else:
+        valid_ids = set(
+            df[df[required_superager_col].notna()]['id'].astype(str).tolist()
+        )
 
     # Iterate over all possible subject directories
     for subject_dir in os.listdir(reconall_dir):
-        # Check if it's a subject directory with session (sub-xxx_ses-yy format)
+        # Check if it's a subject directory with session (sub-xxx_ses-yy format, optionally _run-xx)
         if not subject_dir.startswith("sub-"):
             continue
             
-        # Extract subject ID without session
-        if "_ses-" in subject_dir:
-            # Format is sub-xxx_ses-yy
-            subject_id = subject_dir.split("_ses-")[0]
-            dir_session = subject_dir.split("_ses-")[1]
-            
-            out_dir_t1 = out_dir / subject_id / "t1_masks"
+        # Normalize naming (handles sub-xxx_ses-yy and sub-xxx_ses-yy_run-zz)
+        parts = subject_dir.split("_ses-")
+        subject_id = parts[0]
+        dir_session = None
 
-            # Check if this directory matches the requested session
-            if f"ses-{dir_session}" != ses and f"{dir_session}" != ses:
+        if len(parts) > 1:
+            dir_session = parts[1]
+            # Remove optional run information
+            dir_session_core = dir_session.split("_run-")[0]
+            if f"ses-{dir_session_core}" != ses and dir_session_core != ses:
                 continue
-        else:
-            # Format is just sub-xxx
-            subject_id = subject_dir
-            out_dir_t1 = out_dir / subject_id / "t1_masks"
+        elif ses:
+            # If session requested but not present in name, skip
+            continue
 
-        # If cohort is 'bbhi' and valid_ids is set, skip if subject_id not in that set 
+        out_dir_t1 = out_dir / subject_id / "t1_masks"
+
+        # If valid_ids is set, skip if subject_id not in that set 
         if valid_ids is not None and subject_id.replace("sub-", "") not in valid_ids:
             continue
         
@@ -153,10 +156,9 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
 
         # 3. Create volume in native T1 space 
 
-        # Create a custom environment for FreeSurfer to be able to take the results from the previous step
-        subjects_dir = os.environ.get('SUBJECTS_DIR', str(output_folder))
+        # Create a custom environment for FreeSurfer; default to recon-all dir if SUBJECTS_DIR unset
         custom_env = os.environ.copy()
-        custom_env["SUBJECTS_DIR"] = subjects_dir
+        custom_env["SUBJECTS_DIR"] = custom_env.get("SUBJECTS_DIR", str(reconall_dir))
   
         # Left hemisphere
         cmd_lh_label2vol = [
@@ -225,16 +227,15 @@ def main():
             # Set paths based on cohort
             if cohort == "bbhi":
                 # BBHI paths
-                reconall_dir = Path('/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall')
+                reconall_dir = Path('/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall')
             else:  # cohort == "bbhi senior"
-                reconall_dir = Path('/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall')
+                reconall_dir = Path('/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall')
 
-            
             # Set environment variables
             os.environ['SUBJECTS_DIR'] = str(reconall_dir)
             
             # Determine subjects to process
-            subject_data, already_processed = get_subjects_to_process(reconall_dir, output_folder, session, cohort)
+            subject_data, already_processed = get_subjects_to_process(reconall_dir, output_folder, session)
             print(f"Number of subjects already processed: {len(already_processed)}")
 
             if not subject_data:
