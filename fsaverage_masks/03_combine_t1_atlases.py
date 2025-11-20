@@ -1,16 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-"""
-Python script to combine atlas components (left/right subcortical regions and 
-left/right Schaefer cortical regions) into a single atlas in T1 space.
-"""
-
 import os
 import nibabel as nib
 import numpy as np
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
 
 # Set up logging
@@ -20,6 +13,7 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+
 
 def get_subjects_to_process(output_folder, ses):
     """Generate a list of subjects to process based on whether they have
@@ -59,7 +53,7 @@ def get_subjects_to_process(output_folder, ses):
 
 
 def process_subject(output_folder, subject, ses):
-    """Process a single subject to create a combined Schaefer atlas.
+    """Process a single subject to create a combined Schaefer atlas in native T1 space.
     
     Args:
         output_folder (Path): Path to the directory containing subject data.
@@ -80,29 +74,48 @@ def process_subject(output_folder, subject, ses):
         left_subcortical_path = subject_subcort_folder / f"{subject}_left_subcortical14_t1.nii.gz"
         right_subcortical_path = subject_subcort_folder / f"{subject}_right_subcortical14_t1.nii.gz"
 
-        # Load the individual brain atlas components with correct paths
-        left_cortical = nib.load(left_cortical_path).get_fdata()
-        right_cortical = nib.load(right_cortical_path).get_fdata()
-        left_subcortical = nib.load(left_subcortical_path).get_fdata()
-        right_subcortical = nib.load(right_subcortical_path).get_fdata()
+        left_cortical_img = nib.load(left_cortical_path)
+        right_cortical_img = nib.load(right_cortical_path)
+        left_subcortical_img = nib.load(left_subcortical_path)
+        right_subcortical_img = nib.load(right_subcortical_path)
+
+        left_cortical = left_cortical_img.get_fdata()
+        right_cortical = right_cortical_img.get_fdata()
+        left_subcortical = left_subcortical_img.get_fdata()
+        right_subcortical = right_subcortical_img.get_fdata()
+
+        # Ensure all volumes share the same shape and affine before combining
+        reference_shape = left_cortical.shape
+        reference_affine = left_cortical_img.affine
+        for img, label in [
+            (right_cortical_img, "right cortical"),
+            (left_subcortical_img, "left subcortical"),
+            (right_subcortical_img, "right subcortical"),
+        ]:
+            if img.shape != reference_shape or not np.allclose(img.affine, reference_affine):
+                raise ValueError(
+                    f"{subject}: {label} volume shape/affine mismatch prevents combining "
+                    f"(expected {reference_shape}, got {img.shape})"
+                )
         
         # Adjust values to create non-overlapping ranges for each region
-        left_cortical_adj = np.where(left_cortical != 0, left_cortical, 0)                    # cortical: values from 1 to 100 (keeping 0 as 0)
-        right_cortical_adj = np.where(right_cortical != 0, right_cortical + 100, 0)           # cortical: values from 101 to 200 (keeping 0 as 0)
-        left_subcortical_adj = np.where(left_subcortical != 0, left_subcortical + 200, 0)     # ls: values from 201 to 207 (keeping 0 as 0)
-        right_subcortical_adj = np.where(right_subcortical != 0, right_subcortical + 207, 0)  # rs: values from 208 to 214 (keeping 0 as 0)
+        left_cortical_adj = np.where(left_cortical != 0, left_cortical, 0)                    # cortical: values from 1 to 100 (keeping background as 0)
+        right_cortical_adj = np.where(right_cortical != 0, right_cortical + 100, 0)           # cortical: values from 101 to 200 (keeping background as 0)
+        left_subcortical_adj = np.where(left_subcortical != 0, left_subcortical + 200, 0)     # ls: values from 201 to 207 (keeping background as 0)
+        right_subcortical_adj = np.where(right_subcortical != 0, right_subcortical + 207, 0)  # rs: values from 208 to 214 (keeping background as 0)
         
         # Get the affine transformation matrix from the original image
-        affine = nib.load(left_cortical_path).affine
+        affine = reference_affine # uses left cortical as reference as they all have same affine
         
-        # Create a matrix to store the final result
+        # Create a blank matrix to store the final result with the same shape as the left cortical atlas
         result = np.zeros_like(left_cortical)
         
-        # Create a stacked matrix for comparison
+        # Create a stacked matrix for comparison 
         stacked = np.stack([left_cortical_adj, right_cortical_adj, left_subcortical_adj, right_subcortical_adj], axis=-1)
         
         # Identify positions with overlap (more than one non-zero value)
         overlap_mask = np.sum(stacked != 0, axis=-1) > 1
+        print(f"Subject {subject} has {np.sum(overlap_mask)} overlapping voxels out of {np.prod(reference_shape)}.")
 
         # Check if there are any overlapping voxels
         if not np.any(overlap_mask):
@@ -114,57 +127,56 @@ def process_subject(output_folder, subject, ses):
         
         output_file = subject_subcort_folder / "overlap_values_percentages.txt"
         
-        # Open file in append mode
-        with open(output_file, "a") as file:
-            # Iterate through each overlap instance
+        # Open file in write mode so each run overwrites previous logs
+        with open(output_file, "w") as file:
             for idx, voxel_values in enumerate(overlap_values[0], start=1):
-                left_cortical_value = voxel_values[0]
-                right_cortical_value = voxel_values[1]  
-                left_subcortical_value = voxel_values[2]
-                right_subcortical_value = voxel_values[3]
-                n_values_overlaped = overlap_values[1][idx-1]
-                left_cortical_perc = 0.
-                right_cortical_perc = 0.
-                left_subcortical_perc = 0. 
-                right_subcortical_perc = 0.
-                # Calculate percentage of overlap for each region
-                if left_cortical_value != 0: left_cortical_perc = n_values_overlaped*100/np.sum(left_cortical_adj==left_cortical_value)
-                if right_cortical_value != 0: right_cortical_perc = n_values_overlaped*100/np.sum(right_cortical_adj==right_cortical_value)
-                if left_subcortical_value != 0: left_subcortical_perc = n_values_overlaped*100/np.sum(left_subcortical_adj==left_subcortical_value)
-                if right_subcortical_value != 0: right_subcortical_perc = n_values_overlaped*100/np.sum(right_subcortical_adj==right_subcortical_value)
+                counts = {
+                    "left_cortical": (voxel_values[0], left_cortical_adj),
+                    "right_cortical": (voxel_values[1], right_cortical_adj),
+                    "left_subcortical": (voxel_values[2], left_subcortical_adj),
+                    "right_subcortical": (voxel_values[3], right_subcortical_adj),
+                }
+                n_values_overlaped = overlap_values[1][idx - 1]
+                percentages = {
+                    region: (n_values_overlaped * 100 / np.sum(arr == value)) if value != 0 else 0.0
+                    for region, (value, arr) in counts.items()
+                }
 
-                # Write overlap information to file
-                new_line = f"{subject}, {idx}, {n_values_overlaped}, {left_cortical_value}, {right_cortical_value}, {left_subcortical_value}, {right_subcortical_value}, {left_cortical_perc}, {right_cortical_perc}, {left_subcortical_perc}, {right_subcortical_perc}\n"
-                file.write(new_line)
+                file.write(
+                    f"{subject}, {idx}, {n_values_overlaped}, "
+                    f"{counts['left_cortical'][0]}, {counts['right_cortical'][0]}, "
+                    f"{counts['left_subcortical'][0]}, {counts['right_subcortical'][0]}, "
+                    f"{percentages['left_cortical']}, {percentages['right_cortical']}, "
+                    f"{percentages['left_subcortical']}, {percentages['right_subcortical']}\n"
+                )
 
-        # For voxels with overlap, keep the value from the area with the highest percentage of affected voxels
-        for idx, voxel_values in enumerate(overlap_values[0], start=1):
-            left_cortical_value = voxel_values[0]
-            right_cortical_value = voxel_values[1]
-            left_subcortical_value = voxel_values[2]
-            right_subcortical_value = voxel_values[3]
-            n_values_overlaped = overlap_values[1][idx-1]
-            left_cortical_perc = 0.
-            right_cortical_perc = 0.
-            left_subcortical_perc = 0. 
-            right_subcortical_perc = 0.
-            # Calculate percentage of overlap for each region
-            if left_cortical_value != 0: left_cortical_perc = n_values_overlaped*100/np.sum(left_cortical_adj==left_cortical_value)
-            if right_cortical_value != 0: right_cortical_perc = n_values_overlaped*100/np.sum(right_cortical_adj==right_cortical_value)
-            if left_subcortical_value != 0: left_subcortical_perc = n_values_overlaped*100/np.sum(left_subcortical_adj==left_subcortical_value)
-            if right_subcortical_value != 0: right_subcortical_perc = n_values_overlaped*100/np.sum(right_subcortical_adj==right_subcortical_value)
-            
-            # Find the region with the highest overlap percentage
-            max_perc_idx = np.argmax(np.array([left_cortical_perc, right_cortical_perc, left_subcortical_perc, right_subcortical_perc]))
-            
-            # Assign values based on the region with highest percentage
-            result[(overlap_mask) &
-                      (stacked[:,:,:,0]==left_cortical_value) &
-                      (stacked[:,:,:,1]==right_cortical_value) &
-                      (stacked[:,:,:,2]==left_subcortical_value) &
-                      (stacked[:,:,:,3]==right_subcortical_value)] = np.array([left_cortical_value, right_cortical_value, left_subcortical_value, right_subcortical_value])[max_perc_idx]
+                # Select the region with the highest overlap percentage
+                labels = [
+                    counts['left_cortical'][0],
+                    counts['right_cortical'][0],
+                    counts['left_subcortical'][0],
+                    counts['right_subcortical'][0],
+                ]
+                max_perc_idx = int(
+                    np.argmax(
+                        [
+                            percentages["left_cortical"],
+                            percentages["right_cortical"],
+                            percentages["left_subcortical"],
+                            percentages["right_subcortical"],
+                        ]
+                    )
+                )
 
-        # For non-overlapping areas, simply sum the values (only one will be non-zero)
+                result[
+                    (overlap_mask)
+                    & (stacked[:, :, :, 0] == counts["left_cortical"][0])
+                    & (stacked[:, :, :, 1] == counts["right_cortical"][0])
+                    & (stacked[:, :, :, 2] == counts["left_subcortical"][0])
+                    & (stacked[:, :, :, 3] == counts["right_subcortical"][0])
+                ] = labels[max_perc_idx]
+
+        # For non-overlapping areas, sum the values since only one will be non-zero. This preserves the original labels.
         result[~overlap_mask] = np.sum(stacked[~overlap_mask], axis=-1)
         
         # Check that all 214 areas are preserved
@@ -184,6 +196,7 @@ def process_subject(output_folder, subject, ses):
     except Exception as e:
         logger.exception(f"Error processing subject {subject}: {str(e)}")
         return False
+
 
 def main():
     # Define paths
@@ -209,12 +222,14 @@ def main():
             # Filter subjects by cohort ID
             if cohort == "bbhi":
                 # Keep only subjects whose numeric ID is >= 5000
-                subjects = [subject for subject in subjects if int(subject.split("-")[1]) >= 5000]
+                subjects = [subject for subject in subjects if int(subject.split("-")[1]) > 5000]
+                already_processed = [subject for subject in already_processed if int(subject.split("-")[1]) > 5000]
             else:  # cohort == "bbhi senior"
                 subjects = [subject for subject in subjects if int(subject.split("-")[1]) < 5000]
+                already_processed = [subject for subject in already_processed if int(subject.split("-")[1]) < 5000]
             
-            print(f"Number of subjects to process: {len(subjects)}")
             print(f"Number of subjects already processed: {len(already_processed)}")
+            print(f"Number of subjects to process: {len(subjects)}")
 
             if not subjects:
                 logger.info("No subjects found that need processing.")
@@ -244,6 +259,7 @@ def main():
                 print("Failed subjects:")
                 for subject in failed_subjects:
                     print(f"  - {subject}")
+
 
 if __name__ == "__main__":
     main()

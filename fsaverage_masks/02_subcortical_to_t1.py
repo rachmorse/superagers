@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-"""
-Python script to extract subcortical regions from FreeSurfer's aseg.mgz file
-and create labeled volumes for left and right subcortical structures.
-"""
-
 import os
 import subprocess
 import logging
@@ -21,9 +15,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 def get_subjects_to_process(output_folder):
     """Generate a list of subjects to process based on whether they have
-    fsaverage to t1 done for the specified timepoint.
+    fsaverage to t1 process done for the specified timepoint.
 
     Args:
         output_folder (Path): Path to the directory fsaverage to t1 results
@@ -44,14 +39,16 @@ def get_subjects_to_process(output_folder):
       
         t1_left_path = subject_folder / f"t1_masks/{subject}_schaefer_volumetric_t1_lh.nii.gz"
         t1_right_path = subject_folder / f"t1_masks/{subject}_schaefer_volumetric_t1_rh.nii.gz"
-        output_file_path = subject_folder / f"subcortical_t1_masks/{subject}_left_subcortical14_t1.nii.gz"
+        left_subcort_output = subject_folder / f"subcortical_t1_masks/{subject}_left_subcortical14_t1.nii.gz"
+        right_subcort_output = subject_folder / f"subcortical_t1_masks/{subject}_right_subcortical14_t1.nii.gz"
 
-        if t1_left_path.exists() and t1_right_path.exists() and not output_file_path.exists():
-            subjects_to_process.append(subject)
-        elif output_file_path.exists():
-            already_processed.append(subject)
+        # Only queue subjects that have both cortical masks and are missing at least one subcortical mask
+        if t1_left_path.exists() and t1_right_path.exists():
+            if not left_subcort_output.exists() or not right_subcort_output.exists():
+                subjects_to_process.append(subject)
+            else:
+                already_processed.append(subject)
 
-    print(f"Number of subjects to process: {len(subjects_to_process)}")
     return subjects_to_process, already_processed
 
 
@@ -69,24 +66,32 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
         bool: True if processing completed successfully, False otherwise.
     """
     try:
+        output_folder_sub = Path(output_folder_sub)
+        aseg_file = Path(aseg_file)
+        reference_file = Path(reference_file)
+
+        if not aseg_file.exists():
+            logger.error(f"aseg file not found: {aseg_file}")
+            return False
+        if not reference_file.exists():
+            logger.error(f"Reference file not found: {reference_file}")
+            return False
+
         # Define subcortical labels and their corresponding values
         # 17 L_Hippocampus -> 1, 18 L_Amygdala -> 2, 13 L_Pallidum -> 3,
         # 12 L_Putamen -> 4, 11 L_Caudate -> 5, 26 L_Accumbens -> 6, 10 L_Thalamus -> 7
         if region.lower() == 'left':
             subcortical_labels = "17 18 13 12 11 26 10"
-            output_file = f"{output_folder_sub}/{subject}_left_subcortical14_t1.nii.gz"
+            aseg_space_output = output_folder_sub / f"{subject}_left_subcortical14_asegspace.nii.gz"
+            final_output = output_folder_sub / f"{subject}_left_subcortical14_t1.nii.gz"
         else:
         # 53 R_Hippocampus -> 1, 54 R_Amygdala -> 2, 52 R_Pallidum -> 3,
         # 51 R_Putamen -> 4, 50 R_Caudate -> 5, 58 R_Accumbens -> 6, 49 R_Thalamus -> 7
             subcortical_labels = "53 54 52 51 50 58 49"
-            output_file = f"{output_folder_sub}/{subject}_right_subcortical14_t1.nii.gz"
+            aseg_space_output = output_folder_sub / f"{subject}_right_subcortical14_asegspace.nii.gz"
+            final_output = output_folder_sub / f"{subject}_right_subcortical14_t1.nii.gz"
             
         logger.info(f"Processing {region} subcortical regions")
-        
-        # Set up FSL environment variables inside this function
-        os.environ["FSLDIR"] = "/home/rachel/fsl"
-        os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:{os.environ['PATH']}"
-        os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
         
         # Add this path as it has trouble finding fslmaths otherwise
         fslmaths_bin = "/home/rachel/fsl/bin/fslmaths"
@@ -97,12 +102,12 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
             lab = int(lab)
             logger.info(f"Processing label {lab} (value {i})")
             
-            # Step 1: Extract the region from aseg
+            # Step 1: Extract the regions from aseg, giving selected region a value of 1
             cmd_binarize = [
                 'mri_binarize',
-                '--i', aseg_file,
+                '--i', str(aseg_file),
                 '--match', str(lab),
-                '--o', f'{output_folder_sub}/tmp.mgz'
+                '--o', str(output_folder_sub / 'tmp.mgz')
             ]
             try:
                 subprocess.run(cmd_binarize, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -111,13 +116,13 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
                 logger.error(f"Error in mri_binarize: {e.stderr}")
                 return False
                 
-            # Step 2: Convert to NIfTI format
+            # Step 2: Convert the binarized file to NIfTI format
             cmd_convert = [
                 'mri_convert',
                 '--in_type', 'mgz',
                 '--out_type', 'nii',
-                f'{output_folder_sub}/tmp.mgz',
-                f'{output_folder_sub}/tmp.nii.gz'
+                str(output_folder_sub / 'tmp.mgz'),
+                str(output_folder_sub / 'tmp.nii.gz')
             ]
             try:
                 subprocess.run(cmd_convert, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -126,13 +131,14 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
                 logger.error(f"Error in mri_convert: {e.stderr}")
                 return False
             
-            # Step 3: Create or update the output file
-            if lab == int(labels_list[0]):  # First label
+            # Step 3: Create the output volume with appropriate labeling
+            # First unbinarize to set each ROI to its corresponding value
+            if i == 1:  # First label initializes new volume
                 cmd_init = [
                     fslmaths_bin,
-                    f'{output_folder_sub}/tmp.nii.gz',
+                    str(output_folder_sub / 'tmp.nii.gz'),
                     '-mul', str(i),
-                    output_file
+                    str(aseg_space_output)
                 ]
                 try:
                     subprocess.run(cmd_init, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -144,9 +150,9 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
                 # Multiply by the value (i)
                 cmd_mul = [
                     fslmaths_bin,
-                    f'{output_folder_sub}/tmp.nii.gz',
+                    str(output_folder_sub / 'tmp.nii.gz'),
                     '-mul', str(i),
-                    f'{output_folder_sub}/tmp.nii.gz'
+                    str(output_folder_sub / 'tmp.nii.gz')
                 ]
                 try:
                     subprocess.run(cmd_mul, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -157,9 +163,9 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
                 # Add to the existing file
                 cmd_add = [
                     fslmaths_bin,
-                    output_file,
-                    '-add', f'{output_folder_sub}/tmp.nii.gz',
-                    output_file
+                    str(aseg_space_output),
+                    '-add', str(output_folder_sub / 'tmp.nii.gz'),
+                    str(aseg_space_output)
                 ]
                 try:
                     subprocess.run(cmd_add, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
@@ -167,11 +173,33 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
                     logger.error(f"Error in addition step: {e}")
                     return False
                 
+        # Resample to reference (native T1) space using nearest-neighbor interpolation
+        cmd_resample = [
+            'mri_vol2vol',
+            '--mov', str(aseg_space_output),
+            '--targ', str(reference_file),
+            '--o', str(final_output),
+            '--interp', 'nearest',
+            '--regheader'
+        ]
+        try:
+            subprocess.run(cmd_resample, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error resampling subcortical mask to reference space: {e.stderr}")
+            return False
+        finally:
+            try:
+                if aseg_space_output.exists():
+                    aseg_space_output.unlink()
+            except OSError as cleanup_error:
+                logger.debug(f"Could not remove temporary file {aseg_space_output}: {cleanup_error}")
+        
         return True
         
     except Exception as e:
         logger.exception(f"Error processing {subject}'s subcortical regions: {str(e)}")
         return False
+
 
 def cleanup_temp_files(output_folder_sub):
     """Clean up temporary files.
@@ -198,6 +226,11 @@ def main():
     cohorts = ["bbhi", "bbhi senior"]
     sessions = ["ses-01", "ses-02"]   
 
+    # Set up FSL environment variables inside this function
+    os.environ["FSLDIR"] = "/home/rachel/fsl"
+    os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:{os.environ['PATH']}"
+    os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
+
     print("-----------------------Running 02_subcortical_to_t1.py-----------------------")
 
     for cohort in cohorts:
@@ -210,13 +243,20 @@ def main():
 
             # Determine subjects to process
             subject_list, already_processed = get_subjects_to_process(output_folder)
+                        
+            # Filter subjects by cohort before processing so printed count statements are accurate
+            if cohort == "bbhi":
+                subjects = [s for s in subject_list if int(s.split('-')[1]) > 5000]
+                already_processed = [s for s in already_processed if int(s.split('-')[1]) > 5000]
+            else:
+                subjects = [s for s in subject_list if int(s.split('-')[1]) < 5000]
+                already_processed = [s for s in already_processed if int(s.split('-')[1]) < 5000]
+
             print(f"Number of subjects already processed subjects: {len(already_processed)}")
             
-            if not subject_list:
+            if not subjects:
                 logger.info("No subjects found that need processing.")
                 continue
-                
-            subjects = subject_list
 
             # Uncomment this line to run the script with one subject
             # subjects = ["sub-1014"]
@@ -233,23 +273,14 @@ def main():
                 # Create the output directory if it doesn't exist
                 os.makedirs(output_folder_sub, exist_ok=True)
 
-                # Convert subject to a numeric ID to be able to filter based on cohort
-                numeric_id = int(subject.split('-')[1])
-                
-                # If current cohort is "bbhi" but numeric_id < 5000, skip it (because the pattern does not match)
-                if cohort == "bbhi" and numeric_id < 5000:
-                    continue
-                if cohort == "bbhi senior" and numeric_id > 5000:
-                    continue
-
                 # Set paths based on cohort
                 if cohort == "bbhi":
                     # BBHI paths
-                    aseg_file = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")
-                    reference_file = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed/{subject}/native_T1/{subject}_{ses}_run-01_rest_sbref_ap_T1-space.nii.gz")
+                    aseg_file = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall/{subject}_{ses}_run_01/mri/aseg.mgz")
+                    reference_file = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall/{subject}_{ses}_run_01/mri/T1.mgz")
                 else:  # cohort == "bbhi senior"
-                    aseg_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")
-                    reference_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed/{subject}/{ses}/native_T1/{subject}_{ses}_run-01_rest_sbref_ap_T1-space.nii.gz") 
+                    aseg_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")
+                    reference_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall/{subject}_{ses}/mri/T1.mgz")
 
                 logger.info(f"Processing subject {subject}...")
 
@@ -287,6 +318,7 @@ def main():
                 print("Failed subjects:")
                 for subject in failed_subjects:
                     print(f"  - {subject}")
+
 
 if __name__ == "__main__":
     main()
