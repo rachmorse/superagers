@@ -27,12 +27,12 @@ This repository contains the analysis scripts for our study on superagers, which
             - Score within 1 SD of the norm for age and education on the TMT B, inverse digits and semantic fluency based on the neuronorma data from [Peña-Casanova et al. (2009a)](https://pubmed.ncbi.nlm.nih.gov/19661109/) with Spanish adults at baseline and follow-up. 
 
 ### fsaverage_masks
-- **Purpose:** These scripts transform the fsaverage Schaefer atlas and aseg parcellation to T1 native space then DWI and BOLD native space and combine the two atlases to have native space Schaefer + subcortical atlas for each subject. 
+- **Purpose:** These scripts transform the fsaverage Schaefer atlas and aseg parcellation to T1 native space then DWI native space and BOLD native T1 space and combine the two atlases to have a Schaefer + subcortical atlas for each subject using Freesurfer and FSL. 
 - **Scripts:**
-    - `01_fsaverage_to_t1.py`: Transforms the Schaefer 200-parcel atlas from FreeSurfer’s ‘fsaverage’ surface space to each subject’s T1 space. It uses FreeSurfer's mri_surf2surf and mri_label2vol.
-    - `02_subcortical_to_t1.py`: Extracts subcortical regions from FreeSurfer's aseg.mgz files for each subject, creating labeled volumetric masks T1 space.
-    - `03_combine_t1_atlases.py`: Merges left and right Schaefer cortical and subcortical masks into a single subject-specific atlas in T1 space, handling overlaps and preserving all 214 brain regions.
-    - `04_t1_to_dwi_bold.py`: Transforms the Schaefer/subcortical atlases from T1 space into native DWI and BOLD spaces, generating native-space masks for downstream structural and functional analyses. It uses FSL's FLIRT. 
+    - `01_fsaverage_to_t1.py`: Transforms the Schaefer 200 ROI atlas from FreeSurfer’s ‘fsaverage’ surface space to each subject’s T1 space. It uses FreeSurfer's mri_surf2surf (converts to subject specific surface) and mri_label2vol (conducts surface-to-volume projection in native T1 space).
+    - `02_subcortical_to_t1.py`: Extracts subcortical regions from FreeSurfer's aseg.mgz files for each subject, creating labeled volumetric masks in T1 space using mri_vol2vol (resamples from aseg to T1 space).
+    - `03_combine_t1_atlases.py`: Stacks left and right Schaefer cortical and subcortical masks into a single subject-specific atlas in T1 space, handling overlaps to preserve all 214 brain regions.
+    - `04_t1_to_dwi_bold.py`: Transforms the Schaefer/subcortical atlases from T1 space into native DWI and native-T1 BOLD space using FSL's flirt and epi_reg for DWI images and FreeSurfer's mri_vol2vol for BOLD images. 
     - `run_pipeline.py`: Runs all scripts above, looping through each timepoint and cohort.  
 
 ### fmri_analysis
