@@ -1,19 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-"""
-Python script to transform the Schaefer 200 atlas from fsaverage (surface) to native BoldStandard volume
-of a given subject in SUBJECTS_DIR
-"""
-
 import pandas as pd
 import os
-import numpy as np
 import subprocess
 import logging
-from datetime import datetime, timezone
-import nibabel as nib
-from pathlib import Path    
+from pathlib import Path
 
 # Set up logging
 logging.basicConfig(
@@ -23,9 +14,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 def get_subjects_to_process(reconall_dir, out_dir, ses):
     """Generate a list of subjects to process based on whether they have
-    recon-all done for the specified timepoint.
+    recon-all done for the specified timepoint and have neuropsych data.
 
     Args:
         reconall_dir (Path): Path to the directory containing the recon-all results.
@@ -34,11 +26,12 @@ def get_subjects_to_process(reconall_dir, out_dir, ses):
         
     Returns:
         list: List of subject IDs to process.
+        list: List of subject IDs already processed.
     """
     subjects_to_process = []
     already_processed = []
 
-    # If cohort is 'bbhi', read the CSV file to filter valid IDs
+    # Read the CSV file to filter valid IDs based on neuropsych data (e.g., whether they have the data to be classified as superager)
     valid_ids = None
     df = pd.read_csv('/home/rachel/Desktop/data/superager.csv')
     required_superager_col = 'superager_tp2' if ses == 'ses-02' else 'superager_tp1'
@@ -55,7 +48,7 @@ def get_subjects_to_process(reconall_dir, out_dir, ses):
 
     # Iterate over all possible subject directories
     for subject_dir in os.listdir(reconall_dir):
-        # Check if it's a subject directory with session (sub-xxx_ses-yy format, optionally _run-xx)
+        # Check if it's a subject directory with session (sub-xxx_ses-yy format, optionally _run-xx as with BBHI)
         if not subject_dir.startswith("sub-"):
             continue
             
@@ -76,13 +69,12 @@ def get_subjects_to_process(reconall_dir, out_dir, ses):
 
         out_dir_t1 = out_dir / subject_id / "t1_masks"
 
-        # If valid_ids is set, skip if subject_id not in that set 
+        # If sub is not in valid IDs, skip
         if valid_ids is not None and subject_id.replace("sub-", "") not in valid_ids:
             continue
         
         # Check if the required directory exists and hasn't been processed yet
         subject_recon_dir = reconall_dir / subject_dir
-        
         output_lh_path = out_dir_t1 / f"{subject_id}_schaefer_volumetric_t1_lh.nii.gz"
         output_rh_path = out_dir_t1 / f"{subject_id}_schaefer_volumetric_t1_rh.nii.gz"
 
@@ -96,12 +88,12 @@ def get_subjects_to_process(reconall_dir, out_dir, ses):
 
 
 def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
-    """Process a single subject to transform Schaefer atlas to native space.
+    """Process a single subject to transform Schaefer atlas to native T1 space.
     
     Args:
         subject_dir (str): Subject directory (format: sub-xxx_ses-0y).
         subject_id (str): Subject ID.
-        reconall_dir (str): Directory containing recon-all results.
+        reconall_dir (str): Directory containing recon-all output.
         output_folder (str): Output directory.
     """
     try:
@@ -118,10 +110,11 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
             logger.error("Please download these files manually and place them in the fsaverage_masks directory")
             return False
             
+        # Set up paths for output annotations
         lh_annotation = output_folder / f"lh.Schaefer2018_200Parcels_7Networks_order.annot"
         rh_annotation = output_folder / f"rh.Schaefer2018_200Parcels_7Networks_order.annot"
         
-        # 2. Map annotations from fsaverage to subject
+        # Map annotations from fsaverage to subject-specfic surface space
         logger.info("Mapping Schaefer 200 atlas annotations from fsaverage to subject's surface")
         
         # Left hemisphere
@@ -154,17 +147,19 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
             logger.error(f"Error mapping right hemisphere: {e.stderr}")
             return False
 
-        # 3. Create volume in native T1 space 
+        # Then transform the subject-specific surface annotations to volumetric T1 space
 
         # Create a custom environment for FreeSurfer; default to recon-all dir if SUBJECTS_DIR unset
         custom_env = os.environ.copy()
         custom_env["SUBJECTS_DIR"] = custom_env.get("SUBJECTS_DIR", str(reconall_dir))
   
         # Left hemisphere
+        subject_t1 = reconall_dir / subject_dir / "mri" / "T1.mgz"
+
         cmd_lh_label2vol = [
             "mri_label2vol",
             "--annot", str(lh_annotation),
-            "--temp", f"{reconall_dir}/{subject_dir}/mri/T1.mgz",
+            "--temp", str(subject_t1),
             "--identity",
             "--fillthresh", "0.0",
             "--proj", "frac", "0", "1", "0.1",
@@ -182,7 +177,7 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
         cmd_rh_label2vol = [
             "mri_label2vol",
             "--annot", str(rh_annotation),
-            "--temp", f"{reconall_dir}/{subject_dir}/mri/T1.mgz",
+            "--temp", str(subject_t1),
             "--identity",
             "--fillthresh", "0.3",
             "--proj", "frac", "0", "1", "0.1",
