@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -44,6 +45,45 @@ class BoldProcessingPaths:
     out_bold_masks: Path
     output_path_bold: Path
     out_subject_dir: Path
+
+
+def run_parallel_tasks(tasks, processor, job_name):
+    """Run tasks sequentially or in parallel depending on task count."""
+    successes = []
+    failures = []
+    if not tasks:
+        return successes, failures
+
+    cores = 6
+    if cores <= 1:
+        for subject, paths in tasks:
+            result = processor(paths)
+            if result:
+                successes.append(subject)
+            else:
+                failures.append(subject)
+        return successes, failures
+
+    print(f"Running {job_name} for {len(tasks)} subjects with up to {cores} cores.")
+    with ProcessPoolExecutor(max_workers=cores) as executor:
+        future_to_subject = {
+            executor.submit(processor, paths): subject for subject, paths in tasks
+        }
+        for future in as_completed(future_to_subject):
+            subject = future_to_subject[future]
+            try:
+                result = future.result()
+            except Exception as exc:
+                print(f"{job_name} processing crashed for {subject}: {exc}")
+                failures.append(subject)
+                continue
+
+            if result:
+                successes.append(subject)
+            else:
+                failures.append(subject)
+
+    return successes, failures
 
 
 def get_subjects_to_process(subject_infos: List[SubjectPaths]) -> Tuple[List[str], List[str], List[str]]:
@@ -488,43 +528,39 @@ def main():
                 print("No subjects found that need processing.")
                 continue
 
+            dwi_tasks = []
+            missing_dwi = []
             for subject in subjects_for_dwi:
                 subject_paths = dwi_inputs.get(subject)
                 if not subject_paths:
                     print(f"Missing DWI path configuration for {subject}, skipping.")
+                    missing_dwi.append(subject)
                     continue
+                dwi_tasks.append((subject, subject_paths))
 
-                subject_result = process_subject_dwi(subject_paths)
+            result_dwi, failed_dwi = run_parallel_tasks(
+                dwi_tasks, process_subject_dwi, "DWI"
+            )
+            failed_dwi.extend(missing_dwi)
 
-                if subject_result:
-                    print(f"Successfully processed DWI for {subject}")
-                    result_dwi.append(subject)
-                else:
-                    print(f"Failed to process DWI for {subject}")
-
-            # Then run BOLD processing
+            bold_tasks = []
+            missing_bold = []
             for subject in subjects_for_bold:
                 subject_paths = bold_inputs.get(subject)
                 if not subject_paths:
                     print(f"Missing BOLD path configuration for {subject}, skipping.")
+                    missing_bold.append(subject)
                     continue
+                bold_tasks.append((subject, subject_paths))
 
-                subject_result = process_subject_bold(subject_paths)
-
-                if subject_result:
-                    print(f"Successfully processed BOLD for {subject}")
-                    result_bold.append(subject)
-                else:
-                    print(f"Failed to process BOLD for {subject}")
+            result_bold, failed_bold = run_parallel_tasks(
+                bold_tasks, process_subject_bold, "BOLD"
+            )
+            failed_bold.extend(missing_bold)
                     
-            # Summary statistics
             print(f"Successfully processed DWI for {len(result_dwi)} subjects")
             print(f"Successfully processed BOLD for {len(result_bold)} subjects")
             print(f"Total subjects with successful processing: {len(set(result_dwi + result_bold))}")
-
-            # Calculate failures
-            failed_dwi = [s for s in subjects_for_dwi if s not in result_dwi]
-            failed_bold = [s for s in subjects_for_bold if s not in result_bold]
 
             print(f"Failed to process DWI for {len(failed_dwi)} subjects")
             print(f"Failed to process BOLD for {len(failed_bold)} subjects")
