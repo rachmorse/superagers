@@ -25,6 +25,7 @@ class DwiProcessingPaths:
     ses_label: str
     t1_mgz_path: Path
     t1w_mask: Path
+    t1_brain_path: Path
     eddy_corrected: Path
     b0_output: Path
     out_b0_dir: Path
@@ -128,44 +129,53 @@ def extract_b0(input_path, output_path):
     print(f"Extracted b0 volume to {output_path}")
 
 
-def transform_t1w_to_dwi(t1w_mask, t1_anat, b0_ref, output_path, out_native_masks):
-    """Transform the T1w space mask to native DWI space using a transformation matrix.
+def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, b0_ref, output_path, out_native_masks):
+    """Transform the T1w space mask to native DWI space using epi_reg.
     
     Args:
         t1w_mask (Path): Path to the T1w space mask.
-        t1_anat (Path): Path to the anatomical T1w image in the same space as the mask.
+        t1_anat (Path): Path to the T1 NIfTI image from recon-all.
+        t1_brain (Path): Path to the brain-extracted T1 image.
         b0_ref (Path): Path to the b0 reference image.
-        output_path (Path): Path to save the native DWI space mask.
-        out_native_masks (Path): Output directory to save the transformation matrix.
+        output_path (Path): Path to save the DWI space mask file.
+        out_native_masks (Path): Output directory to where the mask is saved.
     """
-    # Create output directory if it doesn't exist
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Define the transformation matrix path
-    transform_mat = out_native_masks / "T1w_to_b0.mat"
+    epi_reg_prefix = out_native_masks / "epi_reg"
+    epi_reg_prefix.parent.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Register the anatomical T1 to the b0 reference
+    # Run epi_reg to compute the transformation from b0 to T1w
     subprocess.run(
-        (
-            "flirt "
-            f"-in {t1_anat} "
-            f"-ref {b0_ref} "
-            f"-omat {transform_mat} "
-            "-dof 6 "
-            "-cost normmi "
-            "-usesqform "
-            "-searchrx -90 90 "
-            "-searchry -90 90 "
-            "-searchrz -90 90"
-        ),
-        shell=True,
+        [
+            "epi_reg",
+            f"--epi={b0_ref}",
+            f"--t1={t1_anat}",
+            f"--t1brain={t1_brain}",
+            f"--out={epi_reg_prefix}",
+        ],
         check=True,
     )
 
-    # Step 2: Apply transformation to mask
+    epi_to_t1_mat = Path(f"{epi_reg_prefix}.mat")
+    transform_mat = out_native_masks / "T1w_to_b0.mat"
+
+    # Invert the transformation matrix to go from T1w to b0
     subprocess.run(
-        f"flirt -in {t1w_mask} -ref {b0_ref} -applyxfm -init {transform_mat} -out {output_path} -paddingsize 0.0 -interp nearestneighbour", 
-        shell=True, 
+        [
+            "convert_xfm",
+            "-omat",
+            str(transform_mat),
+            "-inverse",
+            str(epi_to_t1_mat),
+        ],
+        check=True,
+    )
+
+    # Apply the transformation to the T1w mask to bring it into DWI space
+    subprocess.run(
+        f"flirt -in {t1w_mask} -ref {b0_ref} -applyxfm -init {transform_mat} -out {output_path} -paddingsize 0.0 -interp nearestneighbour",
+        shell=True,
         check=True,
     )
 
@@ -247,6 +257,33 @@ def ensure_t1_nifti(t1_mgz, subject, ses_label, out_subject_dir):
     return t1_nifti
 
 
+def ensure_t1_brain(t1_anat: Path, t1_brain: Path):
+    """Generate a brain-extracted T1 volume required by epi_reg
+    using FSL's BET tool.
+    
+    Args:
+        t1_anat (Path): Path to the T1 NIfTI image from recon-all.
+        t1_brain (Path): Path to save the brain-extracted T1 image.
+    
+    Returns:
+        Path: Path to the brain-extracted T1 image.
+    """
+    t1_brain.parent.mkdir(parents=True, exist_ok=True)
+    if not t1_brain.exists():
+        subprocess.run(
+            [
+                "bet",
+                str(t1_anat),
+                str(t1_brain),
+                "-R",
+                "-f",
+                "0.2",
+            ],
+            check=True,
+        )
+    return t1_brain
+
+
 def process_subject_dwi(paths: DwiProcessingPaths):
     """Process a single subject's DWI data using predefined file paths.
     
@@ -267,6 +304,7 @@ def process_subject_dwi(paths: DwiProcessingPaths):
             paths.ses_label,
             paths.out_subject_dir,
         )
+        t1_brain = ensure_t1_brain(t1_anat, paths.t1_brain_path)
 
         # Step 1: Extract b0 from eddy corrected data
         if not paths.b0_output.exists():
@@ -276,6 +314,7 @@ def process_subject_dwi(paths: DwiProcessingPaths):
         transform_t1w_to_dwi(
             paths.t1w_mask,
             t1_anat,
+            t1_brain,
             paths.b0_output,
             paths.output_path_dwi,
             paths.out_native_masks,
@@ -368,6 +407,7 @@ def main():
                 ses_label = f"ses-0{ses}"
                 out_subject_dir = out_dir / subject
                 t1w_mask = out_subject_dir / f"subcortical_t1_masks/{subject}_{ses_label}_schaefer200_subcortical14_t1_space.nii.gz"
+                t1_brain = out_subject_dir / f"t1_converted/{subject}_{ses_label}_conformed_T1_brain.nii.gz"
                 dwi_mask_output = out_subject_dir / f"dwi_space_masks/{subject}_{ses_label}_schaefer200_subcortical14_dwi_space.nii.gz"
                 bold_mask_output = out_subject_dir / f"bold_space_masks/{subject}_{ses_label}_schaefer200_subcortical14_bold_space.nii.gz"
 
@@ -409,6 +449,7 @@ def main():
                     ses_label=ses_label,
                     t1_mgz_path=t1_mgz_path,
                     t1w_mask=t1w_mask,
+                    t1_brain_path=t1_brain,
                     eddy_corrected=eddy_corrected,
                     b0_output=b0_output,
                     out_b0_dir=out_b0_dir,
