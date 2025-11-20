@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-"""
-Python script to extract subcortical regions from FreeSurfer's aseg.mgz file
-and create labeled volumes for left and right subcortical structures.
-"""
-
 import os
 import subprocess
 import logging
@@ -21,9 +15,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 def get_subjects_to_process(output_folder):
     """Generate a list of subjects to process based on whether they have
-    fsaverage to t1 done for the specified timepoint.
+    fsaverage to t1 process done for the specified timepoint.
 
     Args:
         output_folder (Path): Path to the directory fsaverage to t1 results
@@ -98,11 +93,6 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
             
         logger.info(f"Processing {region} subcortical regions")
         
-        # Set up FSL environment variables inside this function
-        os.environ["FSLDIR"] = "/home/rachel/fsl"
-        os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:{os.environ['PATH']}"
-        os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
-        
         # Add this path as it has trouble finding fslmaths otherwise
         fslmaths_bin = "/home/rachel/fsl/bin/fslmaths"
 
@@ -112,7 +102,7 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
             lab = int(lab)
             logger.info(f"Processing label {lab} (value {i})")
             
-            # Step 1: Extract the region from aseg
+            # Step 1: Extract the regions from aseg, giving selected region a value of 1
             cmd_binarize = [
                 'mri_binarize',
                 '--i', str(aseg_file),
@@ -126,7 +116,7 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
                 logger.error(f"Error in mri_binarize: {e.stderr}")
                 return False
                 
-            # Step 2: Convert to NIfTI format
+            # Step 2: Convert the binarized file to NIfTI format
             cmd_convert = [
                 'mri_convert',
                 '--in_type', 'mgz',
@@ -141,7 +131,8 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
                 logger.error(f"Error in mri_convert: {e.stderr}")
                 return False
             
-            # Step 3: Create or update the output file
+            # Step 3: Create the output volume with appropriate labeling
+            # First unbinarize to set each ROI to its corresponding value
             if i == 1:  # First label initializes new volume
                 cmd_init = [
                     fslmaths_bin,
@@ -209,6 +200,7 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
         logger.exception(f"Error processing {subject}'s subcortical regions: {str(e)}")
         return False
 
+
 def cleanup_temp_files(output_folder_sub):
     """Clean up temporary files.
     
@@ -234,6 +226,11 @@ def main():
     cohorts = ["bbhi", "bbhi senior"]
     sessions = ["ses-01", "ses-02"]   
 
+    # Set up FSL environment variables inside this function
+    os.environ["FSLDIR"] = "/home/rachel/fsl"
+    os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:{os.environ['PATH']}"
+    os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
+
     print("-----------------------Running 02_subcortical_to_t1.py-----------------------")
 
     for cohort in cohorts:
@@ -247,10 +244,10 @@ def main():
             # Determine subjects to process
             subject_list, already_processed = get_subjects_to_process(output_folder)
                         
-            # Filter subjects by cohort before processing so counts match reality
+            # Filter subjects by cohort before processing so printed count statements are accurate
             if cohort == "bbhi":
-                subjects = [s for s in subject_list if int(s.split('-')[1]) >= 5000]
-                already_processed = [s for s in already_processed if int(s.split('-')[1]) >= 5000]
+                subjects = [s for s in subject_list if int(s.split('-')[1]) > 5000]
+                already_processed = [s for s in already_processed if int(s.split('-')[1]) > 5000]
             else:
                 subjects = [s for s in subject_list if int(s.split('-')[1]) < 5000]
                 already_processed = [s for s in already_processed if int(s.split('-')[1]) < 5000]
@@ -321,6 +318,7 @@ def main():
                 print("Failed subjects:")
                 for subject in failed_subjects:
                     print(f"  - {subject}")
+
 
 if __name__ == "__main__":
     main()
