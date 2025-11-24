@@ -149,6 +149,8 @@ def get_subjects_to_process(subject_infos: List[SubjectPaths]) -> Tuple[List[str
     print(f"Subjects already with BOLD mask: {len(already_processed_bold)}")
     print(f"Subjects already fully processed: {len(already_processed)}")
     print(f"Subjects missing required files: {len(missing_files)}")     
+    print(f"Subjects needing DWI processing: {len(subjects_for_dwi)}")
+    print(f"Subjects needing BOLD processing: {len(subjects_for_bold)}")
 
     return subjects_for_dwi, subjects_for_bold, already_processed
 
@@ -189,16 +191,21 @@ def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, ou
     epi_reg_prefix.parent.mkdir(parents=True, exist_ok=True)
 
     # Run epi_reg to compute the transformation from b0 to T1w
-    subprocess.run(
-        [
-            "epi_reg",
-            f"--epi={b0_ref}",
-            f"--t1={t1_anat}",
-            f"--t1brain={t1_brain}",
-            f"--out={epi_reg_prefix}",
-        ],
-        check=True,
+    # Set up python2 shim for FSL compatibility becuase if you dont
+    # run epi_reg in python2 it fails
+    shim_dir = Path.home() / "py2shim"
+
+    cmd = (
+        f'export PATH="{shim_dir}:$PATH"; '
+        f'source /vol/software/fsl/etc/fslconf/fsl.sh; '
+        f'epi_reg '
+        f'--epi={b0_ref} '
+        f'--t1={t1_anat} '
+        f'--t1brain={t1_brain} '
+        f'--out={epi_reg_prefix}'
     )
+
+    subprocess.run(["bash", "-lc", cmd], check=True)
 
     epi_to_t1_mat = Path(f"{epi_reg_prefix}.mat")
     transform_mat = out_native_masks / "T1w_to_b0.mat"
@@ -413,9 +420,9 @@ def main():
             print("-------------------------")
 
             # Set up FSL so it runs correctly in this script
-            os.environ["FSLDIR"] = "/home/rachel/fsl"
+            os.environ["FSLDIR"] = "/vol/software/fsl"
             os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:" + os.environ["PATH"]
-            subprocess.run(["bash", "-c", "source /home/rachel/fsl/etc/fslconf/fsl.sh"], check=True)
+            subprocess.run(["bash", "-c", "source /vol/software/fsl/etc/fslconf/fsl.sh"], check=True)
 
             # Set FSL to output compressed NIFTI files
             os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
@@ -508,16 +515,12 @@ def main():
             subjects_for_dwi, subjects_for_bold, already_processed = get_subjects_to_process(subject_infos)
 
             # Uncomment the following line to process specific subjects
-            # subjects_for_dwi = ["sub-3020", "sub-159530", "sub-1171"] 
-            # subjects_for_bold = ["sub-3020", "sub-159530", "sub-1171"] 
+            # subjects_for_dwi = ["sub-101848"] 
+            # subjects_for_bold = [] 
             
             # Process each subject
             result_dwi = []
             result_bold = []
-
-            print(f"Subjects needing DWI processing: {len(subjects_for_dwi)}")
-            print(f"Subjects needing BOLD processing: {len(subjects_for_bold)}")
-            print(f"Already processed subjects: {len(already_processed)}")
 
             # Check if there are subjects to process
             if not subjects_for_dwi and not subjects_for_bold:
