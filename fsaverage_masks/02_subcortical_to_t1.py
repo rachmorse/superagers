@@ -16,12 +16,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_subjects_to_process(output_folder):
+def get_subjects_to_process(output_folder, reconall_folder):
     """Generate a list of subjects to process based on whether they have
     fsaverage to t1 process done for the specified timepoint.
 
     Args:
         output_folder (Path): Path to the directory fsaverage to t1 results
+        reconall_folder (Path): Path to the directory containing FreeSurfer recon-all outputs
 
     Returns:
         list: List of subject IDs to process.
@@ -43,7 +44,7 @@ def get_subjects_to_process(output_folder):
         right_subcort_output = subject_folder / f"subcortical_t1_masks/{subject}_right_subcortical14_t1.nii.gz"
 
         # Only queue subjects that have both cortical masks and are missing at least one subcortical mask
-        if t1_left_path.exists() and t1_right_path.exists():
+        if t1_left_path.exists() and t1_right_path.exists() and reconall_folder.exists():
             if not left_subcort_output.exists() or not right_subcort_output.exists():
                 subjects_to_process.append(subject)
             else:
@@ -92,7 +93,12 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
             final_output = output_folder_sub / f"{subject}_right_subcortical14_t1.nii.gz"
             
         logger.info(f"Processing {region} subcortical regions")
-        
+
+        # Set up FSL environment variables inside this function
+        os.environ["FSLDIR"] = "/home/rachel/fsl"
+        os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:{os.environ['PATH']}"
+        os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
+
         # Add this path as it has trouble finding fslmaths otherwise
         fslmaths_bin = "/home/rachel/fsl/bin/fslmaths"
 
@@ -226,11 +232,6 @@ def main():
     cohorts = ["bbhi", "bbhi senior"]
     sessions = ["ses-01", "ses-02"]   
 
-    # Set up FSL environment variables inside this function
-    os.environ["FSLDIR"] = "/home/rachel/fsl"
-    os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:{os.environ['PATH']}"
-    os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
-
     print("-----------------------Running 02_subcortical_to_t1.py-----------------------")
 
     for cohort in cohorts:
@@ -240,6 +241,11 @@ def main():
             print("-------------------------")
 
             output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
+
+            if cohort == "bbhi":
+                reconall_folder = Path('/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall')
+            else:  # cohort == "bbhi senior"
+                reconall_folder = Path('/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall')
 
             # Determine subjects to process
             subject_list, already_processed = get_subjects_to_process(output_folder)
@@ -276,11 +282,11 @@ def main():
                 # Set paths based on cohort
                 if cohort == "bbhi":
                     # BBHI paths
-                    aseg_file = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall/{subject}_{ses}_run_01/mri/aseg.mgz")
-                    reference_file = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall/{subject}_{ses}_run_01/mri/T1.mgz")
+                    aseg_file = Path(f"{reconall_folder}/{subject}_{ses}_run-01/mri/aseg.mgz")
+                    reference_file = Path(f"{reconall_folder}/{subject}_{ses}_run-01/mri/T1.mgz")
                 else:  # cohort == "bbhi senior"
-                    aseg_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")
-                    reference_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall/{subject}_{ses}/mri/T1.mgz")
+                    aseg_file = Path(f"{reconall_folder}/{subject}_{ses}/mri/aseg.mgz")
+                    reference_file = Path(f"{reconall_folder}/{subject}_{ses}/mri/T1.mgz")
 
                 logger.info(f"Processing subject {subject}...")
 

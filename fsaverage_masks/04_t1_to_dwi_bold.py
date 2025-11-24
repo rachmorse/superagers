@@ -153,34 +153,37 @@ def get_subjects_to_process(subject_infos: List[SubjectPaths]) -> Tuple[List[str
     return subjects_for_dwi, subjects_for_bold, already_processed
 
 
-def extract_b0(input_path, output_path):
-    """Extract the b0 volume from the eddy-corrected data.
-    
-    Args:
-        input_path (Path): Path to the eddy-corrected data.
-        output_path (Path): Path where to save the extracted b0 volume.
-    """
-    # Create output directory if it doesn't exist
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Using FSL's fslroi to extract the first volume (b0)
-    cmd = f"fslroi {input_path} {output_path} 0 1"
-    subprocess.run(cmd, shell=True, check=True)
-    print(f"Extracted b0 volume to {output_path}")
-
-
-def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, b0_ref, output_path, out_native_masks):
-    """Transform the T1w space mask to native DWI space using epi_reg.
+def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, output_path, out_native_masks):
+    """Create a b0 reference and transform the T1w space mask to native DWI space 
+    using epi_reg and flirt.
     
     Args:
         t1w_mask (Path): Path to the T1w space mask.
         t1_anat (Path): Path to the T1 NIfTI image from recon-all.
         t1_brain (Path): Path to the brain-extracted T1 image.
+        eddy_corrected (Path): Path to the eddy-corrected DWI series.
         b0_ref (Path): Path to the b0 reference image.
         output_path (Path): Path to save the DWI space mask file.
         out_native_masks (Path): Output directory to where the mask is saved.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Create b0 reference from the eddy-corrected data (first volume)
+    b0_ref.parent.mkdir(parents=True, exist_ok=True)
+    if not eddy_corrected.exists():
+        print(f"ERROR: Eddy-corrected DWI file not found: {eddy_corrected}")
+        raise FileNotFoundError(f"Eddy-corrected DWI not found: {eddy_corrected}")
+
+    if not b0_ref.exists():
+        subprocess.run(
+            f"fslroi {eddy_corrected} {b0_ref} 0 1",
+            shell=True,
+            check=True,
+        )
+
+    if not b0_ref.exists():
+        print(f"ERROR: Failed to create b0 reference: {b0_ref}")
+        raise FileNotFoundError(f"b0 reference not created: {b0_ref}")
 
     epi_reg_prefix = out_native_masks / "epi_reg"
     epi_reg_prefix.parent.mkdir(parents=True, exist_ok=True)
@@ -224,6 +227,8 @@ def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, b0_ref, output_path, out_n
 
 def transform_t1w_to_bold(t1w_mask, bold_path, out_bold_masks, output_path_bold):
     """Transform the T1w space mask to BOLD native T1 space using mri_vol2vol.
+    The BOLD image is already in the same anatomical space as T1 but not the same
+    voxel grid.
     
     Args:
         t1w_mask (Path): Path to the T1w space mask.
@@ -315,8 +320,8 @@ def ensure_t1_brain(t1_anat: Path, t1_brain: Path):
                 "bet",
                 str(t1_anat),
                 str(t1_brain),
-                "-R",
-                "-f",
+                "-R", # More robust 
+                "-f", # Removes more non-brain tissue
                 "0.2",
             ],
             check=True,
@@ -337,7 +342,7 @@ def process_subject_dwi(paths: DwiProcessingPaths):
     print(f"\nProcessing DWI for {subject}...")
 
     try:
-        # Step 0: Ensure T1 is in NIfTI format
+        # Step 0: Ensure T1 is in NIfTI format and brain-extracted image is available
         t1_anat = ensure_t1_nifti(
             paths.t1_mgz_path,
             subject,
@@ -346,15 +351,12 @@ def process_subject_dwi(paths: DwiProcessingPaths):
         )
         t1_brain = ensure_t1_brain(t1_anat, paths.t1_brain_path)
 
-        # Step 1: Extract b0 from eddy corrected data
-        if not paths.b0_output.exists():
-            extract_b0(paths.eddy_corrected, paths.b0_output)
-
-        # Step 2: Transform T1w mask to native space using the transformation matrix
+        # Step 1: Transform T1w mask to native space using the transformation matrix
         transform_t1w_to_dwi(
             paths.t1w_mask,
             t1_anat,
             t1_brain,
+            paths.eddy_corrected,
             paths.b0_output,
             paths.output_path_dwi,
             paths.out_native_masks,
@@ -367,6 +369,10 @@ def process_subject_dwi(paths: DwiProcessingPaths):
             shutil.rmtree(paths.out_b0_dir)
         if (paths.out_subject_dir / "t1_converted").exists():
             shutil.rmtree(paths.out_subject_dir / "t1_converted")
+        epi_reg_files = list((paths.out_subject_dir / "dwi_space_masks").glob("epi_reg*.nii.gz"))
+        if epi_reg_files:
+            for f in epi_reg_files:
+                f.unlink()
         
         return subject
     except Exception as e:
@@ -452,7 +458,7 @@ def main():
                 bold_mask_output = out_subject_dir / f"bold_space_masks/{subject}_{ses_label}_schaefer200_subcortical14_bold_space.nii.gz"
 
                 if cohort == "bbhi":
-                    t1_mgz_path = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall/{subject}_{ses_label}_run_01/mri/T1.mgz")
+                    t1_mgz_path = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall/{subject}_{ses_label}_run-01/mri/T1.mgz")
                     dwi_root_dir = dwi_bbhi_dir / subject
                     if ses == "2":
                         bold_path = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp{ses}/{subject}/native_T1/{subject}_{ses_label}_run-01_rest_bold_ap_T1-space.nii.gz")
@@ -511,9 +517,9 @@ def main():
 
             subjects_for_dwi, subjects_for_bold, already_processed = get_subjects_to_process(subject_infos)
 
-            # Uncomment the following line to process one subject
-            # subjects_for_dwi = ["sub-1014"] 
-            # subjects_for_bold = ["sub-1014"] 
+            # Uncomment the following line to process specific subjects
+            # subjects_for_dwi = ["sub-3020", "sub-159530", "sub-1171"] 
+            # subjects_for_bold = ["sub-3020", "sub-159530", "sub-1171"] 
             
             # Process each subject
             result_dwi = []
