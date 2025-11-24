@@ -26,7 +26,7 @@ class DwiProcessingPaths:
     ses_label: str
     t1_mgz_path: Path
     t1w_mask: Path
-    t1_brain_path: Path
+    brain_mgz_path: Path
     eddy_corrected: Path
     b0_output: Path
     out_b0_dir: Path
@@ -274,11 +274,12 @@ def transform_t1w_to_bold(t1w_mask, bold_path, out_bold_masks, output_path_bold)
     print(f"Transformed T1w mask to BOLD space: {output_path_bold}")
 
 
-def ensure_t1_nifti(t1_mgz, subject, ses_label, out_subject_dir):
-    """Convert the subject's T1.mgz to NIfTI.
+def ensure_t1_nifti(t1_mgz, brain_mgz, subject, ses_label, out_subject_dir):
+    """Convert the subject's T1.mgz and brain.mgz to NIfTI.
     
     Args:
         t1_mgz (Path): Path to the subject's recon-all T1.mgz
+        brain_mgz (Path): Path to the subject's recon-all brain.mgz
         subject (str): The subject ID
         ses_label (str): Session label 
         out_subject_dir (Path): Output directory for the subject
@@ -288,45 +289,31 @@ def ensure_t1_nifti(t1_mgz, subject, ses_label, out_subject_dir):
     """
     if not t1_mgz.exists():
         raise FileNotFoundError(f"T1.mgz not found for {subject}: {t1_mgz}")
+    if not brain_mgz.exists():
+        raise FileNotFoundError(f"brain.mgz not found for {subject}: {brain_mgz}")
 
     t1_dir = out_subject_dir / "t1_converted"
+    brain_dir = out_subject_dir / "brain_converted"
     t1_dir.mkdir(parents=True, exist_ok=True)
+    brain_dir.mkdir(parents=True, exist_ok=True)
     t1_nifti = t1_dir / f"{subject}_{ses_label}_conformed_T1.nii.gz"
+    brain_nifti = brain_dir / f"{subject}_{ses_label}_conformed_T1_brain.nii.gz"
 
     if not t1_nifti.exists():
         subprocess.run(
             ["mri_convert", str(t1_mgz), str(t1_nifti)],
             check=True,
         )
-
-    return t1_nifti
-
-
-def ensure_t1_brain(t1_anat: Path, t1_brain: Path):
-    """Generate a brain-extracted T1 volume required by epi_reg
-    using FSL's BET tool.
+        print(f"Converted T1.mgz to NIfTI for {subject}")
     
-    Args:
-        t1_anat (Path): Path to the T1 NIfTI image from recon-all.
-        t1_brain (Path): Path to save the brain-extracted T1 image.
-    
-    Returns:
-        Path: Path to the brain-extracted T1 image.
-    """
-    t1_brain.parent.mkdir(parents=True, exist_ok=True)
-    if not t1_brain.exists():
+    if not brain_nifti.exists():
         subprocess.run(
-            [
-                "bet",
-                str(t1_anat),
-                str(t1_brain),
-                "-R", # More robust 
-                "-f", # Removes more non-brain tissue
-                "0.2",
-            ],
+            ["mri_convert", str(brain_mgz), str(brain_nifti)],
             check=True,
         )
-    return t1_brain
+        print(f"Converted brain.mgz to NIfTI for {subject}")
+
+    return t1_nifti, brain_nifti
 
 
 def process_subject_dwi(paths: DwiProcessingPaths):
@@ -343,13 +330,13 @@ def process_subject_dwi(paths: DwiProcessingPaths):
 
     try:
         # Step 0: Ensure T1 is in NIfTI format and brain-extracted image is available
-        t1_anat = ensure_t1_nifti(
+        t1_anat, t1_brain = ensure_t1_nifti(
             paths.t1_mgz_path,
+            paths.brain_mgz_path,
             subject,
             paths.ses_label,
             paths.out_subject_dir,
         )
-        t1_brain = ensure_t1_brain(t1_anat, paths.t1_brain_path)
 
         # Step 1: Transform T1w mask to native space using the transformation matrix
         transform_t1w_to_dwi(
@@ -369,6 +356,8 @@ def process_subject_dwi(paths: DwiProcessingPaths):
             shutil.rmtree(paths.out_b0_dir)
         if (paths.out_subject_dir / "t1_converted").exists():
             shutil.rmtree(paths.out_subject_dir / "t1_converted")
+        if (paths.out_subject_dir / "brain_converted").exists():
+            shutil.rmtree(paths.out_subject_dir / "brain_converted")
         epi_reg_files = list((paths.out_subject_dir / "dwi_space_masks").glob("epi_reg*.nii.gz"))
         if epi_reg_files:
             for f in epi_reg_files:
@@ -453,12 +442,12 @@ def main():
                 ses_label = f"ses-0{ses}"
                 out_subject_dir = out_dir / subject
                 t1w_mask = out_subject_dir / f"subcortical_t1_masks/{subject}_{ses_label}_schaefer200_subcortical14_t1_space.nii.gz"
-                t1_brain = out_subject_dir / f"t1_converted/{subject}_{ses_label}_conformed_T1_brain.nii.gz"
                 dwi_mask_output = out_subject_dir / f"dwi_space_masks/{subject}_{ses_label}_schaefer200_subcortical14_dwi_space.nii.gz"
                 bold_mask_output = out_subject_dir / f"bold_space_masks/{subject}_{ses_label}_schaefer200_subcortical14_bold_space.nii.gz"
 
                 if cohort == "bbhi":
                     t1_mgz_path = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall/{subject}_{ses_label}_run-01/mri/T1.mgz")
+                    brain_mgz_path = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall/{subject}_{ses_label}_run-01/mri/brain.mgz")
                     dwi_root_dir = dwi_bbhi_dir / subject
                     if ses == "2":
                         bold_path = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp{ses}/{subject}/native_T1/{subject}_{ses_label}_run-01_rest_bold_ap_T1-space.nii.gz")
@@ -466,6 +455,7 @@ def main():
                         bold_path = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed/{subject}/native_T1/{subject}_{ses_label}_run-01_rest_bold_ap_T1-space.nii.gz")
                 else:
                     t1_mgz_path = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall/{subject}_{ses_label}/mri/T1.mgz")
+                    brain_mgz_path = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall/{subject}_{ses_label}/mri/brain.mgz")
                     if ses == "1":
                         dwi_root_dir = dwi_bbhi_senior_dir / subject
                     else:
@@ -495,7 +485,7 @@ def main():
                     ses_label=ses_label,
                     t1_mgz_path=t1_mgz_path,
                     t1w_mask=t1w_mask,
-                    t1_brain_path=t1_brain,
+                    brain_mgz_path=brain_mgz_path,
                     eddy_corrected=eddy_corrected,
                     b0_output=b0_output,
                     out_b0_dir=out_b0_dir,
