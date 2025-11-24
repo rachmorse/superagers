@@ -54,7 +54,7 @@ def run_parallel_tasks(tasks, processor, job_name):
     if not tasks:
         return successes, failures
 
-    cores = 6
+    cores = 10
     if cores <= 1:
         for subject, paths in tasks:
             result = processor(paths)

@@ -248,7 +248,7 @@ def main():
                 reconall_folder = Path('/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall')
 
             # Determine subjects to process
-            subject_list, already_processed = get_subjects_to_process(output_folder)
+            subject_list, already_processed = get_subjects_to_process(output_folder, reconall_folder)
                         
             # Filter subjects by cohort before processing so printed count statements are accurate
             if cohort == "bbhi":
