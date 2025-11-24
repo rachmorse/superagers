@@ -227,7 +227,7 @@ def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, ou
 
 def transform_t1w_to_bold(t1w_mask, bold_path, out_bold_masks, output_path_bold):
     """Transform the T1w space mask to BOLD native T1 space using mri_vol2vol.
-    The BOLD image is already in the same anatomical as T1 but not the same
+    The BOLD image is already in the same anatomical space as T1 but not the same
     voxel grid.
     
     Args:
@@ -320,8 +320,8 @@ def ensure_t1_brain(t1_anat: Path, t1_brain: Path):
                 "bet",
                 str(t1_anat),
                 str(t1_brain),
-                "-R",
-                "-f",
+                "-R", # More robust 
+                "-f", # Removes more non-brain tissue
                 "0.2",
             ],
             check=True,
@@ -342,7 +342,7 @@ def process_subject_dwi(paths: DwiProcessingPaths):
     print(f"\nProcessing DWI for {subject}...")
 
     try:
-        # Step 0: Ensure T1 is in NIfTI format
+        # Step 0: Ensure T1 is in NIfTI format and brain-extracted image is available
         t1_anat = ensure_t1_nifti(
             paths.t1_mgz_path,
             subject,
@@ -517,9 +517,9 @@ def main():
 
             subjects_for_dwi, subjects_for_bold, already_processed = get_subjects_to_process(subject_infos)
 
-            # Uncomment the following line to process one subject
-            subjects_for_dwi = ["sub-3020", "sub-159530", "sub-1171"] 
-            subjects_for_bold = ["sub-3020", "sub-159530", "sub-1171"] 
+            # Uncomment the following line to process specific subjects
+            # subjects_for_dwi = ["sub-3020", "sub-159530", "sub-1171"] 
+            # subjects_for_bold = ["sub-3020", "sub-159530", "sub-1171"] 
             
             # Process each subject
             result_dwi = []
