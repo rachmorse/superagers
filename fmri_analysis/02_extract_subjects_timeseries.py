@@ -7,30 +7,23 @@ import numpy as np
 import pandas as pd
 from extract_timeseries import extract_timeseries, visualize_timeseries
 
+
 def process_subject_extract(args):
-    """Processes a single subject: extracts timeseries and saves it.
+    """Processes a single subject. Extracts timeseries and saves it.
     Optionally, visualizes the timeseries data.
 
     Args:
-        subject (str): Identifier for the subject whose data is processed.
-        ses (str): Session identifier for the specific data collection session.
-        threshold (float): Threshold value used for data processing, e.g., for filtering.
-        bold_template (str): File path template for the BOLD timeseries data.
+        subject (str): Subject ID.
+        ses (str): Timepoint.
         atlas_file (str): File path for the atlases used for extracting timeseries.
         output_dir (str): Directory where processed data and any outputs are saved.
-        roi_indices (list of int): List of region of interest indices for timeseries extraction.
         error_log_path (str): File path where error logs should be written.
-
-    Raises:
-        Exception: If no valid timeseries is extracted for a subject.
     """
     (
         subject,
         ses,
-        threshold,
         atlas_file,
         output_dir,
-        roi_indices,
         error_log_path,
     ) = args
 
@@ -90,19 +83,17 @@ def process_subject_extract(args):
 
     print(f"Processing completed for subject: {subject}")
 
-def exclude_subjects_framewise_displ(subject, ses, root_directory):
+
+def exclude_subjects_framewise_displ(subject, fd_file):
     """Check if the subject has excessive motion (>30% of frames exceeding 0.5 mm).
 
     Args:
         subject (str): Subject ID.
-        ses (str): Session identifier.
-        root_directory (Path): Path to the root directory containing the data.
+        fd_file (Path): Path to the framewise displacement file.
 
     Returns:
         bool: True if the subject should be excluded due to excessive motion, False otherwise.
-    """
-    fd_file = Path(f"{root_directory}/{subject}/ses-0{ses}/native_T1/framewise_displ.txt")
-    
+    """    
     if fd_file.exists():
         try:
             fd_values = pd.read_csv(fd_file, header=None).iloc[:, 0]
@@ -114,7 +105,9 @@ def exclude_subjects_framewise_displ(subject, ses, root_directory):
                 return True
         except Exception as e:
             print(f"Error reading FD file for {subject}: {str(e)}")
-    
+    else:
+        print(f"FWD file not found for {subject} at {fd_file}.")
+
     return False
 
 
@@ -127,44 +120,36 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
         root_directory (Path): Path to the root directory containing the scrubbed data.
         atlas_file_template (Path): Path to the Schaefer atlas mask.
         output_directory (Path): Path to the output directory where timeseries data is saved.
-        ses (str): Session / timepoint.
-        cohort (str): Cohort name (e.g., 'bbhi', 'superagers').
+        ses (str): Timepoint.
+        cohort (str): Cohort name (e.g., 'bbhi', 'bbhi senior').
     """
     subjects_to_process = []
     subjects_excluded_motion = []
     subjects_excluded_no_bold = []
-    subjects_without_atlas_file = []
+    subjects_excluded_no_atlas_file = []
     subjects = []
 
     # Iterate over all possible subject directories
-    if cohort == "bbhi":
-        subjects_df = pd.read_csv(subject_csv)
+    subjects_df = pd.read_csv(subject_csv)
 
-        if "id" in subjects_df.columns:
-            subjects = [f"sub-{subject}" for subject in subjects_df["id"].tolist()]
-        else:
-            print("Error: 'id' column not found in CSV file.")
-            subjects = []
+    if "id" in subjects_df.columns:
+        subjects = [f"sub-{subject}" for subject in subjects_df["id"].tolist()]
     else:
-        # Read from directory
-        for subject_dir in os.listdir(root_directory):
-            # This checks whether they have data for the correct timepoint 
-            if subject_dir.startswith("sub-"):
-                if ses == "1":
-                    session_path = Path(f"{root_directory}/{subject_dir}/ses-01")
-                    session_exists = session_path.exists() and session_path.is_dir()
-                elif ses == "2":
-                    session_path = Path(f"{root_directory}/{subject_dir}/ses-02") 
-                    session_exists = session_path.exists() and session_path.is_dir()
-                else:
-                    session_exists = False
-                    
-                if not session_exists:
-                    continue
-                subjects.append(subject_dir)
+        print("Error: 'id' column not found in CSV file.")
+        subjects = []
 
     # Now process each subject
     for subject in subjects:
+        # Only keep subjects that belong to the current cohort by ID convention
+        try:
+            subject_num = int(subject.split("-")[1])
+        except (IndexError, ValueError):
+            print(f"Skipping {subject}: could not parse numeric ID")
+            continue
+        subject_cohort = "bbhi" if subject_num > 6000 else "bbhi senior"
+        if subject_cohort != cohort:
+            continue
+
         scrubbed_data = None
         
         if cohort == "bbhi":
@@ -179,11 +164,12 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
             # Track subjects with no bold file
             if not bold_file_exists:
                 subjects_excluded_no_bold.append(subject)
-                continue  # Skip this subject
+                print(f"BOLD file not found for {subject}: {scrubbed_data} or {unscrubbed_file}")
+                continue  
 
             # If FWD file exists, check motion criteria
             if fd_file.exists() and bold_file_exists:
-                if exclude_subjects_framewise_displ(subject, ses, root_directory):
+                if exclude_subjects_framewise_displ(subject, fd_file):
                     subjects_excluded_motion.append(subject)
                     continue 
         else:
@@ -203,7 +189,7 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
                     continue 
 
                 if fd_file.exists() and bold_file_exists:
-                    if exclude_subjects_framewise_displ(subject, ses, root_directory):
+                    if exclude_subjects_framewise_displ(subject, fd_file):
                         subjects_excluded_motion.append(subject)
                         continue 
             else:
@@ -218,7 +204,7 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
                     continue 
 
                 if fd_file.exists() and bold_file_exists:
-                    if exclude_subjects_framewise_displ(subject, ses, root_directory):
+                    if exclude_subjects_framewise_displ(subject, fd_file):
                         subjects_excluded_motion.append(subject)
                         continue 
                 else:
@@ -243,7 +229,7 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
             if not atlas_file_exists:
                 # Track subjects with no atlas file
                 print(f"Atlas file not found for {subject}: {subject_atlas_file}")
-                subjects_without_atlas_file.append(subject)
+                subjects_excluded_no_atlas_file.append(subject)
                 continue
                 
             # Now create the output directory and check if output file exists
@@ -257,26 +243,23 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
     print(f"Number of subjects to process: {len(subjects_to_process)}")
     print(f"Number of subjects excluded due to no bold file: {len(subjects_excluded_no_bold)}")
     print(f"Number of subjects excluded due to excessive motion: {len(subjects_excluded_motion)}")
-    print(f"Number of subjects excluded due to no atlas file: {len(subjects_without_atlas_file)}")
+    print(f"Number of subjects excluded due to no atlas file: {len(subjects_excluded_no_atlas_file)}")
     return subjects_to_process
+
 
 def main(
     ses: str,
-    threshold: float,
     error_log_path: Union[str, Path],
     output_dir: Union[str, Path],
     roi_indices: List[int],
     atlas_file_template: str,
     multi: bool = False,
 ):
-    """Main function to run the script.
-
-    This function defines session timepoints, data directories, and processes subjects' timeseries
-    data either sequentially or in parallel based on the multi flag.
+    """This function defines session timepoints, data directories, and processes 
+    subjects' timeseries data either sequentially or in parallel based on the multi flag.
 
     Args:
-        ses (str): Session (timepoint).
-        threshold (float): Threshold value for scrubbing.
+        ses (str): Timepoint.
         error_log_path (Union[str, Path]): Path to log the error file.
         output_dir (Union[str, Path]): Path where processed data will be output.
         roi_indices (List[int]): ROI indices for timeseries visualization (e.g. add the index for the ROI/s you want to visualize).
@@ -294,10 +277,8 @@ def main(
         (
             subject,
             ses,
-            threshold,
             atlas_file_template, 
             output_dir,
-            roi_indices,
             error_log_path,
         )
         for subject in subjects
@@ -314,9 +295,9 @@ def main(
 if __name__ == "__main__":
     sessions = ["1", "2"]  
     cohorts = ["bbhi", "bbhi senior"]  
-    threshold = "0.5"
     root = Path("/home/rachel/Desktop/schaefer_analysis") 
     output_directory = Path(f"{root}/timeseries_data/native_space")
+    subject_csv = Path("/home/rachel/Desktop/data/superager.csv")
 
     for ses in sessions:
         for cohort in cohorts:
@@ -327,12 +308,9 @@ if __name__ == "__main__":
             if cohort == "bbhi":
                 if ses == "1":
                     root_directory = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed")
-                    subject_csv = "/home/rachel/Desktop/data/bbhi_ids_tp1.csv"
                 else:
                     root_directory = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp2")
-                    subject_csv = "/home/rachel/Desktop/data/clean_bbhi.csv"
             else:
-                subject_csv = None
                 root_directory = Path("/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed")
             error_log_path = output_directory / "error_log.txt"
 
@@ -351,11 +329,9 @@ if __name__ == "__main__":
 
             main(
                 ses=ses,
-                threshold=threshold,
                 error_log_path=error_log_path,
                 output_dir=output_directory,
                 roi_indices=roi_indices,
                 atlas_file_template=atlas_file_template,
-                # multi=False,
-                multi=True, # Uncomment this line to enable parallel processing
+                multi=True, 
             )
