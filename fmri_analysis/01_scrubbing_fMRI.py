@@ -1,7 +1,6 @@
 import os
 from multiprocessing import Pool
 from pathlib import Path
-
 import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
@@ -11,9 +10,11 @@ import scipy.interpolate
 # This script is only to run on the BBHI senior tp2 data because the BBHI and BBHI senior tp1 data has already been scrubbed.
 
 def analyze_threshold(data, threshold, total_scans=740, affected_percentage=0.5):
-    """Analyze and visualize subjects with a high amount of movement using a given FWD threshold (e.g. subjects with > X FWD in > Y% of scans).
+    """Analyze and visualize subjects with a high amount of movement using a given 
+    FWD threshold (e.g. subjects with > X FWD in > Y% of scans).
 
-    Note - this is to consider what your data look like to help determine the threshold and affected percentage to use for scrubbing.
+    Note - this is to consider what the data look like to help determine the 
+    threshold and affected percentage to use for scrubbing.
 
     Args:
         data (pd.DataFrame): DataFrame containing FWD data.
@@ -32,7 +33,7 @@ def analyze_threshold(data, threshold, total_scans=740, affected_percentage=0.5)
     plt.show()
 
 
-def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="interpolate", max_scrub_percent=50):
+def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="interpolate", max_scrub_percent=30):
     """Scrub the BOLD fMRI images by either removing or interpolating scans based on FWD threshold.
 
     Args:
@@ -42,13 +43,10 @@ def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="in
         scrubbed_file (str): Path to save the scrubbed BOLD image file (NIfTI format).
         threshold (float, optional): Threshold for FWD above which scans are considered moved. Default is 0.5 FWD.
         method (str, optional): Method for handling moved scans. Either 'cut' to remove or 'interpolate' to replace. Default is 'interpolate'.
-        max_scrub_percent (float, optional): Maximum percentage of timepoints that can be scrubbed before the subject is skipped. Default is 50%.
+        max_scrub_percent (float, optional): Maximum percentage of frames that can be scrubbed before the subject is skipped. Default is 30%.
 
     Returns:
-        bool: True if scrubbing was performed, False if subject was skipped due to too many timepoints exceeding threshold.
-
-    Raises:
-        Exception: If an unknown method is specified.
+        bool: True if scrubbing was performed, False if subject was skipped due to too many frames exceeding threshold.
     """
     print(f"Scrubbing BOLD image for subject: {subject}")
 
@@ -62,7 +60,7 @@ def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="in
     print("Loading Framewise Displacement data from file:", fwd_file)
     fwd = np.array(pd.read_csv(fwd_file).FramewiseDisplacement)
 
-    # Identify timepoints with excessive motion
+    # Identify volumes with excessive motion
     all_tps = np.arange(bold_data.shape[3])
     correct_tps = all_tps[[False] + list(fwd < threshold)]
     incorrect_tps = all_tps[[False] + list(fwd >= threshold)]
@@ -72,7 +70,7 @@ def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="in
         print(f"No frames exceed the threshold for subject {subject}. Skipping scrubbing.")
         return False
     
-    # Calculate percentage of timepoints that would be scrubbed
+    # Calculate percentage of volumes that would be scrubbed
     scrub_percent = (len(incorrect_tps) * 100) / bold_data.shape[3]
     
     print(
@@ -154,6 +152,7 @@ def process_subject(
     error_log,
     bold_pattern,
     scrubbed_pattern,
+    subject_dir_pattern,
 ):
     """Processes a single subject by scrubbing the BOLD fMRI images based on the FWD.
     Saves the scrubbed BOLD file for the subject and logs errors if any occur.
@@ -167,6 +166,7 @@ def process_subject(
         error_log (str): Error log file path.
         bold_pattern (str): Pattern for the BOLD file names.
         scrubbed_pattern (str): Pattern for the scrubbed file names.
+        subject_dir_pattern (str): Relative path pattern to the session/native_T1 directory.
 
     Raises:
         Exception: If any error occurs during the processing of the subject.
@@ -200,14 +200,16 @@ def main(
     threshold,
     bold_pattern,
     scrubbed_pattern,
+    subject_dir_pattern,
     multi=False,
 ):
     """Main function to run this script. This function performs the following steps:
 
     1. Defines session, threshold, and directories for data input and output.
-    2. Iterates over all subjects in the root directory to concatenate their `framewise_displ.txt` files into a single DataFrame.
+    2. Iterates over all subjects in the root directory to concatenate their 
+        `framewise_displ.txt` files into a single DataFrame.
     3. Saves the concatenated DataFrame to `all_fwd.csv`.
-    4. Visualizes data thresholds using the `analyze_threshold` function.
+    4. Optionally, visualizes data thresholds using the `analyze_threshold` function.
     5. Generates a list of subjects to be processed and saves it as `todo.csv`.
     6. Scrubs the BOLD images by either serial or parallel processing of subjects.
     7. Saves the scrubbed BOLD images to the output directory.
@@ -220,10 +222,8 @@ def main(
         threshold (float): Threshold value for scrubbing.
         bold_pattern (str): Pattern for the BOLD file names.
         scrubbed_pattern (str): Pattern for the scrubbed file names.
+        subject_dir_pattern (str): Relative path pattern to the session/native_T1 directory.
         multi (bool): If True, enables parallel processing using multiprocessing. Defaults to False.
-
-    Raises:
-        Exception: If any required file or directory is not found.
     """
     error_log = os.path.join(output_data, "scrubbing_errors.txt")
     all_fwd_path = os.path.join(output_data, "all_fwd.csv")
@@ -235,8 +235,7 @@ def main(
     potential_subjects = os.listdir(root)
     subjects = []
 
-    # Filter subjects based on whether they have the required session directory
-    # and don't already have scrubbed data
+    # Filter subjects based on whether they have the required session directory and don't have scrubbed data
     for subject in potential_subjects:
         if not subject.startswith("sub-"):
             continue
@@ -255,8 +254,9 @@ def main(
             continue
             
         # Check if scrubbed data already exists in either location
-        local_scrubbed_file = Path(f"{output_data}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
-        remote_scrubbed_file = Path(f"{root}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
+        threshold_str = str(threshold)
+        local_scrubbed_file = Path(f"{output_data}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold_str}.nii.gz")
+        remote_scrubbed_file = Path(f"{root}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold_str}.nii.gz")
         
         # Only add subject if scrubbed data doesn't exist in either location
         if not local_scrubbed_file.exists() and not remote_scrubbed_file.exists():
@@ -287,7 +287,7 @@ def main(
         else:
             print(f"No framewise_displ.txt found for {subject} at {fwd_file}")
 
-    print(f"Total subjects: {len(subjects)}")
+    print(f"Total subjects needing scrubbing: {len(subjects)}")
 
     # Save the concatenated DataFrame to all_fwd.csv
     all_fwd_df.to_csv(all_fwd_path, index=True, header=False)
@@ -312,6 +312,7 @@ def main(
                         error_log,
                         bold_pattern,
                         scrubbed_pattern,
+                        subject_dir_pattern,
                     )
                     for subject in subjects
                 ],
@@ -327,6 +328,7 @@ def main(
                 error_log,
                 bold_pattern,
                 scrubbed_pattern,
+                subject_dir_pattern,
             )
 
 
@@ -363,6 +365,6 @@ if __name__ == "__main__":
         threshold,
         bold_pattern,
         scrubbed_pattern,
-        # multi=False,
-        multi=True,  # Uncomment this line to enable parallel processing
+        subject_dir_pattern,
+        multi=True,
     )
