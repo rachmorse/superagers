@@ -5,6 +5,7 @@ import os
 import subprocess
 import logging
 from pathlib import Path
+from joblib import Parallel, delayed
 
 # Set up logging
 logging.basicConfig(
@@ -99,6 +100,10 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
     try:
         # Create the output directory if it doesn't exist
         output_folder.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"\n{'='*50}")
+        logger.info(f"Processing subject: {subject_id} (directory: {subject_dir})")
+        logger.info(f"{'='*50}\n")
         
         # Set up annotation files - these are the Schaefer 200 atlas files from GitHub
         schaefer_fsaverage_left = Path('/home/rachel/Desktop/superagers/fsaverage_masks/lh.Schaefer2018_200Parcels_7Networks_order.annot')
@@ -245,22 +250,16 @@ def main():
             # subject_data = [("sub-1014", "sub-1014_ses-01")]
             
             # Process each subject
-            successful = 0
-            for subject_id, subject_dir in subject_data:
-                logger.info(f"\n{'='*50}")
-                logger.info(f"Processing subject: {subject_id} (directory: {subject_dir})")
-                logger.info(f"{'='*50}\n")
-
-                # Set up paths
-                output_folder_t1 = Path(f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}/{subject_id}/t1_masks')
-                
-                if process_subject(
+            results = Parallel(n_jobs=10)(
+                delayed(process_subject)(
                     subject_dir,  
                     subject_id,   
                     reconall_dir,
-                    output_folder_t1
-                ):
-                    successful += 1
+                    Path(f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}/{subject_id}/t1_masks')
+                ) for subject_id, subject_dir in subject_data
+            )
+            
+            successful = sum(results)
             
             logger.info(f"\nProcessing summary:")
             logger.info(f"Total subjects: {len(subject_data)}")
