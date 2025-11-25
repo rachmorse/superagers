@@ -21,13 +21,13 @@ def process_subject_functional(args):
             root_directory (Path): Root directory for the timeseries data.
             timeseries_path (Path): Path to the directory containing the timeseries data.
             error_log_path (Path): Path to the error log file.
-            schaefer_atlas:
+            combined_labels (List[str]): List of ROI labels.
 
     Raises:
         FileNotFoundError: If the timeseries file is not found.
         Exception: If an error occurs while loading the timeseries data
     """
-    subject_id, ses, output_dir, root_directory, timeseries_path, error_log_path = args
+    subject_id, ses, output_dir, root_directory, timeseries_path, error_log_path, combined_labels = args
 
     timeseries_file = root_directory / f"{subject_id}_ses-{ses}_subcortical_schaefer200_timeseries.csv"
 
@@ -58,7 +58,8 @@ def process_subject_functional(args):
         ses=ses,
         timeseries=timeseries,
         output_dir=output_dir,
-        timeseries_path=timeseries_path
+        ses=ses,
+        combined_labels=combined_labels
     )
 
     # Visualize data if you would like by uncommenting the line below
@@ -118,6 +119,14 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], timeser
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Read combined labels once
+    labels_csv_path = timeseries_path / "combined_labels.csv"
+    try:
+        combined_labels = pd.read_csv(labels_csv_path, header=None).squeeze().tolist()
+    except FileNotFoundError:
+        print(f"Error: Labels file not found at {labels_csv_path}")
+        return
+
     args = [
         (
             subject_id,
@@ -126,12 +135,68 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], timeser
             root_directory,
             timeseries_path,
             error_log_path,
+            combined_labels,
         )
         for subject_id in subjects
     ]
 
     for arg in args:
         process_subject_functional(arg)
+
+    # Concatenate and Cleanup
+    print("Concatenating individual subject timeseries files...")
+    
+    # Define directories to check
+    dirs_to_check = [
+        output_dir / f"ses-{ses}/all_to_all_roi_matrices",
+        output_dir / f"ses-{ses}/within_network_matrices",
+        output_dir / f"ses-{ses}/subcortical_matrices"
+    ]
+
+    for directory in dirs_to_check:
+        if not directory.exists():
+            continue
+            
+        # Group files by matrix type 
+        files = list(directory.glob("sub-*_matrix.csv"))
+        if not files:
+            continue
+            
+        # Extract unique suffixes (e.g., "all_to_all_roi_matrix.csv")
+        suffixes = set()
+        for f in files:
+            parts = f.name.split("_", 1) # Split only on first underscore
+            if len(parts) > 1:
+                suffixes.add(parts[1])
+        
+        for suffix in suffixes:
+            # Gather all files for this suffix
+            matrix_files = list(directory.glob(f"sub-*_{suffix}"))
+            if not matrix_files:
+                continue
+                
+            # Concatenate
+            dfs = []
+            for mf in matrix_files:
+                try:
+                    dfs.append(pd.read_csv(mf))
+                except Exception as e:
+                    print(f"Error reading {mf}: {e}")
+            
+            if dfs:
+                combined_df = pd.concat(dfs, ignore_index=True)
+                # Sort by ID 
+                if 'id' in combined_df.columns:
+                    combined_df = combined_df.sort_values('id')
+                
+                final_output = directory / suffix
+                combined_df.to_csv(final_output, index=False)
+                print(f"Created {final_output}")
+                
+                # Delete individual files
+                for mf in matrix_files:
+                    mf.unlink()
+                print(f"Deleted individual files for {suffix}")
 
 
 if __name__ == "__main__":

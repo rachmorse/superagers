@@ -1,7 +1,6 @@
 from itertools import combinations
 from pathlib import Path
 from typing import Dict, List
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -28,7 +27,7 @@ def prepare_directories(root_dir: Path, session: str, subdir_types: List[str]):
 
 
 def compute_functional_connectivity(
-    subject_id: str, timeseries: np.ndarray, output_dir: Path, ses: str, timeseries_path: Path
+    subject_id: str, timeseries: np.ndarray, output_dir: Path, ses: str, combined_labels: List[str]
 ) -> np.ndarray:
     """Compute the connectivity matrix for all ROIs and each network, save them to CSV files.
 
@@ -42,10 +41,6 @@ def compute_functional_connectivity(
     Returns:
         Tuple[np.ndarray, np.ndarray]: The full connectivity and fisher z-transformed matrices.
     """
-    # Read combined labels from CSV
-    labels_csv_path = f"{timeseries_path}/combined_labels.csv"
-    combined_labels = pd.read_csv(labels_csv_path, header=None).squeeze().tolist()
-
     # Extract ROI names and networks using the combined labels
     network_mappings = create_network_mappings(combined_labels)
     
@@ -256,18 +251,12 @@ def save_connectivity_data(
         roi_names (List[str]): List of ROI names.
         output_dir (Path): Directory where the connectivity data will be saved.
     """
-    csv_output_path = output_dir / f"{label}_matrix.csv"
-    fisher_z_csv_output_path = output_dir / f"fisher_z_{label}_matrix.csv"
+    csv_output_path = output_dir / f"{subject_id}_{label}_matrix.csv"
+    fisher_z_csv_output_path = output_dir / f"{subject_id}_fisher_z_{label}_matrix.csv"
 
     def save_csv(dataframe: pd.DataFrame, file_path: Path):
-        if file_path.exists():
-            existing_df = pd.read_csv(file_path, index_col="id")
-            dataframe = dataframe[~dataframe.index.isin(existing_df.index)]
-            # Append without writing header
-            dataframe.to_csv(file_path, mode="a", header=False)
-        else:
-            # Initial write with header
-            dataframe.to_csv(file_path, index_label="id", header=True)
+        # Always write a new file for the subject
+        dataframe.to_csv(file_path, index_label="id", header=True)
 
     if matrix is not None:
         columns = [f"{roi1}-{roi2}" for roi1, roi2 in combinations(roi_names, 2)]
