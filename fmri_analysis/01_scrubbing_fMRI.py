@@ -33,13 +33,13 @@ def analyze_threshold(data, threshold, total_scans=740, affected_percentage=0.5)
     plt.show()
 
 
-def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="interpolate", max_scrub_percent=30):
+def scrub(subject, bold_file, fwd_data, scrubbed_file, threshold=0.5, method="interpolate", max_scrub_percent=30):
     """Scrub the BOLD fMRI images by either removing or interpolating scans based on FWD threshold.
 
     Args:
         subject (str): Subject ID used to process the BOLD and FWD files.
         bold_file (str): Path to the BOLD image file (NIfTI format).
-        fwd_file (str): Path to the FWD file (CSV format).
+        fwd_data (array-like): Framewise Displacement data.
         scrubbed_file (str): Path to save the scrubbed BOLD image file (NIfTI format).
         threshold (float, optional): Threshold for FWD above which scans are considered moved. Default is 0.5 FWD.
         method (str, optional): Method for handling moved scans. Either 'cut' to remove or 'interpolate' to replace. Default is 'interpolate'.
@@ -48,6 +48,21 @@ def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="in
     Returns:
         bool: True if scrubbing was performed, False if subject was skipped due to too many frames exceeding threshold.
     """
+    # Check if no frames exceed threshold, skip loading BOLD and scrubbing
+    fwd_check = np.array(fwd_data)
+
+    if not np.any(np.nan_to_num(fwd_check) >= threshold):
+        print(f"No frames exceed the threshold for subject {subject}. Skipping scrubbing.")
+        return False
+
+    # Then check if too many frames exceed threshold, skip loading BOLD and scrubbing
+    num_bad_frames = np.sum(np.nan_to_num(fwd_check) >= threshold)
+    est_scrub_percent = (num_bad_frames * 100) / (len(fwd_check) + 1)
+    
+    if est_scrub_percent > max_scrub_percent:
+        print(f"WARNING: More than {max_scrub_percent}% of timepoints would be scrubbed for subject {subject}. Skipping scrubbing.")
+        return False
+
     print(f"Scrubbing BOLD image for subject: {subject}")
 
     # Load BOLD image data
@@ -57,18 +72,22 @@ def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="in
     bold_affine = bold.affine
 
     # Load FWD data
-    print("Loading Framewise Displacement data from file:", fwd_file)
-    fwd = np.array(pd.read_csv(fwd_file).FramewiseDisplacement)
+    fwd = np.array(fwd_data)
+
+    # Check for array alignment
+    if len(fwd) == bold_data.shape[3]:
+        pass # Lengths match, no adjustment needed
+    elif len(fwd) == bold_data.shape[3] - 1:
+        # FWD is one shorter than BOLD, prepend 0 to align. 
+        # Since this code compares fwd < threshold, prepending 0 means the first volume is not scrubbed.
+        fwd = np.insert(fwd, 0, 0)
+    else:
+        raise ValueError(f"Length mismatch: FWD has {len(fwd)} points, BOLD has {bold_data.shape[3]} volumes.")
 
     # Identify volumes with excessive motion
     all_tps = np.arange(bold_data.shape[3])
-    correct_tps = all_tps[[False] + list(fwd < threshold)]
-    incorrect_tps = all_tps[[False] + list(fwd >= threshold)]
-
-    # If there are 0 frames above the threshold, skip scrubbing
-    if len(incorrect_tps) == 0:
-        print(f"No frames exceed the threshold for subject {subject}. Skipping scrubbing.")
-        return False
+    correct_tps = all_tps[fwd < threshold]
+    incorrect_tps = all_tps[fwd >= threshold]
     
     # Calculate percentage of volumes that would be scrubbed
     scrub_percent = (len(incorrect_tps) * 100) / bold_data.shape[3]
@@ -76,12 +95,6 @@ def scrub(subject, bold_file, fwd_file, scrubbed_file, threshold=0.5, method="in
     print(
         f"{len(incorrect_tps)} out of {bold_data.shape[3]} scans ({round(scrub_percent, 2)}%) exceed the motion threshold (FWD > {threshold})."
     )
-    
-    # Check if percentage exceeds maximum allowed
-    if scrub_percent > max_scrub_percent:
-        print(f"WARNING: More than {max_scrub_percent}% of timepoints would be scrubbed for subject {subject}.")
-        print(f"Subject {subject} has been skipped. Data will not be scrubbed.")
-        return False
     
     # Extract only the correct timepoints for interpolation
     correct_bold = bold_data[:, :, :, correct_tps]
@@ -153,6 +166,7 @@ def process_subject(
     bold_pattern,
     scrubbed_pattern,
     subject_dir_pattern,
+    fwd_data,
 ):
     """Processes a single subject by scrubbing the BOLD fMRI images based on the FWD.
     Saves the scrubbed BOLD file for the subject and logs errors if any occur.
@@ -172,16 +186,18 @@ def process_subject(
         Exception: If any error occurs during the processing of the subject.
     """
     try:
-        fwd_file = os.path.join(root, subject, subject_dir_pattern, "framewise_displ.txt")
         bold_file = bold_pattern.format(subject=subject, ses=ses)
         scrubbed_file = scrubbed_pattern.format(subject=subject, ses=ses, threshold=threshold, output_data=output_data)
 
         print(f"Processing subject: {subject}")
 
+        if fwd_data is None:
+            raise ValueError(f"No FWD data available for subject {subject}")
+
         scrub(
             subject,    
             bold_file,
-            fwd_file,
+            fwd_data,
             scrubbed_file,
             threshold=threshold,
             method="interpolate",
@@ -229,7 +245,8 @@ def main(
     all_fwd_path = os.path.join(output_data, "all_fwd.csv")
 
     # Concatenate all framewise_displ.txt files (per subject) into a single DataFrame
-    all_fwd_df = pd.DataFrame()
+    fwd_list = []
+    subject_fwd_map = {}
 
     # Determine subjects list 
     potential_subjects = os.listdir(root)
@@ -282,16 +299,23 @@ def main(
             fwd_series = pd.Series(fwd_data["FramewiseDisplacement"].tolist(), name=subject)
             fwd_row_df = fwd_series.to_frame().T
 
-            # Append the row DataFrame to the main DataFrame
-            all_fwd_df = pd.concat([all_fwd_df, fwd_row_df])
+            # Append the row DataFrame to the list
+            fwd_list.append(fwd_row_df)
+            
+            # Store for processing
+            subject_fwd_map[subject] = fwd_data["FramewiseDisplacement"].tolist()
         else:
             print(f"No framewise_displ.txt found for {subject} at {fwd_file}")
 
     print(f"Total subjects needing scrubbing: {len(subjects)}")
 
     # Save the concatenated DataFrame to all_fwd.csv
-    all_fwd_df.to_csv(all_fwd_path, index=True, header=False)
-    print(f"all_fwd.csv has been created at {all_fwd_path}")
+    if fwd_list:
+        all_fwd_df = pd.concat(fwd_list)
+        all_fwd_df.to_csv(all_fwd_path, index=True, header=False)
+        print(f"all_fwd.csv has been created at {all_fwd_path}")
+    else:
+        print("No FWD data found to concatenate.")
 
     # Visualize what different thresholds would look like in the data
     # analyze_threshold(all_fwd_df, 0.2)
@@ -313,6 +337,7 @@ def main(
                         bold_pattern,
                         scrubbed_pattern,
                         subject_dir_pattern,
+                        subject_fwd_map.get(subject)
                     )
                     for subject in subjects
                 ],
@@ -329,6 +354,7 @@ def main(
                 bold_pattern,
                 scrubbed_pattern,
                 subject_dir_pattern,
+                subject_fwd_map.get(subject)
             )
 
 
@@ -366,5 +392,5 @@ if __name__ == "__main__":
         bold_pattern,
         scrubbed_pattern,
         subject_dir_pattern,
-        multi=True,
+        multi=False,
     )
