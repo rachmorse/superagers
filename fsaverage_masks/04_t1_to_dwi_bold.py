@@ -7,7 +7,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
-
+import nibabel as nib
+import numpy as np
 
 @dataclass
 class SubjectPaths:
@@ -155,7 +156,7 @@ def get_subjects_to_process(subject_infos: List[SubjectPaths]) -> Tuple[List[str
     return subjects_for_dwi, subjects_for_bold, already_processed
 
 
-def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, output_path, out_native_masks):
+def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, output_path, out_native_masks, subject):
     """Create a b0 reference and transform the T1w space mask to native DWI space 
     using epi_reg and flirt.
     
@@ -167,6 +168,7 @@ def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, ou
         b0_ref (Path): Path to the b0 reference image.
         output_path (Path): Path to save the DWI space mask file.
         out_native_masks (Path): Output directory to where the mask is saved.
+        subject (str): Subject ID for logging.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -205,7 +207,46 @@ def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, ou
         f'--out={epi_reg_prefix}'
     )
 
-    subprocess.run(["bash", "-lc", cmd], check=True)
+    proc = subprocess.run(
+        ["bash", "-lc", cmd],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+    # Ive added a bunch of print statements here as this part sometimes throws errors
+    # If a flag is thrown, the script will exit for that subject
+
+    # Flag when BBR fails due to no boundary points being found
+    if "ERROR::set_bbr_seg: could not find any boundary points" in proc.stderr:
+        print(f"\nBBR FAILURE for {subject}: no boundary points found.\n")
+        sys.exit(1)
+    proc.check_returncode() 
+
+    # BBR errors seem to come from the WM segmentation step, so check that the output wmedge file is ok 
+    img_path = out_native_masks / "epi_reg_fast_wmedge.nii.gz"
+    if not img_path.exists():
+        print(f"Stopping for {subject}: wmedge file does not exist.")
+        sys.exit(1)
+    img = nib.load(img_path)
+    data = img.get_fdata()
+
+    # NaN check
+    if np.isnan(data).any():
+        print(f"Stopping for {subject}: wmedge image contains NaNs.")
+        sys.exit(1)
+
+    # Non-zero voxel check (must NOT be empty)
+    nonzero = np.count_nonzero(data)
+    if nonzero == 0:
+        print(f"Stopping for {subject}: wmedge image is EMPTY → FAST failed → BBR will fail.")
+        sys.exit(1)
+
+    # Warn if extremely sparse (e.g., fewer than 2000 voxels)
+    if nonzero < 2000:
+        print(f"Warning for {subject}: wmedge image looks abnormally small ({nonzero} voxels).")
+
+    print(f"{subject}: wmedge file looks valid ({nonzero} non-zero voxels). Continuing...")
 
     epi_to_t1_mat = Path(f"{epi_reg_prefix}.mat")
     transform_mat = out_native_masks / "T1w_to_b0.mat"
@@ -354,6 +395,7 @@ def process_subject_dwi(paths: DwiProcessingPaths):
             paths.b0_output,
             paths.output_path_dwi,
             paths.out_native_masks,
+            subject,
         )
 
         print(f"Successfully created native space DWI mask for {subject}")
@@ -515,7 +557,7 @@ def main():
             subjects_for_dwi, subjects_for_bold, already_processed = get_subjects_to_process(subject_infos)
 
             # Uncomment the following line to process specific subjects
-            # subjects_for_dwi = ["sub-101848"] 
+            # subjects_for_dwi = ["sub-110369"] 
             # subjects_for_bold = [] 
             
             # Process each subject
