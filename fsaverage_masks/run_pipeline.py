@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import List, Tuple
+import datetime
+
 
 SCRIPTS: List[str] = [
     "01_fsaverage_to_t1.py",
@@ -49,6 +51,9 @@ def main() -> None:
     base_dir = Path(__file__).resolve().parent
     log_path = base_dir / "nohup_fsaverage.out"
 
+    start_time = datetime.datetime.now()
+    print(f"Starting pipeline at {start_time}")
+
     failures: List[str] = []
     for script in SCRIPTS:
         exit_code, name = run_script(base_dir / script, log_path)
@@ -61,6 +66,13 @@ def main() -> None:
             print(f"  - {item}")
     else:
         print("All scripts completed successfully.")
+
+    end_time = datetime.datetime.now()
+    elapsed = end_time - start_time
+    hours = elapsed.total_seconds() / 3600
+
+    print(f"Completed at {end_time}")
+    print(f"Total time: {hours:.2f} hours")
 
 
 if __name__ == "__main__":
