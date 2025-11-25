@@ -43,7 +43,6 @@ This repository contains the analysis scripts for our study on superagers, which
         - Uses the functions in the script `extract_timeseries.py`.
     - `03_compute_subject_functional_connectivity.py`: Computes various functional connectivity metrics for subjects from the timeseries data. The script processes timeseries data, computes functional connectivity with and without Fisher z-transformation, and saves the results to CSV files.
         - Uses the functions in the script `compute_functional_connectivity.py`.
-    - `04_compute_group_connectivity`: Computes the average functional connectivy for given groups (e.g., superagers or non-superagers) cross-sectionally.
 - **Notes:**
     - The scripts used to preprocesses the fMRI data used here are available in another [repository](https://github.com/rachmorse/fmri_preprocessing).
 
