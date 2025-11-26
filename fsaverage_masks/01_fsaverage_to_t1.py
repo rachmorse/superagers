@@ -16,7 +16,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_subjects_to_process(reconall_dir, out_dir, ses):
+def get_subjects_to_process(reconall_dir, out_dir, ses, cohort):
     """Generate a list of subjects to process based on whether they have
     recon-all done for the specified timepoint and have neuropsych data.
 
@@ -68,6 +68,16 @@ def get_subjects_to_process(reconall_dir, out_dir, ses):
             # If session requested but not present in name, skip
             continue
 
+        # Filter subjects based on cohort
+        try:
+            subject_num = int(subject_id.split("-")[1])
+            if cohort == "bbhi" and subject_num < 6000:
+                continue
+            if cohort == "bbhi senior" and subject_num > 6000:
+                continue
+        except (IndexError, ValueError):
+            logger.warning(f"Could not parse subject number from {subject_id}, skipping cohort check.")
+
         out_dir_t1 = out_dir / subject_id / "t1_masks"
 
         # If sub is not in valid IDs, skip
@@ -85,6 +95,8 @@ def get_subjects_to_process(reconall_dir, out_dir, ses):
             already_processed.append(subject_id)
 
     print(f"Number of subjects to process: {len(subjects_to_process)}")
+    print(f"Number of subjects already processed: {len(already_processed)}")
+
     return subjects_to_process, already_processed   
 
 
@@ -153,11 +165,11 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
             return False
 
         # Then transform the subject-specific surface annotations to volumetric T1 space
-
-        # Create a custom environment for FreeSurfer; default to recon-all dir if SUBJECTS_DIR unset
+        # Create a custom environment for FreeSurfer to be able to take the results from the previous step
+        subjects_dir = os.environ.get('SUBJECTS_DIR', str(output_folder))
         custom_env = os.environ.copy()
-        custom_env["SUBJECTS_DIR"] = custom_env.get("SUBJECTS_DIR", str(reconall_dir))
-  
+        custom_env["SUBJECTS_DIR"] = subjects_dir
+
         # Left hemisphere
         subject_t1 = reconall_dir / subject_dir / "mri" / "T1.mgz"
 
@@ -235,19 +247,18 @@ def main():
             os.environ['SUBJECTS_DIR'] = str(reconall_dir)
             
             # Determine subjects to process
-            subject_data, already_processed = get_subjects_to_process(reconall_dir, output_folder, session)
-            print(f"Number of subjects already processed: {len(already_processed)}")
+            subject_data, already_processed = get_subjects_to_process(reconall_dir, output_folder, session, cohort)
 
             if not subject_data:
                 logger.info("No subjects found that need processing.")
                 continue
-                
-            subjects = [s[0] for s in subject_data]
-            logger.info(f"Will process {len(subjects)} subjects: {', '.join(subjects)}")
             
             # Uncomment this code to process a single subject 
             # Format subject_data = [(subject_id, subject_dir)]
             # subject_data = [("sub-1014", "sub-1014_ses-01")]
+
+            subjects = [s[0] for s in subject_data]
+            logger.info(f"Will process {len(subjects)} subjects: {', '.join(subjects)}")
             
             # Process each subject
             results = Parallel(n_jobs=10)(
