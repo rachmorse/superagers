@@ -220,27 +220,27 @@ def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, ou
     # Flag when BBR fails due to no boundary points being found
     if "ERROR::set_bbr_seg: could not find any boundary points" in proc.stderr:
         print(f"\nBBR FAILURE for {subject}: no boundary points found.\n")
-        sys.exit(1)
+        raise RuntimeError(f"BBR FAILURE for {subject}: no boundary points found.")
     proc.check_returncode() 
 
     # BBR errors seem to come from the WM segmentation step, so check that the output wmedge file is ok 
     img_path = out_native_masks / "epi_reg_fast_wmedge.nii.gz"
     if not img_path.exists():
         print(f"Stopping for {subject}: wmedge file does not exist.")
-        sys.exit(1)
+        raise RuntimeError(f"Stopping for {subject}: wmedge file does not exist.")
     img = nib.load(img_path)
     data = img.get_fdata()
 
     # NaN check
     if np.isnan(data).any():
         print(f"Stopping for {subject}: wmedge image contains NaNs.")
-        sys.exit(1)
+        raise RuntimeError(f"Stopping for {subject}: wmedge image contains NaNs.")
 
     # Non-zero voxel check (must NOT be empty)
     nonzero = np.count_nonzero(data)
     if nonzero == 0:
         print(f"Stopping for {subject}: wmedge image is EMPTY → FAST failed → BBR will fail.")
-        sys.exit(1)
+        raise RuntimeError(f"Stopping for {subject}: wmedge image is EMPTY → FAST failed → BBR will fail.")
 
     # Warn if extremely sparse (e.g., fewer than 2000 voxels)
     if nonzero < 2000:
