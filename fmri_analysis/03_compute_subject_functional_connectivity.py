@@ -55,14 +55,13 @@ def process_subject_functional(args):
     # Compute functional connectivity with the combined atlas
     connectivity_matrix, fisher_z_matrix = compute_functional_connectivity(
         subject_id=subject_id,
-        ses=ses,
         timeseries=timeseries,
         output_dir=output_dir,
-        ses=ses,
-        combined_labels=combined_labels
+        combined_labels=combined_labels,
+        ses=ses
     )
 
-    # Visualize data if you would like by uncommenting the line below
+    # Visualize data by uncommenting the line below
     # visualize_fc_data(subject_id, fisher_z_matrix, output_dir, ses, True)
 
     print(f"Processing completed for subject: {subject_id}")

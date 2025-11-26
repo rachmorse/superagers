@@ -79,7 +79,7 @@ def process_subject_extract(args):
     np.savetxt(timeseries_output_path, timeseries, delimiter=",")
 
     # Run this to visualize the data
-    # visualize_timeseries(subject_id, timeseries, roi_indices)
+    # visualize_timeseries(subject, timeseries, roi_indices)
 
     print(f"Processing completed for subject: {subject}")
 
@@ -186,6 +186,7 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
                 # Track subjects with no bold file
                 if not bold_file_exists:
                     subjects_excluded_no_bold.append(subject)
+                    print(f"BOLD file not found for {subject}: {scrubbed_data} or {unscrubbed_file}")
                     continue 
 
                 if fd_file.exists() and bold_file_exists:
@@ -201,6 +202,7 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
                 # Track subjects with no bold file
                 if not bold_file_exists:
                     subjects_excluded_no_bold.append(subject)
+                    print(f"BOLD file not found for {subject}: {scrubbed_data} or {unscrubbed_file}")
                     continue 
 
                 if fd_file.exists() and bold_file_exists:
