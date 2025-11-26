@@ -93,6 +93,8 @@ def get_subjects_to_process(reconall_dir, out_dir, ses, cohort):
             subjects_to_process.append((subject_id, subject_dir))
         elif output_lh_path.exists() and output_rh_path.exists():
             already_processed.append(subject_id)
+        elif not subject_recon_dir.exists():
+            logger.warning(f"Subject {subject_id} does not have recon-all.")
 
     print(f"Number of subjects to process: {len(subjects_to_process)}")
     print(f"Number of subjects already processed: {len(already_processed)}")

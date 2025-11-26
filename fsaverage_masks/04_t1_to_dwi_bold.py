@@ -557,9 +557,9 @@ def main():
             subjects_for_dwi, subjects_for_bold, already_processed = get_subjects_to_process(subject_infos)
 
             # Uncomment the following line to process specific subjects
-            # subjects_for_dwi = ["sub-110369"] 
-            # subjects_for_bold = [] 
-            
+            # subjects_for_dwi = [] 
+            # subjects_for_bold = ["sub-187539", "sub-187655"] 
+
             # Process each subject
             result_dwi = []
             result_bold = []
