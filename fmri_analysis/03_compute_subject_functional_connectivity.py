@@ -2,7 +2,6 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Union
-
 import nibabel as nib
 import numpy as np
 import pandas as pd
@@ -117,15 +116,15 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], timeser
 
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
-
+    
     # Read combined labels once
     labels_csv_path = timeseries_path / "combined_labels.csv"
     try:
         combined_labels = pd.read_csv(labels_csv_path, header=None).squeeze().tolist()
     except FileNotFoundError:
         print(f"Error: Labels file not found at {labels_csv_path}")
-        return
-
+        return    
+        
     args = [
         (
             subject_id,
@@ -141,69 +140,6 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], timeser
 
     for arg in args:
         process_subject_functional(arg)
-
-    # Concatenate and Cleanup
-    print("Concatenating individual subject matrix files...")
-    
-    # Define directories to check
-    dirs_to_check = [
-        output_dir / f"ses-{ses}/all_to_all_roi_matrices",
-        output_dir / f"ses-{ses}/within_network_matrices",
-        output_dir / f"ses-{ses}/subcortical_matrices"
-    ]
-
-    for directory in dirs_to_check:
-        if not directory.exists():
-            continue
-            
-        # Group files by suffix using a single pass
-        files_by_suffix = {}
-        all_files = list(directory.glob("sub-*_matrix.csv"))
-        
-        for f in all_files:
-            # Extract suffix (everything after the first underscore)
-            parts = f.name.split("_", 1)
-            if len(parts) > 1:
-                suffix = parts[1]
-                if suffix not in files_by_suffix:
-                    files_by_suffix[suffix] = []
-                files_by_suffix[suffix].append(f)
-        
-        # Process each group
-        for suffix, matrix_files in files_by_suffix.items():
-            if not matrix_files:
-                continue
-                
-            dfs = []
-            for mf in matrix_files:
-                try:
-                    dfs.append(pd.read_csv(mf))
-                except Exception as e:
-                    print(f"Error reading {mf}: {e}")
-            
-            if dfs:
-                combined_df = pd.concat(dfs, ignore_index=True)
-                # Sort by ID if present
-                if 'id' in combined_df.columns:
-                    combined_df = combined_df.sort_values('id')
-                
-                final_output = directory / suffix
-                
-                # Safe write and delete
-                try:
-                    combined_df.to_csv(final_output, index=False)
-                    print(f"Created {final_output}")
-                    
-                    # Verify file exists and has content before deleting originals
-                    if final_output.exists() and final_output.stat().st_size > 0:
-                        for mf in matrix_files:
-                            mf.unlink()
-                        print(f"Deleted {len(matrix_files)} individual files for {suffix}")
-                    else:
-                        print(f"Error: Output file {final_output} was not created correctly. Keeping individual files.")
-                        
-                except Exception as e:
-                    print(f"Error writing combined file {final_output}: {e}. Keeping individual files.")
 
 
 if __name__ == "__main__":

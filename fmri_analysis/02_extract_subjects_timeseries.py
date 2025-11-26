@@ -335,5 +335,5 @@ if __name__ == "__main__":
                 output_dir=output_directory,
                 roi_indices=roi_indices,
                 atlas_file_template=atlas_file_template,
-                multi=True, 
+                multi=False, 
             )

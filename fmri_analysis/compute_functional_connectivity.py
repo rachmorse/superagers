@@ -251,12 +251,18 @@ def save_connectivity_data(
         roi_names (List[str]): List of ROI names.
         output_dir (Path): Directory where the connectivity data will be saved.
     """
-    csv_output_path = output_dir / f"{subject_id}_{label}_matrix.csv"
-    fisher_z_csv_output_path = output_dir / f"{subject_id}_fisher_z_{label}_matrix.csv"
+    csv_output_path = output_dir / f"{label}_matrix.csv"
+    fisher_z_csv_output_path = output_dir / f"fisher_z_{label}_matrix.csv"
 
     def save_csv(dataframe: pd.DataFrame, file_path: Path):
-        # Always write a new file for the subject
-        dataframe.to_csv(file_path, index_label="id", header=True)
+        if file_path.exists():
+            existing_df = pd.read_csv(file_path, index_col="id")
+            dataframe = dataframe[~dataframe.index.isin(existing_df.index)]
+            # Append without writing header
+            dataframe.to_csv(file_path, mode="a", header=False)
+        else:
+            # Initial write with header
+            dataframe.to_csv(file_path, index_label="id", header=True)
 
     if matrix is not None:
         columns = [f"{roi1}-{roi2}" for roi1, roi2 in combinations(roi_names, 2)]
