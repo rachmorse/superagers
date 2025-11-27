@@ -19,7 +19,14 @@ from compute_functional_connectivity import (
 
 
 def setup_logging(output_dir):
-    """Setup basic logging to file and console"""
+    """Setup basic logging to file and console
+    
+    Args:
+        output_dir (Path): Path to the output directory where the log file will be saved.
+    
+    Returns:
+        logging.Logger: Logger object for logging messages.
+    """
     log_file = output_dir / f"structural_connectivity_{datetime.now().strftime('%Y%m%d')}.log"
     
     logging.basicConfig(
@@ -88,8 +95,7 @@ def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
 
 
 def save_structural_connectivity(subject_id, label, matrix, roi_names, output_dir):
-    """
-    Save structural connectivity matrix without normalization.
+    """Save structural connectivity matrix without normalization.
     Only saves to the group CSV file, not individual subject files.
     
     Args:
@@ -138,8 +144,7 @@ def save_structural_connectivity(subject_id, label, matrix, roi_names, output_di
 
 
 def visualize_sc_data(subject_id, connectivity_matrix, output_directory, ses, cmap='RdBu_r'):
-    """
-    Visualize structural connectivity matrices using the same colormap as functional connectivity.
+    """Visualize structural connectivity matrices using the same colormap as functional connectivity.
     
     Args:
         subject_id (str): Subject ID for labeling the figure
@@ -214,7 +219,7 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
         str(tractogram_file), 
         str(mask_file), 
         str(temp_matrix_file),
-        "-force",
+        "-force",           # Overwrite existing files
         "-zero_diagonal",   # Set diagonal elements to zero
         "-symmetric",       # Ensure matrix is symmetric
         "-scale_invnodevol" # Scale by the inverse size of each node that the streamlines connect to
@@ -383,6 +388,12 @@ def main():
     output_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
     labels_csv_path = "/home/rachel/Desktop/schaefer_analysis/timeseries_data/native_space/combined_labels.csv"
 
+    # Create output directory if it does not exist
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Setup logging
+    setup_logging(output_dir)
+
     # Track both failed and successful subjects
     successful_subjects = []
     failed_subjects = []
@@ -405,9 +416,6 @@ def main():
             # Create output directory if it does not exist
             output_dir.mkdir(parents=True, exist_ok=True)
             prepare_directories(output_dir, ses, ["all_to_all_roi_matrices", "within_network_matrices", "subcortical_matrices", "visualization"])
-
-            # Setup logging
-            setup_logging(output_dir)
             
             # Get subjects to process
             subjects = get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses)
