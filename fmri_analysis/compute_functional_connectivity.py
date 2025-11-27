@@ -20,7 +20,13 @@ def fisher_transform(correlations: np.ndarray) -> np.ndarray:
 
 
 def prepare_directories(root_dir: Path, session: str, subdir_types: List[str]):
-    """Ensure all necessary directories exist."""
+    """Ensure all necessary directories exist.
+    
+    Args:
+        root_dir (Path): Root directory for the timeseries data at a specific timepoint.
+        session (str): Timepoint.
+        subdir_types (List[str]): List of subdirectory types to create.
+    """
     for subdir in subdir_types:
         path = root_dir / f"ses-{session}" / subdir
         path.mkdir(parents=True, exist_ok=True)
@@ -35,7 +41,7 @@ def compute_functional_connectivity(
         subject_id (str): Subject ID.
         timeseries (np.ndarray): Timeseries data for the subject.
         output_dir (Path): Directory where the connectivity data will be saved.
-        ses (str): Session / timepoint
+        ses (str): Timepoint
         timeseries_path (Path): Path to the directory containing the timeseries data.
 
     Returns:
@@ -233,6 +239,24 @@ def create_network_mappings(labels: List[str]) -> Dict[str, List[int]]:
     return network_mappings
 
 
+def save_csv(dataframe: pd.DataFrame, file_path: Path):
+    """Save a DataFrame to a CSV file, appending without header if 
+    the file exists (e.g. subs have already been processed).
+
+    Args:
+        dataframe (pd.DataFrame): The DataFrame to save.
+        file_path (Path): The path to the CSV file.
+    """
+    if file_path.exists():
+        existing_df = pd.read_csv(file_path, index_col="id")
+        dataframe = dataframe[~dataframe.index.isin(existing_df.index)]
+        # Append without writing header
+        dataframe.to_csv(file_path, mode="a", header=False)
+    else:
+        # Initial write with header
+        dataframe.to_csv(file_path, index_label="id", header=True)
+
+
 def save_connectivity_data(
     subject_id: str,
     label: str,
@@ -253,16 +277,6 @@ def save_connectivity_data(
     """
     csv_output_path = output_dir / f"{label}_matrix.csv"
     fisher_z_csv_output_path = output_dir / f"fisher_z_{label}_matrix.csv"
-
-    def save_csv(dataframe: pd.DataFrame, file_path: Path):
-        if file_path.exists():
-            existing_df = pd.read_csv(file_path, index_col="id")
-            dataframe = dataframe[~dataframe.index.isin(existing_df.index)]
-            # Append without writing header
-            dataframe.to_csv(file_path, mode="a", header=False)
-        else:
-            # Initial write with header
-            dataframe.to_csv(file_path, index_label="id", header=True)
 
     if matrix is not None:
         columns = [f"{roi1}-{roi2}" for roi1, roi2 in combinations(roi_names, 2)]

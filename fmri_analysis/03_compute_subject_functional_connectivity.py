@@ -15,10 +15,10 @@ def process_subject_functional(args):
     Args:
         args (tuple): Contains the following:
             subject_id (str): Subject ID.
-            ses (str): Session or timepoint.
+            ses (str): Timepoint.
             output_dir (Path): Path to the directory where output data is saved.
-            root_directory (Path): Root directory for the timeseries data.
-            timeseries_path (Path): Path to the directory containing the timeseries data.
+            root_directory (Path): Root directory for the timeseries data at a specific timepoint.
+            timeseries_path (Path): Path to the directory containing the timeseries data not at a specific timepoint.
             error_log_path (Path): Path to the error log file.
             combined_labels (List[str]): List of ROI labels.
 
@@ -96,15 +96,14 @@ def get_subjects_to_process(root_directory, output_directory, ses):
 
 
 def main(output_dir: Union[str, Path], root_directory: Union[str, Path], timeseries_path: Path, ses: str):
-    """Main function to run the script.
-
-    This function reads the pre-extracted timeseries data for each subject,
+    """This function reads the pre-extracted timeseries data for each subject,
     computes the functional connectivity matrices for all subjects.
 
     Args:
         output_dir (Union[str, Path]): Path where processed data will be output.
-        root_directory (Union[str, Path]): Root directory for the timeseries data.
-        ses (str): Session / timepoint.
+        root_directory (Union[str, Path]): Root directory for the timeseries data at a specific timepoint.
+        timeseries_path (Path): Path to the directory containing the timeseries data not at a specific timepoint.
+        ses (str): Timepoint.
 
     Raises:
         FileNotFoundError: If the selected ROIs file is not found.
