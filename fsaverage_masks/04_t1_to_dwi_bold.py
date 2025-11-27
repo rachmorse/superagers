@@ -207,21 +207,46 @@ def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, ou
         f'--out={epi_reg_prefix}'
     )
 
-    proc = subprocess.run(
-        ["bash", "-lc", cmd],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
+    # Use a temporary file for logging to avoid buffer deadlocks
+    log_file = out_native_masks / f"epi_reg_{subject}.log"
+    
+    try:
+        with open(log_file, "w") as f:
+            proc = subprocess.run(
+                ["bash", "-lc", cmd],
+                stdout=f,
+                stderr=subprocess.STDOUT,
+                timeout=1200,  # 20 minute timeout
+                check=True
+            )
 
     # Ive added a bunch of print statements here as this part sometimes throws errors
     # If a flag is thrown, the script will exit for that subject
+    except subprocess.TimeoutExpired:
+        print(f"\nERROR: epi_reg timed out for {subject} after 20 minutes.")
+        raise RuntimeError(f"epi_reg timed out for {subject}")
+    except subprocess.CalledProcessError as e:
+        print(f"\nERROR: epi_reg failed for {subject}.")
+        # Read the log file to check for specific errors
+        if log_file.exists():
+            with open(log_file, "r") as f:
+                log_content = f.read()
+                if "ERROR::set_bbr_seg: could not find any boundary points" in log_content:
+                    print(f"BBR FAILURE for {subject}: no boundary points found.")
+                    raise RuntimeError(f"BBR FAILURE for {subject}: no boundary points found.")
+        raise e
 
-    # Flag when BBR fails due to no boundary points being found
-    if "ERROR::set_bbr_seg: could not find any boundary points" in proc.stderr:
-        print(f"\nBBR FAILURE for {subject}: no boundary points found.\n")
-        raise RuntimeError(f"BBR FAILURE for {subject}: no boundary points found.")
-    proc.check_returncode() 
+    # Check log for BBR failure even on success (sometimes it doesn't return non-zero exit code)
+    if log_file.exists():
+        with open(log_file, "r") as f:
+            log_content = f.read()
+            if "ERROR::set_bbr_seg: could not find any boundary points" in log_content:
+                print(f"\nBBR FAILURE for {subject}: no boundary points found.\n")
+                raise RuntimeError(f"BBR FAILURE for {subject}: no boundary points found.")
+            
+    # Clean up log file if successful
+    if log_file.exists():
+        log_file.unlink() 
 
     # BBR errors seem to come from the WM segmentation step, so check that the output wmedge file is ok 
     img_path = out_native_masks / "epi_reg_fast_wmedge.nii.gz"
