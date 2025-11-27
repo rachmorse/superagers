@@ -4,9 +4,8 @@ from pathlib import Path
 import re
 
 def get_expected_dwi_files(subject_id, ses):
-    """
-    Returns a list of DWI file paths expected for the subject_id for a given session.
-    Used to check these for subjects who are missing structural data but do have functional data.
+    """Returns a list of DWI file paths expected for the subject_id for a given session.
+    Used to check for subjects who are missing structural data but do have functional data.
 
     Args:
         subject_id (str): The subject ID in the format 'sub-xxx'.
@@ -19,32 +18,27 @@ def get_expected_dwi_files(subject_id, ses):
         return []
 
     if numeric_id > 5000: # BBHI
-        if ses == 1:
-            files = [
-                f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp1/{subject_id}/eddy_corrected_data.nii.gz",
-                f"/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_MSMTCSD_TP1/{subject_id}_dwi_tractogram_1M_SIFT.tck"
-            ] 
-        else:
-            files = [
-                f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp2/{subject_id}/eddy_corrected_data.nii.gz",
-                f"/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_MSMTCSD_TP2/{subject_id}_dwi_tractogram_1M_SIFT.tck"
-            ]
+        files = [
+            f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp{ses}/{subject_id}/eddy_corrected_data.nii.gz",
+            f"/pool/guttmann/institut/BBHI/MRI/derivatives/tracto_MSMTCSD/{subject_id}/ses-0{ses}/dwi/{subject_id}_ses-0{ses}_model-MSMTCSD_tractogram.tck"
+        ] 
     else:
         if ses == 1:
             files = [
-                f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP1/{subject_id}/eddy_corrected_data.nii.gz",
-                f"/pool/guttmann/institut/UB/Superagers/MRI/tracto_MSMTCSD_TP1/{subject_id}_dwi_tractogram_1M_SIFT.tck"
+                f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP{ses}/{subject_id}/eddy_corrected_data.nii.gz",
+                f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/tracto_MSMTCSD/{subject_id}/ses-0{ses}/dwi/{subject_id}_ses-0{ses}_model-MSMTCSD_tractogram.tck"
             ]
         else:
             files = [
-                f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP2/{subject_id}_ses-02/eddy_corrected_data.nii.gz",
-                f"/pool/guttmann/institut/UB/Superagers/MRI/tracto_MSMTCSD_TP2/{subject_id}_dwi_tractogram_1M_SIFT.tck"
+                f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP{ses}/{subject_id}_ses-0{ses}/eddy_corrected_data.nii.gz",
+                f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/tracto_MSMTCSD/{subject_id}/ses-0{ses}/dwi/{subject_id}_ses-0{ses}_model-MSMTCSD_tractogram.tck"
             ]
+
     return files
 
+
 def gather_dwi_checks(sub_ids, ses):
-    """
-    For each subject, check the expected DWI files for a given session.
+    """For each subject, check the expected DWI files for a given session.
     Returns a dict: subject -> { 'eddy': bool, 'tract': bool } indicating file existence.
 
     Args:
@@ -61,6 +55,7 @@ def gather_dwi_checks(sub_ids, ses):
         tract_found = os.path.exists(dwi_files[1])
         results[subject_id] = {'eddy': eddy_found, 'tract': tract_found}
     return results
+
 
 def check_poor_registration(subject):
     """Check if a subject has poor registration based on structural analysis logs.
@@ -89,26 +84,24 @@ def check_poor_registration(subject):
     
     return False
 
-def summarize_dwi_results(results_dict, ses_number):
-    """
-    Summarizes the results of DWI checks for a given session.
+
+def summarize_dwi_results(ses_number, all_ids):
+    """Summarizes the results of DWI checks for a given session.
 
     Args:
-        results_dict (dict): Dictionary with subject IDs as keys and file existence as values.
         ses_number (int): The session number (1 or 2).
+        all_ids (list): List of all subject IDs.
     """
-    found_tract_ids = [sub for sub, r in results_dict.items() if r['tract']]
-    missing_eddy = [sub for sub, r in results_dict.items() if not r['eddy']]
-    missing_tract = [sub for sub, r in results_dict.items() if not r['tract']]
+    dwi_status = gather_dwi_checks(all_ids, ses_number)
+    found_tract_ids = [sub for sub, res in dwi_status.items() if res['tract']]
+    missing_eddy = [sub for sub, res in dwi_status.items() if not res['eddy']]
+    missing_tract = [sub for sub, res in dwi_status.items() if res['eddy'] and not res['tract']]
 
     # Check subs with poor registration
     poor_reg = []
     for subject in found_tract_ids:
         if check_poor_registration(subject):
             poor_reg.append(subject)
-
-    # Get list of subs who dont fit any category
-    odd_cases = [sub for sub in found_tract_ids if sub not in poor_reg]
 
     print(f"\n=== DWI Check Summary for Timepoint {ses_number} (subs with functional but not structural data) ===")
     if missing_eddy:
@@ -121,7 +114,7 @@ def summarize_dwi_results(results_dict, ses_number):
         print("-----------------------------")
 
     if missing_tract:
-        print(f"Subjects dropped because no dwi_tractogram_1M_SIFT.tck: {len(missing_tract)} subjects")
+        print(f"Subjects dropped because no dwi_tractogram_1M_SIFT.tck (but with eddy_corrected_data.nii.gz): {len(missing_tract)} subjects")
         print(', '.join(missing_tract))
         print("-----------------------------")
     else:
@@ -136,26 +129,24 @@ def summarize_dwi_results(results_dict, ses_number):
         print("No subjects dropped due to poor structural registration.")
         print("-----------------------------")
 
-    if odd_cases:
-        print(f"Subjects who were not dropped due to any of these: {len(odd_cases)} subjects")
-        print(', '.join(odd_cases))
-        print("-----------------------------")
+    return missing_tract, poor_reg
+
 
 def get_expected_fmri_files(subject_id, ses):
-    """
-    Returns a list of fMRI file paths expected for subject_id for a given session.
+    """Returns a list of fMRI file paths expected for subject_id for a given session.
     Used to check the files for subjects who are missing func data but do have structural data.
 
     Args:
         subject_id (str): The subject ID in the format 'sub-xxx'.
         ses (int): The session number (1 or 2).
     """
+    # Get a numeric version of ID to be able to separate BBHI from BBHI senior file paths
     try:
         numeric_id = int(subject_id.split('-')[1])
     except (IndexError, ValueError):
         return []
 
-    if numeric_id > 5000:
+    if numeric_id > 5000: # BBHI
         if ses == 1:
             files = [
                 f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed/{subject_id}/native_T1/{subject_id}_ses-01_run-01_rest_bold_ap_T1-space.nii.gz",
@@ -179,9 +170,9 @@ def get_expected_fmri_files(subject_id, ses):
             ]
     return files
 
+
 def gather_fmri_checks(sub_ids, ses):
-    """
-    For each subject in sub_ids, check the expected fMRI files for a given session.
+    """For each subject in sub_ids, check the expected fMRI files for a given session.
     Return a dict: subject -> {'fmri': bool} indicating file existence.
 
     Args:
@@ -200,9 +191,10 @@ def gather_fmri_checks(sub_ids, ses):
         results[subject_id] = {'bold': bold_found, 'mask': mask_found}
     return results
 
-def check_scrubbing_bbhi_senior(subject):
-    """Check if a BBHI senior subject was excluded due to scrubbing 
-    based on nohup scrubbing logs.
+
+def check_scrubbing(subject):
+    """Check if a subject was excluded due to scrubbing based 
+    on nohup scrubbing logs.
     
     Args:
         subject (str): Subject ID
@@ -217,7 +209,7 @@ def check_scrubbing_bbhi_senior(subject):
         print(f"Warning: Log file {log_file} not found")
         return False
     
-    # Search for poor registration warning in the log file
+    # Search for excessive motion warning in the log file
     try:
         with open(log_file, 'r') as f:
             log_content = f.read()
@@ -228,47 +220,6 @@ def check_scrubbing_bbhi_senior(subject):
     
     return False
 
-def check_scrubbing_bbhi(subject, ses):
-    """Check if a BBHI subject was excluded due to scrubbing 
-    based on all_fwd file.
-
-    Args:
-        subject (str): Subject ID in the format "sub-XXXX".
-        ses (str): Session (e.g., "01" or "02").
-
-    """
-    if ses == 1:
-        fwd_csv = Path("/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed/all_fwd.csv")
-    else:
-        fwd_csv = Path("/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp2/all_fwd.csv")
-    
-    # Make sure the file exists
-    if not fwd_csv.exists():
-        print(f"Warning: FWD CSV file not found at {fwd_csv}")
-        return False
-    
-    try:
-        # Load the CSV
-        df = pd.read_csv(fwd_csv)
-        subject_col = df.columns[0]
-        
-        # Filter rows matching the subject ID at hand
-        subject_rows = df[df[subject_col] == subject]
-        if subject_rows.empty:
-            return False
-        
-        subject_row = subject_rows.iloc[0]
-        fwd_values = subject_row.iloc[1:].astype(float)  # Exclude the first column (the subject ID) from the FWD values
-        fraction_exceed_05 = (fwd_values > 0.5).mean()  # Check what fraction of columns exceed 0.5
-        
-        # Check who is excluded based on 30% threshold
-        if fraction_exceed_05 > 0.3:
-            return True
-        
-    except Exception as e:
-        print(f"Error processing FWD CSV for {subject}: {e}")
-    
-    return False 
 
 def check_truncated_file(subject):
     """Check if a subject has a truncated BOLD file that caused issues with the atlas.
@@ -290,7 +241,7 @@ def check_truncated_file(subject):
     try:
         with open(log_file, 'r') as f:
             log_content = f.read()
-            pattern = re.compile(rf"Image Exception : #22.*{subject}")
+            pattern = re.compile(rf"\+\+\s*WARNING:\s*nifti_read_buffer\([^)]*{subject}")
             match = pattern.search(log_content)
             if match:
                 return True
@@ -299,17 +250,18 @@ def check_truncated_file(subject):
     
     return False   
 
-def summarize_fmri_results(results_dict, ses_number):
-    """
-    Summarizes the results of fMRI checks for a given session.
+
+def summarize_fmri_results(ses_number, all_ids):
+    """Summarizes the results of fMRI checks for a given session.
 
     Args:
-        results_dict (dict): Dictionary with subject IDs as keys and file existence as values.
         ses_number (int): The session number (1 or 2).
+        all_ids (list): List of all subject IDs.
     """
-    found_ids = [sub for sub, r in results_dict.items() if r['bold']]
-    missing_bold = [sub for sub, r in results_dict.items() if not r['bold']]
-    missing_mask_prelim = [sub for sub, r in results_dict.items() if not r['mask']]
+    fmri_status = gather_fmri_checks(all_ids, ses_number)
+    found_ids = [sub for sub, res in fmri_status.items() if res['bold']]
+    missing_bold = [sub for sub, res in fmri_status.items() if not res['bold']]
+    missing_mask_prelim = [sub for sub, res in fmri_status.items() if not res['mask']]
 
     # Check if the subs missing the mask are not missing T1 (e.g., they should have the mask)
     missing_mask = [sub for sub in missing_mask_prelim if sub not in missing_bold]
@@ -317,30 +269,13 @@ def summarize_fmri_results(results_dict, ses_number):
     # Check subs with poor registration
     scrub_exc = []
     for subject in found_ids:
-        if check_scrubbing_bbhi_senior(subject):
+        if check_scrubbing(subject):
             scrub_exc.append(subject)
-    
-    scrub_exc_bbhi = []
-    for subject in found_ids:
-        if check_scrubbing_bbhi(subject, ses_number):
-            scrub_exc_bbhi.append(subject)
     
     trunc_bold = []
     for subject in missing_mask:
         if check_truncated_file(subject):
             trunc_bold.append(subject)
-
-    # Get a list of all subjects dropped due to scrubbing
-    scrub_exc_all = set(scrub_exc) | set(scrub_exc_bbhi)  
-
-    # Get list of subs who dont fit any category
-    odd_cases = [
-        sub
-        for sub in found_ids
-        if sub not in scrub_exc_all
-        and sub not in missing_bold
-        and sub not in missing_mask
-    ]
 
     print(f"\n=== fMRI Check Summary for Timepoint {ses_number} (subs with structural but not functional data) ===")
 
@@ -365,44 +300,132 @@ def summarize_fmri_results(results_dict, ses_number):
         print("No subjects missing Schaefer mask file.")
         print("-----------------------------")
 
-    if scrub_exc_all:
-        print(f"Subjects dropped due to excessive movement (scrubbing): {len(scrub_exc_all)} subjects")
-        print(', '.join(scrub_exc_all))
+    if scrub_exc:
+        print(f"Subjects dropped due to excessive movement (scrubbing): {len(scrub_exc)} subjects")
+        print(', '.join(scrub_exc))
         print("-----------------------------")
     else:
         print("No subjects dropped due to scrubbing.")
         print("-----------------------------")
 
-    if odd_cases:
-        print(f"Subjects who were not dropped due to any of these: {len(odd_cases)} subjects")
-        print(', '.join(odd_cases))
-        print("-----------------------------")
+    return scrub_exc, trunc_bold
+
 
 def main():
-    csv_path = "/home/rachel/Desktop/data/clean_data_all.csv"
+    csv_path = "/home/rachel/Desktop/data/superager.csv"
     df = pd.read_csv(csv_path)
+    # Ensure IDs are in the format 'sub-xxx'
+    all_ids = []
+    for i in df['id'].dropna().tolist():
+        if isinstance(i, int) or (isinstance(i, str) and i.isdigit()):
+             all_ids.append(f"sub-{i}")
 
-    # Get initial sub lists
-    struct_not_func_tp1 = df.loc[(~df['struct_all_1'].isna()) & (df['func_all_1'].isna()), 'id'].tolist()
-    struct_not_func_tp2 = df.loc[(~df['struct_all_2'].isna()) & (df['func_all_2'].isna()), 'id'].tolist()
-    func_not_struct_tp1 = df.loc[(~df['func_all_1'].isna()) & (df['struct_all_1'].isna()), 'id'].tolist()
-    func_not_struct_tp2 = df.loc[(~df['func_all_2'].isna()) & (df['struct_all_2'].isna()), 'id'].tolist()
+    # Reconall dir
+    bbhi_reconall_dir = Path('/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall')
+    bbhi_senior_reconall_dir = Path('/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall')
 
-    # Run functions
-    dwi_results_ses1 = gather_dwi_checks(func_not_struct_tp1, 1)
-    summarize_dwi_results(dwi_results_ses1, 1)
+    # --- Session 1 ---
+    print("\nProcessing Session 1...")
 
-    dwi_results_ses2 = gather_dwi_checks(func_not_struct_tp2, 2)
-    summarize_dwi_results(dwi_results_ses2, 2)
+    # Filter all_ids to only include subjects with recon-all done
+    all_ids_tp1 = []
 
-    fmri_results_ses1_struct_missing = gather_fmri_checks(struct_not_func_tp1, 1)
-    summarize_fmri_results(fmri_results_ses1_struct_missing, 1)
+    for sub in all_ids:
+        num = int(sub.replace("sub-", ""))
+        if num > 6000: 
+            if (bbhi_reconall_dir / f"{sub}_ses-01_run-01").exists():
+                all_ids_tp1.append(sub)
+        else: 
+            if (bbhi_senior_reconall_dir / f"{sub}_ses-01").exists():
+                all_ids_tp1.append(sub)
 
-    fmri_results_ses2_struct_missing = gather_fmri_checks(struct_not_func_tp2, 2)
-    summarize_fmri_results(fmri_results_ses2_struct_missing, 2)
+    print(f"Number of subjects with recon-all done tp1: {len(all_ids_tp1)}")
 
-    n = df['sfc_all_slopes'].notna().sum() 
-    print(f"Number of subjects with all data: {n}")
+    dwi_status_ses1 = gather_dwi_checks(all_ids_tp1, 1)
+    fmri_status_ses1 = gather_fmri_checks(all_ids_tp1, 1)
+
+    # Identify who has what
+    has_dwi_ses1 = [sub for sub, res in dwi_status_ses1.items() if res['eddy'] and res['tract']]
+    has_fmri_ses1 = [sub for sub, res in fmri_status_ses1.items() if res['bold'] and res['mask']]
+    has_fmri_dwi_ses1 = [
+        sub for sub in fmri_status_ses1
+        if fmri_status_ses1[sub]['bold']
+        and sub in dwi_status_ses1
+        and dwi_status_ses1[sub]['tract']
+    ]
+
+    # Summarize
+    # For func_not_struct: explain why structural is missing
+    missing_tract_tp1, poor_reg_tp1 = summarize_dwi_results(1, all_ids)
+
+    # For struct_not_func: explain why functional is missing
+    scrub_exc_tp1, trunc_bold_tp1 = summarize_fmri_results(1, all_ids)
+
+    # --- Session 2 ---
+    print("\nProcessing Session 2...")
+
+    # Filter all_ids to only include subjects with recon-all done
+    all_ids_tp2 = []
+
+    for sub in all_ids:
+        num = int(sub.replace("sub-", ""))
+        if num > 6000: 
+            if (bbhi_reconall_dir / f"{sub}_ses-02_run-01").exists():
+                all_ids_tp2.append(sub)
+        else: 
+            if (bbhi_senior_reconall_dir / f"{sub}_ses-02").exists():
+                all_ids_tp2.append(sub)
+
+    print(f"Number of subjects with recon-all done tp2: {len(all_ids_tp2)}")
+    
+    dwi_status_ses2 = gather_dwi_checks(all_ids_tp2, 2)
+    fmri_status_ses2 = gather_fmri_checks(all_ids_tp2, 2)
+
+    # Identify who has what
+    has_dwi_ses2 = [sub for sub, res in dwi_status_ses2.items() if res['eddy'] and res['tract']]
+    has_fmri_ses2 = [sub for sub, res in fmri_status_ses2.items() if res['bold'] and res['mask']]
+    has_fmri_dwi_ses2 = [
+        sub for sub in fmri_status_ses2
+        if fmri_status_ses2[sub]['bold']
+        and sub in dwi_status_ses2
+        and dwi_status_ses2[sub]['tract']
+    ]
+
+    # Summarize
+    missing_tract_tp2, poor_reg_tp2 = summarize_dwi_results(2, all_ids)
+    scrub_exc_tp2, trunc_bold_tp2 = summarize_fmri_results(2, all_ids)
+
+    # Print summary of subjects with both DWI and fMRI
+    has_fmri_dwi_long = [
+        sub for sub in fmri_status_ses1
+        if fmri_status_ses1[sub]['bold']
+        and sub in dwi_status_ses1
+        and dwi_status_ses1[sub]['tract']
+        and sub in dwi_status_ses2
+        and dwi_status_ses2[sub]['tract']
+        and sub in fmri_status_ses2
+        and fmri_status_ses2[sub]['bold']
+    ]
+
+    # Calculate the intersection of scrub_exc_tp1 and scrub_exc_tp2
+    scrub_exc_tp1_tp2 = list(set(scrub_exc_tp1) & set(scrub_exc_tp2))
+    missing_tract_tp1_tp2 = list(set(missing_tract_tp1) & set(missing_tract_tp2))
+    trunc_bold_tp1_tp2 = list(set(trunc_bold_tp1) & set(trunc_bold_tp2))
+    poor_reg_tp1_tp2 = list(set(poor_reg_tp1) & set(poor_reg_tp2))
+
+    print(f"Subjects with both DWI and fMRI at timepoint 1: {len(has_fmri_dwi_ses1)-len(scrub_exc_tp1)-len(trunc_bold_tp1)-len(poor_reg_tp1)}")
+    print(f"Subjects with DWI at timepoint 1: {len(has_dwi_ses1)}")
+    print(f"Subjects with fMRI at timepoint 1: {len(has_fmri_ses1)}")
+    print(f"---------------")
+    print(f"Subjects with both DWI and fMRI at timepoint 2: {len(has_fmri_dwi_ses2)-len(scrub_exc_tp2)-len(trunc_bold_tp2)-len(poor_reg_tp2)}")
+    print(f"Subjects with DWI at timepoint 2: {len(has_dwi_ses2)}")
+    print(f"Subjects with fMRI at timepoint 2: {len(has_fmri_ses2)}")
+    print(f"---------------")
+    print(f"Subjects with both DWI and fMRI at both timepoints: {len(has_fmri_dwi_long)-len(scrub_exc_tp1_tp2)-len(trunc_bold_tp1_tp2)-len(poor_reg_tp1_tp2)}")
+    print("---------------")
+    print(f"Subjects missing tracts at timepoint 1: {len(missing_tract_tp1)}")
+    print(f"Subjects missing tracts at timepoint 2: {len(missing_tract_tp2)}")
+    print(f"Subjects missing tracts at both timepoints: {len(missing_tract_tp1_tp2)} - {', '.join(missing_tract_tp1_tp2)}")
 
 if __name__ == "__main__":
     main()
