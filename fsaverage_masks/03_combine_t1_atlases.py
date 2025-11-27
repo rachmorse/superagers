@@ -48,6 +48,10 @@ def get_subjects_to_process(output_folder, ses):
             subjects_to_process.append(subject)
         elif output_file_path.exists():
             already_processed.append(subject)
+        elif left_t1_file_path.exists() and not right_t1_file_path.exists() or not left_t1_file_path.exists() and right_t1_file_path.exists():
+            print(f"Subject {subject} missing one cortical atlas file")
+        elif subcort_left_file_path.exists() and not subcort_right_file_path.exists() or not subcort_left_file_path.exists() and subcort_right_file_path.exists():
+            print(f"Subject {subject} missing one subcortical atlas file")
 
     return subjects_to_process, already_processed
 
