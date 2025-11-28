@@ -11,7 +11,7 @@ def create_individual_matrices(input_file, output_dir, ses, is_functional=False,
     Args:
         input_file (str): Path to the input CSV file.
         output_dir (str): Directory to save the individual matrices.
-        ses (str): Session identifier (e.g., "ses-01", "ses-02").
+        ses (str): Session (e.g., "ses-01", "ses-02").
         is_functional (bool): If True, process functional connectivity; otherwise, structural.
         is_fisher_z (bool): If True, indicates that the functional connectivity values are Fisher Z-transformed.
     """
@@ -60,6 +60,7 @@ def create_individual_matrices(input_file, output_dir, ses, is_functional=False,
         print("Continuing with processing, but results may be incorrect.")
         
     # Process each subject
+    print(f"Processing {len(subjects)} subjects...")
     for i, subject in enumerate(subjects):
         # Create an empty connectivity matrix
         conn_matrix = np.zeros((num_rois, num_rois))
@@ -87,20 +88,6 @@ def create_individual_matrices(input_file, output_dir, ses, is_functional=False,
         # Zero out the diagonal
         np.fill_diagonal(conn_matrix, 0)
 
-        # Normalize the structural connectivity matrix
-        if not is_functional:
-
-            # Apply Gaussian normalization
-            mu = np.mean(conn_matrix)
-            sigma = np.std(conn_matrix)
-
-            if sigma > 0:
-                # Z-score (mean=0, std=1)
-                conn_matrix = (conn_matrix - mu) / sigma
-                
-                # Rescale to mean = 0.5, std = 0.1
-                conn_matrix = conn_matrix * 0.1 + 0.5
-
         # Convert to DataFrame with original ROI labels
         conn_df = pd.DataFrame(conn_matrix, index=roi_labels, columns=roi_labels)
 
@@ -111,7 +98,7 @@ def create_individual_matrices(input_file, output_dir, ses, is_functional=False,
             else:
                 output_file = output_dir / f"{subject}_{ses}_functional_connectivity_matrix.csv"
         else:
-            output_file = output_dir / f"{subject}_{ses}_structural_connectivity_matrix_normalized.csv"
+            output_file = output_dir / f"{subject}_{ses}_structural_connectivity_matrix.csv"
         conn_df.to_csv(output_file)
 
 def main():
