@@ -52,13 +52,28 @@ def process_subject_functional(args):
         return
         
     # Compute functional connectivity with the combined atlas
-    connectivity_matrix, fisher_z_matrix = compute_functional_connectivity(
-        subject_id=subject_id,
-        timeseries=timeseries,
-        output_dir=output_dir,
-        combined_labels=combined_labels,
-        ses=ses
-    )
+    try:
+        connectivity_matrix, fisher_z_matrix = compute_functional_connectivity(
+            subject_id=subject_id,
+            timeseries=timeseries,
+            output_dir=output_dir,
+            combined_labels=combined_labels,
+            ses=ses
+        )
+    except ValueError as e:
+        print(f"Error computing connectivity for {subject_id}: {e}")
+        with open(error_log_path, "a") as f:
+            f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Error computing connectivity for subject {subject_id}:\n")
+            f.write(f"{e!s}\n\n")
+        return
+    except Exception as e:
+        print(f"Unexpected error for {subject_id}: {e}")
+        with open(error_log_path, "a") as f:
+            f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Unexpected error for subject {subject_id}:\n")
+            f.write(f"{e!s}\n\n")
+        return
 
     # Visualize data by uncommenting the line below
     # visualize_fc_data(subject_id, fisher_z_matrix, output_dir, ses, True)
