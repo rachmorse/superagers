@@ -132,13 +132,26 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
     # Iterate over all possible subject directories
     subjects_df = pd.read_csv(subject_csv)
 
-    if "id" in subjects_df.columns:
-        subjects = [f"sub-{subject}" for subject in subjects_df["id"].tolist()]
-    else:
+    if "id" not in subjects_df.columns:
         print("Error: 'id' column not found in CSV file.")
-        subjects = []
+        subjects, subs_tp1, subs_tp2 = [], [], []
+    else:
+        # Add sub- prefix to subject IDs
+        subjects_df["id_rewritten"] = [f"sub-{subject}" for subject in subjects_df["id"].tolist()]
+        subjects = subjects_df["id_rewritten"].tolist()
 
-    # Now process each subject
+        # TP1 subs: only those with non-NA superager_tp1
+        subs_tp1 = subjects_df.loc[subjects_df["superager_tp1"].notna(), "id_rewritten"].tolist()
+
+        # TP2 subs: only those with non-NA superager_tp2
+        subs_tp2 = subjects_df.loc[subjects_df["superager_tp2"].notna(), "id_rewritten"].tolist()
+
+    # Now process each subject with seperate handling for each cohort and session
+    if ses == "1":
+        subjects = subs_tp1
+    else:
+        subjects = subs_tp2
+
     for subject in subjects:
         # Only keep subjects that belong to the current cohort by ID convention
         try:
@@ -164,7 +177,6 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
             # Track subjects with no bold file
             if not bold_file_exists:
                 subjects_excluded_no_bold.append(subject)
-                print(f"BOLD file not found for {subject}: {scrubbed_data} or {unscrubbed_file}")
                 continue  
 
             # If FWD file exists, check motion criteria
@@ -186,7 +198,6 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
                 # Track subjects with no bold file
                 if not bold_file_exists:
                     subjects_excluded_no_bold.append(subject)
-                    print(f"BOLD file not found for {subject}: {scrubbed_data} or {unscrubbed_file}")
                     continue 
 
                 if fd_file.exists() and bold_file_exists:
@@ -202,7 +213,6 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
                 # Track subjects with no bold file
                 if not bold_file_exists:
                     subjects_excluded_no_bold.append(subject)
-                    print(f"BOLD file not found for {subject}: {scrubbed_data} or {unscrubbed_file}")
                     continue 
 
                 if fd_file.exists() and bold_file_exists:
@@ -287,7 +297,7 @@ def main(
     ]
 
     if multi:
-        with Pool(4) as pool:
+        with Pool(2) as pool:
             pool.map(process_subject_extract, args)
     else:
         for arg in args:
@@ -335,5 +345,5 @@ if __name__ == "__main__":
                 output_dir=output_directory,
                 roi_indices=roi_indices,
                 atlas_file_template=atlas_file_template,
-                multi=False, 
+                multi=True, 
             )
