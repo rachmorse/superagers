@@ -16,7 +16,7 @@ This repository contains the analysis scripts for our study on superagers, which
 ## Folders
 
 ### classification
-- **Purpose:** These scripts clean the data from the BBHI and BBHI senior cohorts to be able to merge the relevant data, then classify participants as superagers or non-superagers and as maintainers or decliners. 
+- **Purpose:** These scripts clean the data from the BBHI and BBHI senior cohorts to be able to merge the relevant data, then classify participants as superagers or non-superagers. 
 - **Scripts:**
     - `check_invalid_nps`: Prepares BBHI and BBHI senior raw data, filtering for those with comments about their neuropsychological data. It saves the comments, so they can be read manually to exclude subjects with invalid data. 
     - `cleaning_bbhi_data.ipynb`: Cleans BBHI data for merge.
@@ -36,9 +36,9 @@ This repository contains the analysis scripts for our study on superagers, which
     - `run_pipeline.py`: Runs all scripts above, looping through each timepoint and cohort.  
 
 ### fmri_analysis
-- **Purpose:** These scripts scrub the preprocessed fMRI data, extract timeseries data, compute functional connectivity correlations and conduct statistical significance testing on the correlations. 
+- **Purpose:** These scripts scrub the preprocessed fMRI data, extract timeseries data, and compute functional connectivity correlations. 
 - **Scripts:**
-    - `01_scrubbing_fMRI.py`: Scrubs fMRI BOLD images based on a Framewise Displacement (FWD) threshold to help mitigate motion artifacts. It either removes or interpolates frames where a subject has a high FWD (i.e. 0.5).
+    - `01_scrubbing_fMRI.py`: Scrubs fMRI BOLD images based on a Framewise Displacement (FWD) threshold to help mitigate motion artifacts. It interpolates frames where a subject has a high FWD.
     - `02_extract_subjects_timeseries.py`: Extracts timeseries data from fMRI BOLD images using the Schaefer 200 ROI, 7 network atlas and 14 aseg-derived subcortical regions. NOTE - this script excludes participants who had >30% of their frames scrubbed.
         - Uses the functions in the script `extract_timeseries.py`.
     - `03_compute_subject_functional_connectivity.py`: Computes various functional connectivity metrics for subjects from the timeseries data. The script processes timeseries data, computes functional connectivity with and without Fisher z-transformation, and saves the results to CSV files.
@@ -47,7 +47,7 @@ This repository contains the analysis scripts for our study on superagers, which
     - The scripts used to preprocesses the fMRI data used here are available in another [repository](https://github.com/rachmorse/fmri_preprocessing).
 
 ### structural_analysis
-- **Purpose:** These scripts extract the structural connectivity matrices data using MRTrix. 
+- **Purpose:** This script extract the structural connectivity matrices data using MRTrix. 
 - **Scripts:**
     - `generate_structural_matrices.py`: Computes various structural connectivity matrices from the MRTrix data include all-to-all ROI and network specific matrices. Also, visualizes the matrices. 
         - Uses functions from the script `compute_functional_connectivity.py`.
@@ -56,7 +56,6 @@ This repository contains the analysis scripts for our study on superagers, which
 
 ### structural_functional_coupling
 - **Purpose:** These scripts run prepare and calculate the structural functional coupling (SFC) metrics. To calculate SFC, we use the Pearson's correlation coefficient between the row for a given ROI in the structural connectome and the corresponding row in the functional connectome. We exclude self-connections and any connections where either the structural or functional connectivity value equaled zero (method from this [paper](https://doi.org/10.1038/s41467-023-41686-9)).
- 
 - **Scripts:**
     - `01_convert_to_individual_matrix.py`: Converts the functional and structural connectivity data from a shared CSV with all participants into individual 214x214 matrices. 
     - `02_structural_functional_coupling.py`: Computes and visualizes SFC using the normalized structural connectivity data and untransformed functional connectivity data. 
