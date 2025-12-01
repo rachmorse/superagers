@@ -321,6 +321,9 @@ def main(
     # analyze_threshold(all_fwd_df, 0.2)
     # analyze_threshold(all_fwd_df, 0.5)
 
+    # Print subjects to be processed
+    print(f"Subjects to be processed: {subjects}")
+
     # Parallel processing
     if multi:
         with Pool(2) as pool:
@@ -392,5 +395,5 @@ if __name__ == "__main__":
         bold_pattern,
         scrubbed_pattern,
         subject_dir_pattern,
-        multi=False,
+        multi=True,
     )
