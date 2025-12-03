@@ -2,9 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 from pathlib import Path
-import matplotlib.pyplot as plt
 import seaborn as sns
-import os 
 import nibabel as nib
 from nilearn import plotting, surface
 from nilearn.datasets import fetch_atlas_schaefer_2018, fetch_surf_fsaverage
@@ -30,13 +28,13 @@ def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, struct
     already_processed = []
 
     # Iterate over all possible subject directories
-    for subject in os.listdir(mask_dir):
+    for subject in mask_dir.iterdir():
         if not subject.startswith("sub-"):
             continue
         
         # Check if the required directory exists and hasn't been processed yet  
         func_conn_path = functional_dir / f"{subject}_{ses}_functional_connectivity_matrix_fisher_z.csv"
-        struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix_normalized.csv"
+        struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix.csv"
         output_file_path = output_folder / f"{subject}_{ses}_structure_function_coupling.csv"
 
         if func_conn_path.exists() and struct_conn_path.exists() and not output_file_path.exists():
@@ -47,6 +45,7 @@ def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, struct
             print(f"Functional connectivity matrix not found for {subject} {ses} likely due to scrubbing exclusion.")
 
     return subjects_to_process, already_processed
+
 
 def calculate_structure_function_coupling(structural_dir, functional_dir, subject, ses):
     """Calculate structure-function coupling for each ROI
@@ -63,7 +62,7 @@ def calculate_structure_function_coupling(structural_dir, functional_dir, subjec
     
     # Define paths using specific directory structure
     func_conn_path = functional_dir / f"{subject}_{ses}_functional_connectivity_matrix_fisher_z.csv"
-    struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix_normalized.csv"
+    struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix.csv"
 
     # Load connectivity matrices
     func_conn_df = pd.read_csv(func_conn_path)
@@ -173,4 +172,3 @@ def main():
         
 if __name__ == "__main__":
     main()
-    
