@@ -42,12 +42,11 @@ def fisher_transform(connectivity_file, output_directory, ses):
 
 
 def consolidate_sfc_data(ses, sfc_df):
-    """
-    Creates a single DataFrame with all SFC data, where each row is a participant
+    """Creates a single DataFrame with all SFC data, where each row is a participant
     and each column is an ROI.
     
     Args:
-        ses (str): Session identifier 
+        ses (str): Timepoint
         sfc_df (Path): Path to the directory containing SFC data
         
     Returns:
@@ -102,7 +101,7 @@ def consolidate_sfc_data(ses, sfc_df):
             print(f"Error processing file {subject_file}: {e}")
     
     if not all_data:
-        print("No data was successfully processed.")
+        print("No data were successfully processed.")
         return None
     
     # Convert the dictionary to a DataFrame
@@ -143,8 +142,9 @@ def save_group_averages(group_df, group_name, output_file):
     # Save to CSV
     result_df_transposed.to_csv(output_file)
 
+
 def process_connectivity(connectivity_file: Union[str, Path], superager_file: Union[str, Path], output_files: dict):
-    """Process and merge connectivity data with superager and maintainer status, 
+    """Process and merge connectivity data with superager status, 
     then calculate averages.
 
     Args:
@@ -176,34 +176,20 @@ def process_connectivity(connectivity_file: Union[str, Path], superager_file: Un
         save_group_averages(df, group_name, output_file)
 
     # Process individual groups
-    for column, prefix in [('superager', 'superagers'), ('maintainer', 'maintainers')]:
+    for column, prefix in [('superager', 'superagers')]:
         for label, group_df in df.groupby(column):
             if label == 1:
                 group_name = f"{prefix}"
             else:
-                group_name = f"non_{prefix}" if column == 'superager' else "decliners"
+                group_name = f"non_{prefix}"
             output_file = output_files[group_name]
             save_group_averages(group_df, group_name, output_file)
 
-    # Process combined groups
-    for (superager_label, maintainer_label), group_df in df.groupby(['superager', 'maintainer']):
-        if superager_label == 1 and maintainer_label == 1:
-            group_name = 'superager_maintainers'
-        elif superager_label == 1 and maintainer_label == 0:
-            group_name = 'superager_decliners'
-        elif superager_label == 0 and maintainer_label == 1:
-            group_name = 'non_superager_maintainers'
-        else:
-            group_name = 'non_superager_decliners'
-
-        output_file = output_files[group_name]
-        save_group_averages(group_df, group_name, output_file)
-
     print("CSV files created successfully!")
 
+
 def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=0.47):
-    """
-    Create multi-view brain surface visualizations of structure-function coupling from a DataFrame
+    """Create multi-view brain surface visualizations of structure-function coupling from a DataFrame
     
     Args:
         coupling_file (pd.DataFrame): DataFrame with ROI names as index and coupling values in first column
@@ -420,12 +406,6 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
         'all_subjects': output_directory_group / "all_subjects_average.csv",
         'superagers': output_directory_group / "superagers_average.csv",
         'non_superagers': output_directory_group / "non_superagers_average.csv",
-        'maintainers': output_directory_group / "maintainers_average.csv",
-        'decliners': output_directory_group / "decliners_average.csv",
-        'superager_maintainers': output_directory_group / "superager_maintainers_average.csv",
-        'superager_decliners': output_directory_group / "superager_decliners_average.csv",
-        'non_superager_maintainers': output_directory_group / "non_superager_maintainers_average.csv",
-        'non_superager_decliners': output_directory_group / "non_superager_decliners_average.csv",
     }
 
     # Combine individual data into one df
@@ -455,7 +435,7 @@ if __name__ == "__main__":
             print(f"Processing ses-{ses} ...")
             print("--------------------------")
 
-            superager_file = "/home/rachel/Desktop/data/maintainer_superager_data.csv"  
+            superager_file = "/home/rachel/Desktop/data/superager.csv"  
             sfc_df = Path(f"/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-{ses}")
             output_directory = Path(f"{sfc_df}/all_to_all_roi_matrices")
             output_directory_group = Path(f"{sfc_df}/group_connectivity_matrices")
@@ -477,3 +457,4 @@ if __name__ == "__main__":
                 fisher_z_connectivity_file=fisher_z_connectivity_file,
                 output_group_connectivity_file=output_group_connectivity_file
             )
+            
