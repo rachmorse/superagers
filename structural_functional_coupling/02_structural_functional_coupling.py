@@ -29,6 +29,7 @@ def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, struct
 
     # Iterate over all possible subject directories
     for subject in mask_dir.iterdir():
+        subject = str(subject.name)
         if not subject.startswith("sub-"):
             continue
         
@@ -169,6 +170,7 @@ def main():
             results = calculate_structure_function_coupling(structural_dir, functional_dir, subject, ses)
 
             save_coupling_results(results, output_dir)
+        
         
 if __name__ == "__main__":
     main()
