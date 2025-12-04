@@ -19,7 +19,7 @@ def fisher_transform(connectivity_file, output_directory, ses):
     Args:
         correlations (np.ndarray): Correlation coefficients.
         output_dir (Path): Directory to save the transformed data.
-        ses (str): Session identifier 
+        ses (str): Timepoint
         connectivity_file (Path): Path to the CSV file containing the correlation coefficients.
 
     Returns:
@@ -116,19 +116,23 @@ def consolidate_sfc_data(ses, sfc_df):
     return consolidated_df
 
 
-def save_group_averages(group_df, group_name, output_file):
+def save_group_averages(group_df, group_name, output_file, ses):
     """Compute the means for a group, drop non-relevant columns, and save to CSV.
     
     Args:
         group_df (pd.DataFrame): DataFrame containing the group data.
         group_name (str): Name of the group.
         output_file (Union[str, Path]): Path to save the output CSV file.
+        ses (str): Timepoint
     """
     mean_vals = group_df.mean(numeric_only=True)
     
     # Prepare and save the result DataFrame
     result_df = pd.DataFrame([mean_vals], index=[group_name])
-    result_df = result_df.drop(columns=['superager', 'maintainer'], errors='ignore')
+    if ses == "01":
+        result_df = result_df.drop(columns=['superager_tp1'], errors='ignore')
+    else:
+        result_df = result_df.drop(columns=['superager_tp2'], errors='ignore')
     result_df.index.name = 'id'
 
     # Transpose the DataFrame so ROI names are rows instead of columns
@@ -143,7 +147,7 @@ def save_group_averages(group_df, group_name, output_file):
     result_df_transposed.to_csv(output_file)
 
 
-def process_connectivity(connectivity_file: Union[str, Path], superager_file: Union[str, Path], output_files: dict):
+def process_connectivity(connectivity_file: Union[str, Path], superager_file: Union[str, Path], output_files: dict, ses: str):
     """Process and merge connectivity data with superager status, 
     then calculate averages.
 
@@ -151,6 +155,7 @@ def process_connectivity(connectivity_file: Union[str, Path], superager_file: Un
         connectivity_file (Union[str, Path]): Path to the connectivity CSV file.
         superager_file (Union[str, Path]): Path to the superager status CSV file.
         output_files (dict): Dictionary to save averages for each category.
+        ses (str): Timepoint
     """
     # Load the data
     df_connectivity = pd.read_csv(connectivity_file)
@@ -160,7 +165,10 @@ def process_connectivity(connectivity_file: Union[str, Path], superager_file: Un
     df_connectivity = df_connectivity.rename(columns={df_connectivity.columns[0]: 'id'})
 
     # Ensure necessary columns are present
-    df_superager = df_superager[['id', 'superager', 'maintainer']]
+    if ses == "01":
+        df_superager = df_superager[['id', 'superager_tp1']]
+    else:   
+        df_superager = df_superager[['id', 'superager_tp2']]
 
     # Ensure 'id' columns have the same data type
     df_connectivity['id'] = df_connectivity['id'].astype(str)
@@ -168,22 +176,29 @@ def process_connectivity(connectivity_file: Union[str, Path], superager_file: Un
 
     # Merge dataframes on 'id'
     df = pd.merge(df_connectivity, df_superager, on='id', how="inner")
+    print(f"Length of data before merge: connectivity={len(df_connectivity)}, superager={len(df_superager)}")
+    print(f"Length of data after merge: {len(df)}")
 
     # First, process the "all subjects" group
     group_name = 'all_subjects'
     if group_name in output_files:
         output_file = output_files[group_name]
-        save_group_averages(df, group_name, output_file)
+        save_group_averages(df, group_name, output_file, ses)
 
     # Process individual groups
-    for column, prefix in [('superager', 'superagers')]:
+    if ses == "01":
+        column_prefix = [('superager_tp1', 'superagers_tp1')]
+    else:
+        column_prefix = [('superager_tp2', 'superagers_tp2')]
+
+    for column, prefix in column_prefix:
         for label, group_df in df.groupby(column):
             if label == 1:
                 group_name = f"{prefix}"
             else:
                 group_name = f"non_{prefix}"
             output_file = output_files[group_name]
-            save_group_averages(group_df, group_name, output_file)
+            save_group_averages(group_df, group_name, output_file, ses)
 
     print("CSV files created successfully!")
 
@@ -193,10 +208,10 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
     
     Args:
         coupling_file (pd.DataFrame): DataFrame with ROI names as index and coupling values in first column
-        group_name (str): Name of the group (e.g., 'superagers', 'maintainers')
+        group_name (str): Name of the group (e.g., 'superagers_tp1')
         output_dir (str or Path): Directory to save visualizations
         vmin, vmax (float): Min and max values for color scaling
-        ses (str): Session identifier
+        ses (str): Timepoint
     """
     coupling_csv = Path(f"{coupling_file}/{group_name}_average.csv")
     coupling_df = pd.read_csv(coupling_csv, index_col=0)
@@ -404,19 +419,24 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
     # Define output file paths for different categories
     output_files = {
         'all_subjects': output_directory_group / "all_subjects_average.csv",
-        'superagers': output_directory_group / "superagers_average.csv",
-        'non_superagers': output_directory_group / "non_superagers_average.csv",
+        'superagers_tp1': output_directory_group / "superagers_tp1_average.csv",
+        'non_superagers_tp1': output_directory_group / "non_superagers_tp1_average.csv",
+        'superagers_tp2': output_directory_group / "superagers_tp2_average.csv",
+        'non_superagers_tp2': output_directory_group / "non_superagers_tp2_average.csv",
     }
 
     # Combine individual data into one df
-    consolidate_sfc_data(ses, sfc_df)
+    consolidated_df = consolidate_sfc_data(ses, sfc_df)
+    if consolidated_df is None:
+        print(f"Skipping ses-{ses}: no SFC data.")
+        return
 
     # Fisher-z transform the connectivity data
     fisher_transform(connectivity_file, output_directory, ses)
 
     # Process the connectivity data and save averages
-    process_connectivity(connectivity_file, superager_file, output_files)
-
+    process_connectivity(fisher_z_connectivity_file, superager_file, output_files, ses)
+    
     for group_name in group_names:
         # Visualize SFC in selected groups
         visualize_coupling(
@@ -428,7 +448,12 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
 
 if __name__ == "__main__":
     sessions = ["01", "02"]
-    group_names = ["superagers", "non_superagers"] # This is to loop through the visualization
+
+    for ses in sessions:
+        if ses == "01":
+            group_names = ["superagers_tp1", "non_superagers_tp1"] # This is to loop through the visualization
+        else:
+            group_names = ["superagers_tp2", "non_superagers_tp2"]
 
     for ses in sessions:
             print("--------------------------")
