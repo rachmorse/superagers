@@ -95,12 +95,13 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
         logger.info(f"Processing {region} subcortical regions")
 
         # Set up FSL environment variables inside this function
-        os.environ["FSLDIR"] = "/home/rachel/fsl"
+        # Automatically pulls 6.0.4 for consistency with fMRI analysis
+        os.environ["FSLDIR"] = "/vol/software/fsl_6_0_4"
         os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:{os.environ['PATH']}"
         os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
 
         # Add this path as it has trouble finding fslmaths otherwise
-        fslmaths_bin = "/home/rachel/fsl/bin/fslmaths"
+        fslmaths_bin = "/vol/software/fsl_6_0_4/bin/fslmaths"
 
         # Process each label
         labels_list = subcortical_labels.split()

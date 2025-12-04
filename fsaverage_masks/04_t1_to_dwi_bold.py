@@ -199,7 +199,7 @@ def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, ou
 
     cmd = (
         f'export PATH="{shim_dir}:$PATH"; '
-        f'source /vol/software/fsl/etc/fslconf/fsl.sh; '
+        f'source /vol/software/fsl_6_0_4/etc/fslconf/fsl.sh; '
         f'epi_reg '
         f'--epi={b0_ref} '
         f'--t1={t1_anat} '
@@ -487,9 +487,10 @@ def main():
             print("-------------------------")
 
             # Set up FSL so it runs correctly in this script
-            os.environ["FSLDIR"] = "/vol/software/fsl"
+            # Automatically pulls 6.0.4 for consistency with fMRI analysis
+            os.environ["FSLDIR"] = "/vol/software/fsl_6_0_4"
             os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:" + os.environ["PATH"]
-            subprocess.run(["bash", "-c", "source /vol/software/fsl/etc/fslconf/fsl.sh"], check=True)
+            subprocess.run(["bash", "-c", "source /vol/software/fsl_6_0_4/etc/fslconf/fsl.sh"], check=True)
 
             # Set FSL to output compressed NIFTI files
             os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
