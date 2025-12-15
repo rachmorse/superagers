@@ -241,8 +241,12 @@ def main(
         subject_dir_pattern (str): Relative path pattern to the session/native_T1 directory.
         multi (bool): If True, enables parallel processing using multiprocessing. Defaults to False.
     """
-    error_log = os.path.join(output_data, "scrubbing_errors.txt")
-    all_fwd_path = os.path.join(output_data, "all_fwd.csv")
+    folder_name = subject_dir_pattern.split('/')[-1]
+    summary_dir = os.path.join(output_data, folder_name)
+    os.makedirs(summary_dir, exist_ok=True)
+
+    error_log = os.path.join(summary_dir, "scrubbing_errors.txt")
+    all_fwd_path = os.path.join(summary_dir, "all_fwd.csv")
 
     # Concatenate all framewise_displ.txt files (per subject) into a single DataFrame
     fwd_list = []
@@ -272,8 +276,9 @@ def main(
             
         # Check if scrubbed data already exists in either location
         threshold_str = str(threshold)
-        local_scrubbed_file = Path(f"{output_data}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold_str}.nii.gz")
-        remote_scrubbed_file = Path(f"{root}/{subject}/ses-{ses}/native_T1/{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold_str}.nii.gz")
+        local_scrubbed_file = Path(scrubbed_pattern.format(subject=subject, ses=ses, threshold=threshold, output_data=output_data))
+        remote_pattern_str = scrubbed_pattern.replace("{output_data}", str(root))
+        remote_scrubbed_file = Path(remote_pattern_str.format(subject=subject, ses=ses, threshold=threshold))
         
         # Only add subject if scrubbed data doesn't exist in either location
         if not local_scrubbed_file.exists() and not remote_scrubbed_file.exists():
@@ -364,36 +369,54 @@ def main(
 if __name__ == "__main__":
     # Change to your paths and settings
     threshold = 0.5
-    output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
     ses = "02"
-    root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed" 
-    subject_dir_pattern = f"ses-{ses}/native_T1"
+    root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preproc_fs6-recon"
+    output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
 
     # Create the output directory if it does not exist
     output_data.mkdir(parents=True, exist_ok=True)
 
-    # Define file patterns
-    bold_pattern = os.path.join(
-        root,
-        "{subject}",
-        subject_dir_pattern,
-        "{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space.nii.gz",
-    )
-    scrubbed_pattern = os.path.join(
-        "{output_data}",
-        "{subject}",
-        f"ses-{ses}",
-        "native_T1",
-        "{subject}_ses-{ses}_run-01_rest_bold_ap_T1-space_scrubbed_{threshold}.nii.gz",
-    )
+    configs = [
+        {
+            "folder_name": "native_T1",
+            "file_suffix": "T1-space"
+        },
+        {
+            "folder_name": "MNI_2mm",
+            "file_suffix": "MNI-space"
+        }
+    ]
 
-    main(
-        ses,
-        root,
-        output_data,
-        threshold,
-        bold_pattern,
-        scrubbed_pattern,
-        subject_dir_pattern,
-        multi=True,
-    )
+    for config in configs:
+        folder_name = config["folder_name"]
+        file_suffix = config["file_suffix"]
+        
+        subject_dir_pattern = f"ses-{ses}/{folder_name}"
+        
+        print(f"\n--- Processing {folder_name} ---")
+
+        # Define file patterns
+        bold_pattern = os.path.join(
+            root,
+            "{subject}",
+            subject_dir_pattern,
+            f"{{subject}}_ses-{{ses}}_run-01_rest_bold_ap_{file_suffix}.nii.gz",
+        )
+        scrubbed_pattern = os.path.join(
+            "{output_data}",
+            "{subject}",
+            f"ses-{ses}",
+            folder_name,
+            f"{{subject}}_ses-{{ses}}_run-01_rest_bold_ap_{file_suffix}_scrubbed_{{threshold}}.nii.gz",
+        )
+
+        main(
+            ses,
+            root,
+            output_data,
+            threshold,
+            bold_pattern,
+            scrubbed_pattern,
+            subject_dir_pattern,
+            multi=False,
+        )
