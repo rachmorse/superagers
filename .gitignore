@@ -18,3 +18,4 @@ test_diff.py
 temp.py
 *.nii.gz
 *.xlsx
+*.log
