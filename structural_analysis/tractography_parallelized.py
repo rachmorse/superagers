@@ -23,7 +23,9 @@ def setup_logging(output_dir):
     Returns:
         logging.Logger: Logger object for logging messages.
     """
-    log_file = output_dir / f"tractography_processing_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    log_dir = output_dir / "logs"
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / f"tractography_processing_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     
     logging.basicConfig(
         level=logging.INFO,
@@ -59,37 +61,50 @@ def run_command(cmd, shell=True):
     Raises:
         subprocess.CalledProcessError: If the command fails.
     """
-    logging.info(f"Running command: {cmd if isinstance(cmd, str) else ' '.join(cmd)}")
-    subprocess.run(cmd, shell=shell, check=True, executable="/bin/bash")
+    if isinstance(cmd, list):
+        cmd_str = ' '.join(str(c) for c in cmd)
+    else:
+        cmd_str = cmd
+        
+    logging.info(f"Running command: {cmd_str}")
+    
+    try:
+        subprocess.run(cmd_str, shell=shell, check=True, executable="/bin/bash", capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Command failed: {e.cmd}")
+        logging.error(f"STDOUT: {e.stdout}")
+        logging.error(f"STDERR: {e.stderr}")
+        raise e
 
 
-def get_subjects_to_process(dti_dir, done_list_path=None):
-    """Generate a list of subjects to process.
+def get_subjects_to_process(dti_dirs, done_list_path=None):
+    """Generate a list of subjects to process from multiple directories.
     
     Args:
-        dti_dir (Path): Path to directory containing subject folders (e.g. DWI_dtifit_tp1).
+        dti_dirs (list of Path): List of directories containing subject folders.
         done_list_path (Path, optional): Path to a text file listing completed subjects.
 
     Returns:
-        list: List of subject IDs (e.g., 'sub-1001').
+        list: List of tuples (subject_id, source_dir).
     """
-    if not dti_dir.exists():
-        logging.warning(f"DTI directory not found: {dti_dir}")
-        return []
-
-    subjects = []
+    subjects_info = []
     
-    # Scan directory
-    for sub_path in dti_dir.glob("sub-*"):
-        subjects.append(sub_path.name) # e.g., 'sub-12345'
+    for dti_dir in dti_dirs:
+        if not dti_dir.exists():
+            logging.warning(f"DTI directory not found: {dti_dir}")
+            continue
+
+        # Scan directory
+        for sub_path in dti_dir.glob("sub-*"):
+            subjects_info.append((sub_path.name, dti_dir))
         
     # Filter out done subjects if a list is provided
     if done_list_path and done_list_path.exists():
         with open(done_list_path, 'r') as f:
             done_subjects = set(line.strip() for line in f)
-        subjects = [s for s in subjects if s not in done_subjects]
+        subjects_info = [(s, d) for s, d in subjects_info if s not in done_subjects]
         
-    return sorted(subjects)
+    return sorted(subjects_info, key=lambda x: x[0])
 
 
 def check_inputs(subject, input_corr_dwi, fs_dir):
@@ -107,12 +122,12 @@ def check_inputs(subject, input_corr_dwi, fs_dir):
         logging.error(f"{subject}: No eddy corrected data found at {input_corr_dwi}")
         return False
     if not fs_dir.exists():
-        logging.error(f"{subject}: No FreeSurfer directory found at {fs_dir}")
+        logging.error(f"{subject}: No recon-all directory found at {fs_dir}")
         return False
     return True
 
 
-def run_coregistration(subject, wd, input_corr_dwi, fs_dir, git_dir, matlab_cmd):
+def run_coregistration(subject, wd, input_corr_dwi, fs_dir, git_dir, spm_path, matlab_cmd):
     """Performs structural to diffusion coregistration.
 
     This function copies and unzips the eddy corrected data, converts FreeSurfer
@@ -135,17 +150,16 @@ def run_coregistration(subject, wd, input_corr_dwi, fs_dir, git_dir, matlab_cmd)
         input_corr_dwi_temp = f"{wd}_eddy_corrected_data.nii" # No .gz
         run_command(f"gunzip -f {wd}_eddy_corrected_data.nii.gz")
         
-        # Convert FreeSurfer T1 and aparc+aseg
+        # Convert recon-all T1 and aparc+aseg
         run_command(f"mrconvert -force {fs_dir}/mri/T1.mgz {wd}_fs2diff_coords_T1w.nii")
         run_command(f"mrconvert -force {fs_dir}/mri/aparc+aseg.mgz '{wd}_fs2diff_coords_aparc+aseg.nii'")
         
         # Extract b0
-        run_command(f"fslroi {input_corr_dwi_temp} {wd}_b0.nii.gz 0 1")
-        run_command(f"gzip -f -d {wd}_b0.nii.gz") # Becomes b0.nii
+        run_command(f"fslroi {input_corr_dwi_temp} {wd}_b0.nii 0 1")
         
         # MATLAB Coregistration
         matlab_cmd_full = (
-            f"{matlab_cmd} -r \"addpath('{git_dir}'); "
+            f"{matlab_cmd} -r \"addpath(genpath('{str(spm_path)}')); addpath('{git_dir}'); "
             f"spm_coregister_parcellation('{wd}_b0.nii', '{wd}_fs2diff_coords_T1w.nii', "
             f"'{wd}_fs2diff_coords_aparc+aseg.nii'); exit;\""
         )
@@ -173,31 +187,26 @@ def get_working_dwi_file(wd, input_corr_dwi):
     return current_dwi
 
 
-def run_dwi2mask(subject, wd, input_corr_dwi_brainMASK, dwi_file, input_corr_val, input_corr_vec, threads):
-    """Generates a brain mask for the DWI data.
+def prepare_brain_mask(subject, wd, input_corr_dwi_brainMASK):
+    """Prepares the brain mask by copying the robust T1-derived mask.
 
-    If a pre-computed mask exists (input_corr_dwi_brainMASK), it is copied.
-    Otherwise, dwi2mask is used to compute it from the DWI data.
+    This function exclusively uses the pre-computed T1w_brain_mask_dMRIres.nii.gz.
+    If this mask is missing, processing for this subject will fail.
 
     Args:
         subject (str): Subject ID.
         wd (Path): Working directory.
         input_corr_dwi_brainMASK (Path): Path to the pre-existing brain mask.
-        dwi_file (Path): Path to the DWI data file.
-        input_corr_val (Path): Path to the bval file.
-        input_corr_vec (Path): Path to the bvec file.
-        threads (int): Number of threads to use.
+    
+    Raises:
+        FileNotFoundError: If the robust T1 mask is missing.
     """
+    logging.info(f"{subject}: using robust T1 mask")
     if not Path(f"{wd}_mask.nii.gz").exists():
-        # Fallback logic to dwi2mask if not copied
         if input_corr_dwi_brainMASK.exists():
             run_command(f"cp {input_corr_dwi_brainMASK} {wd}_mask.nii.gz")
         else:
-            run_command([
-                "dwi2mask", str(dwi_file), f"{wd}_mask.nii.gz",
-                "-fslgrad", str(input_corr_vec), str(input_corr_val),
-                "-nthreads", str(threads)
-            ])
+            raise FileNotFoundError(f"Robust T1 mask not found for {subject} at {input_corr_dwi_brainMASK}")
 
 
 def run_dwi2response(subject, wd, dwi_file, input_corr_val, input_corr_vec, threads):
@@ -211,6 +220,7 @@ def run_dwi2response(subject, wd, dwi_file, input_corr_val, input_corr_vec, thre
         input_corr_vec (Path): Path to the bvec file.
         threads (int): Number of threads to use.
     """
+    logging.info(f"{subject}: Response Function Estimation")
     if not Path(f"{wd}_desc-csf_response.txt").exists():
         run_command([
             "dwi2response", "dhollander", str(dwi_file),
@@ -234,6 +244,7 @@ def run_dwi2fod(subject, wd, dwi_file, input_corr_val, input_corr_vec, threads):
         input_corr_vec (Path): Path to the bvec file.
         threads (int): Number of threads to use.
     """
+    logging.info(f"{subject}: FOD Estimation")
     if not Path(f"{wd}_desc-wm_fod.mif").exists():
         run_command([
             "dwi2fod", "msmt_csd", str(dwi_file),
@@ -260,26 +271,6 @@ def run_5ttgen(subject, wd):
             f"{wd}_fs2diff_coords_aparc+aseg.nii",
             f"{wd}_fs2diff_coords_aparc+aseg_5TT.nii"
         ])
-
-
-def run_labelconvert(subject, wd, fs_colorlut, fs_default):
-    """Converts the FreeSurfer parcellation to a format suitable for connectivity analysis.
-
-    Args:
-        subject (str): Subject ID.
-        wd (Path): Working directory.
-        fs_colorlut (Path): Path to the FreeSurfer ColorLUT file.
-        fs_default (Path): Path to the default FreeSurfer label file.
-    """
-    logging.info(f"{subject}: Creating matrix nodes")
-    if not Path(f"{wd}_fs2diff_coords_aparc+aseg_nodes.nii.gz").exists():
-            run_command([
-                "labelconvert",
-                f"{wd}_fs2diff_coords_aparc+aseg.nii",
-                str(fs_colorlut), str(fs_default),
-                f"{wd}_fs2diff_coords_aparc+aseg_nodes.nii.gz",
-                "-force"
-            ])
 
 
 def run_tractography(subject, wd, threads):
@@ -364,10 +355,37 @@ def process_subject(subject, dti_dir, recon_all_dir, working_dir_root, git_dir, 
         tuple: (subject, success)
     """
     
+    start_cwd = Path.cwd()
+    
     # Directories
     id_dir = dti_dir / subject
-    wd = working_dir_root / f"{subject}_dwi"
-    fs_dir = recon_all_dir / f"{subject}_ses-01" 
+    
+    # Create output directory for this subject
+    subject_dir = working_dir_root / subject
+    subject_dir.mkdir(parents=True, exist_ok=True)
+    
+    # File prefix for outputs (e.g. /path/to/sub-01/sub-01_dwi_...)
+    wd = subject_dir / f"{subject}_dwi"
+    
+    # Handle recon-all path:
+    possible_fs_dirs = []
+    
+    if "_ses-" in subject:
+        # e.g. 'sub-44010_ses-01' -> try '..._run-01' then base
+        possible_fs_dirs.append(recon_all_dir / f"{subject}_run-01")
+        possible_fs_dirs.append(recon_all_dir / f"{subject}")
+    else:
+        # Fallback
+        possible_fs_dirs.append(recon_all_dir / f"{subject}_ses-01_run-01")
+        possible_fs_dirs.append(recon_all_dir / f"{subject}_ses-01") # Just in case
+
+    fs_dir = possible_fs_dirs[0] # Default
+    for p in possible_fs_dirs:
+        if p.exists():
+            fs_dir = p
+            break
+            
+    logging.info(f"DEBUG: Checking FS dirs: {[str(p) for p in possible_fs_dirs]} -> Selected: {fs_dir}") 
     
     # Input files
     input_corr_dwi = id_dir / "eddy_corrected_data.nii.gz"
@@ -376,8 +394,8 @@ def process_subject(subject, dti_dir, recon_all_dir, working_dir_root, git_dir, 
     input_corr_dwi_brainMASK = id_dir / "T1w_brain_mask_dMRIres.nii.gz"
     
     # Dependencies
-    fs_default = git_dir / "dependences/fs_default.txt"
-    fs_colorlut = git_dir / "dependences/FreeSurferColorLUT.txt"
+    fs_default = git_dir / "fs_default.txt"
+    fs_colorlut = git_dir / "FreeSurferColorLUT.txt"
     
     if not check_inputs(subject, input_corr_dwi, fs_dir):
         return (subject, False)
@@ -387,14 +405,14 @@ def process_subject(subject, dti_dir, recon_all_dir, working_dir_root, git_dir, 
         
         # 1. Coregistration
         print(f"Running coregistration for {subject}")
-        run_coregistration(subject, wd, input_corr_dwi, fs_dir, git_dir, matlab_cmd)
+        run_coregistration(subject, wd, input_corr_dwi, fs_dir, git_dir, spm_path, matlab_cmd)
 
         # Resolve DWI file for subsequent steps
         dwi_file = get_working_dwi_file(wd, input_corr_dwi)
 
         # 2. Masking
-        print(f"Running dwi2mask for {subject}")
-        run_dwi2mask(subject, wd, input_corr_dwi_brainMASK, dwi_file, input_corr_val, input_corr_vec, threads)
+        print(f"Running masking (copying robust T1 mask) for {subject}")
+        prepare_brain_mask(subject, wd, input_corr_dwi_brainMASK)
 
         # 3. Response Function
         print(f"Running dwi2response for {subject}")
@@ -407,16 +425,12 @@ def process_subject(subject, dti_dir, recon_all_dir, working_dir_root, git_dir, 
         # 5. 5TT Generation
         print(f"Running 5ttgen for {subject}")
         run_5ttgen(subject, wd)
-            
-        # 6. Label Conversion
-        print(f"Running labelconvert for {subject}")
-        run_labelconvert(subject, wd, fs_colorlut, fs_default)
 
-        # 7. Tractography
+        # 6. Tractography
         print(f"Running tractography for {subject}")
         run_tractography(subject, wd, threads)
             
-        # 8. Cleanup
+        # 7. Cleanup
         cleanup_files(subject, wd)
 
         logging.info(f"Finished {subject}")
@@ -432,14 +446,24 @@ def main():
     # Configuration
     # --------------------------------------------------------------------------
     # Resource Management
-    jobs = 2          # Number of subjects to process in parallel
+    jobs = 1          # Number of subjects to process in parallel
     threads = 10      # Number of threads per subject (for MRTrix)
+    sessions = ["ses-01", "ses-02"]
+
+    # Paths - using multiple cohorts
+    dti_dirs = []
     
-    # Paths
-    dti_dir = Path("/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp1")
-    recon_all_dir = Path("/pool/guttmann/institut/BBHI/MRI/processed_data/freesurfer-reconall")
-    git_dir = Path("/home/mariacabello/working_dir/multimodal/DTI/TRACTO_Saul")
-    working_dir_root = Path("/home/mariacabello/working_dir/multimodal/DTI/tracto_wd")
+    for ses in sessions:
+        # bbhi
+        dti_dirs.append(Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/dtifit_{ses}_fsl-604"))
+        # bbhi senior
+        dti_dirs.append(Path(f"/pool/guttmann/institut/UB/Superagers/MRI/dtifit_{ses}_fsl-604"))
+        
+    recon_all_bbhi = Path("/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6")
+    recon_all_senior = Path("/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6")
+
+    git_dir = Path("/home/rachel/Desktop/superagers/structural_analysis")
+    working_dir_root = Path("/home/rachel/Desktop/schaefer_analysis/tracto_wd")
     
     spm_path = Path("/home/rachel/spm12")
     matlab_cmd = "/usr/local/bin/matlab -nodesktop -nosplash"
@@ -448,8 +472,7 @@ def main():
     setup_environment()
     
     if not working_dir_root.exists():
-        # working_dir_root.mkdir(parents=True, exist_ok=True)
-        pass 
+        working_dir_root.mkdir(parents=True, exist_ok=True)
 
     logger = setup_logging(Path.cwd()) # Log to current dir
     
@@ -457,25 +480,63 @@ def main():
     script_dir = Path(__file__).resolve().parent
 
     # Get subjects
-    subjects = get_subjects_to_process(dti_dir)
+    subjects_info = get_subjects_to_process(dti_dirs)
     
-    if not subjects:
-        print("No subjects found to process.")
+    # --- TEST MODE: Run on only one subject ---
+    if subjects_info:
+        logging.info(f"TEST MODE ENABLED: Filtering for single subject test.")
+        # Filters the list of subjects to only include the target subject
+        subjects_info = [s for s in subjects_info if s[0] == "sub-1014_ses-01"] 
+        if not subjects_info:
+             logging.info("Target test subject not found.")
+             sys.exit(0)
+    # ------------------------------------------
+    
+    if not subjects_info:
+        logging.info("No subjects found to process.")
         sys.exit(0)
 
-    print(f"Found {len(subjects)} subjects to process.")
-    print(f"Parallel Jobs: {jobs}, Threads per Job: {threads}")
+    # Breakdown counts
+    count_ses01 = 0
+    count_ses02 = 0
+    count_bbhi = 0
+    count_senior = 0
+
+    for _, d_path in subjects_info:
+        s_path = str(d_path)
+        if "ses-01" in s_path:
+            count_ses01 += 1
+        elif "ses-02" in s_path:
+            count_ses02 += 1
+        
+        if "Superagers" in s_path:
+            count_senior += 1
+        else:
+            count_bbhi += 1
+
+    logging.info(f"Found {len(subjects_info)} subjects to process")
+    logging.info(f"  Session 01: {count_ses01}")
+    logging.info(f"  Session 02: {count_ses02}")
+    logging.info(f"  BBHI: {count_bbhi}")
+    logging.info(f"  BBHI Senior: {count_senior}")
+    logging.info(f"Parallel Jobs: {jobs}, Threads per Job: {threads}")
     
     successful_subjects = []
     failed_subjects = []
 
     # Prepare arguments for starmap
     pool_args = []
-    for subject in subjects:
+    for subject, dti_dir in subjects_info:
+        # Determine correct recon-all dir based on DTI path (Cohort determination)
+        if "BBHI" in str(dti_dir):
+            current_recon_dir = recon_all_bbhi
+        else:
+            current_recon_dir = recon_all_senior
+
         pool_args.append((
             subject,
             dti_dir,
-            recon_all_dir,
+            current_recon_dir,
             working_dir_root,
             git_dir,
             spm_path,
