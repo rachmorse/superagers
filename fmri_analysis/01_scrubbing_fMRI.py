@@ -1,3 +1,4 @@
+import json
 import os
 from multiprocessing import Pool
 from pathlib import Path
@@ -10,17 +11,17 @@ import scipy.interpolate
 # This script is only to run on the BBHI senior tp2 data because the BBHI and BBHI senior tp1 data has already been scrubbed.
 
 def analyze_threshold(data, threshold, total_scans=740, affected_percentage=0.5):
-    """Analyze and visualize subjects with a high amount of movement using a given 
-    FWD threshold (e.g. subjects with > X FWD in > Y% of scans).
+    """Analyzes and validates subjects with high motion using a given threshold.
 
-    Note - this is to consider what the data look like to help determine the 
-    threshold and affected percentage to use for scrubbing.
+    This function visualizes the distribution of moved scans to help determine
+    appropriate thresholds for scrubbing.
 
     Args:
-        data (pd.DataFrame): DataFrame containing FWD data.
-        threshold (float): The FWD threshold to be compared with.
-        total_scans (int, optional): The total number of scans per subject. Default is 740.
-        affected_percentage (float, optional): The percentage of affected scans. Default is 50%.
+        data (pd.DataFrame): DataFrame containing Framewise Displacement (FWD) data.
+        threshold (float): The FWD threshold to identify moved scans.
+        total_scans (int, optional): Total number of scans per subject. Defaults to 740.
+        affected_percentage (float, optional): Percentage of scans that must exceed threshold
+            to count a subject as "moved". Defaults to 0.5.
     """
     moved_subjects_count = (((data > threshold).sum(1) / total_scans) > affected_percentage).sum()
     print(
@@ -33,35 +34,113 @@ def analyze_threshold(data, threshold, total_scans=740, affected_percentage=0.5)
     plt.show()
 
 
-def scrub(subject, bold_file, fwd_data, scrubbed_file, threshold=0.5, method="interpolate", max_scrub_percent=30):
-    """Scrub the BOLD fMRI images by either removing or interpolating scans based on FWD threshold.
+def save_json_sidecar(json_file, status, threshold, percent_scrubbed, num_bad_frames, total_frames, max_scrub_percent):
+    """Saves the scrubbing status and statistics to a JSON sidecar file.
+
+    Args:
+        json_file (str): Path to the output JSON file.
+        status (str): The scrubbing status (e.g., 'Scrubbed', 'NoScrubbingNeeded_LowMotion', 'SkippedScrubbing_HighMotion').
+        threshold (float): The FWD threshold used.
+        percent_scrubbed (float): Percentage of frames scrubbed.
+        num_bad_frames (int): Count of frames scrubbed.
+        total_frames (int): Total number of frames in the series.
+        max_scrub_percent (float): Maximum allowed percentage of scrubbed frames.
+    """
+    data = {
+        "Description": "Scrubbed fMRI images",
+        "ExclusionCriteria": f"Subjects with >{max_scrub_percent}% frames exceeding {threshold}mm FD were excluded.",
+        "ScrubbingStatus": status,
+        "MotionThreshold": threshold,
+        "PercentageFramesScrubbed": round(percent_scrubbed, 2),
+        "NumFramesScrubbed": int(num_bad_frames),
+        "TotalFrames": int(total_frames)
+    }
+    
+    try:
+        os.makedirs(os.path.dirname(json_file), exist_ok=True)
+        with open(json_file, 'w') as f:
+            json.dump(data, f, indent=4)
+        print(f"Saved scrub status JSON to {json_file}")
+    except Exception as e:
+        print(f"Error saving JSON file {json_file}: {e}")
+
+
+def scrub(subject, bold_file, fwd_data, scrubbed_file, remote_scrubbed_file, json_file, threshold=0.5, method="interpolate", max_scrub_percent=30):
+    """Scrubs BOLD fMRI images by either removing or interpolating scans based on FWD threshold.
 
     Args:
         subject (str): Subject ID used to process the BOLD and FWD files.
         bold_file (str): Path to the BOLD image file (NIfTI format).
         fwd_data (array-like): Framewise Displacement data.
         scrubbed_file (str): Path to save the scrubbed BOLD image file (NIfTI format).
-        threshold (float, optional): Threshold for FWD above which scans are considered moved. Default is 0.5 FWD.
-        method (str, optional): Method for handling moved scans. Either 'cut' to remove or 'interpolate' to replace. Default is 'interpolate'.
-        max_scrub_percent (float, optional): Maximum percentage of frames that can be scrubbed before the subject is skipped. Default is 30%.
+        json_file (str): Path to save the JSON sidecar file.
+        threshold (float, optional): Threshold for FWD above which scans are considered moved. Defaults to 0.5 FWD.
+        method (str, optional): Method for handling moved scans. Either 'cut' or 'interpolate'. Defaults to 'interpolate'.
+        max_scrub_percent (float, optional): Maximum percentage of frames that can be scrubbed before the subject is skipped. Defaults to 30%.
 
     Returns:
         bool: True if scrubbing was performed, False if subject was skipped due to too many frames exceeding threshold.
     """
     # Check if no frames exceed threshold, skip loading BOLD and scrubbing
     fwd_check = np.array(fwd_data)
+    total_frames_est = len(fwd_check) + 1 
 
     if not np.any(np.nan_to_num(fwd_check) >= threshold):
         print(f"No frames exceed the threshold for subject {subject}. Skipping scrubbing.")
+        save_json_sidecar(json_file, "NoScrubbingNeeded_LowMotion", threshold, 0.0, 0, total_frames_est, max_scrub_percent)
         return False
 
     # Then check if too many frames exceed threshold, skip loading BOLD and scrubbing
     num_bad_frames = np.sum(np.nan_to_num(fwd_check) >= threshold)
-    est_scrub_percent = (num_bad_frames * 100) / (len(fwd_check) + 1)
+    est_scrub_percent = (num_bad_frames * 100) / total_frames_est
     
     if est_scrub_percent > max_scrub_percent:
         print(f"WARNING: More than {max_scrub_percent}% of timepoints would be scrubbed for subject {subject}. Skipping scrubbing.")
+        save_json_sidecar(json_file, "SkippedScrubbing_HighMotion", threshold, est_scrub_percent, num_bad_frames, total_frames_est, max_scrub_percent)
         return False
+
+    # Check for existing scrubbed files (local or remote) to avoid re-scrubbing.
+    # If found, make sure the JSON sidecar exists 
+    file_exists = False
+    source_loc = ""
+    
+    if os.path.exists(scrubbed_file):
+        file_exists = True
+        source_loc = "local"
+    elif remote_scrubbed_file and os.path.exists(remote_scrubbed_file):
+        file_exists = True
+        source_loc = "remote"
+        
+    if file_exists:
+        if not os.path.exists(json_file):
+            print(f"Scrubbed file exists ({source_loc}) for {subject}, regenerating JSON sidecar only.")
+            
+            # Use fixed total frames (740) for efficiency to avoid loading BOLD header
+            total_frames = 740 
+            fwd = np.array(fwd_data)
+
+            # Check for array alignment
+            if len(fwd) == total_frames:
+                pass 
+            elif len(fwd) == total_frames - 1:
+                fwd = np.insert(fwd, 0, 0)
+            else:
+                raise ValueError(f"Length mismatch: FWD has {len(fwd)} points, expected {total_frames} volumes.")
+
+            # Identify volumes with excessive motion
+            all_tps = np.arange(total_frames)
+            incorrect_tps = all_tps[fwd >= threshold]
+            
+            # Calculate percentage of volumes that would be scrubbed
+            scrub_percent = (len(incorrect_tps) * 100) / total_frames
+            
+            # Save JSON
+            save_json_sidecar(json_file, "Scrubbed", threshold, scrub_percent, len(incorrect_tps), total_frames, max_scrub_percent)
+            print(f"JSON sidecar regenerated for {subject}")
+            return True
+        else:
+            print(f"Scrubbed file ({source_loc}) and JSON already exist for {subject}. Skipping re-scrubbing.")
+            return True
 
     print(f"Scrubbing BOLD image for subject: {subject}")
 
@@ -152,6 +231,9 @@ def scrub(subject, bold_file, fwd_data, scrubbed_file, threshold=0.5, method="in
     os.makedirs(os.path.dirname(scrubbed_file), exist_ok=True)
     nib.save(scrubbed_image, scrubbed_file)
 
+    # Save JSON for Performed case
+    save_json_sidecar(json_file, "Scrubbed", threshold, scrub_percent, len(incorrect_tps), bold_data.shape[3], max_scrub_percent)
+
     print(f"Scrubbing complete for subject: {subject}")
     return True
 
@@ -176,18 +258,31 @@ def process_subject(
         ses (str): Session (timepoint).
         root (str): Root directory path.
         threshold (float): Threshold value for scrubbing.
-        output_data (str): Output data directory path.
-        error_log (str): Error log file path.
-        bold_pattern (str): Pattern for the BOLD file names.
-        scrubbed_pattern (str): Pattern for the scrubbed file names.
-        subject_dir_pattern (str): Relative path pattern to the session/native_T1 directory.
+        output_data (str): Output directory root.
+        error_log (str): Path to error log.
+        bold_pattern (str): Filename pattern for input BOLD.
+        scrubbed_pattern (str): Filename pattern for output BOLD.
+        subject_dir_pattern (str): Directory pattern (e.g., ses-X/native_T1).
+        fwd_data (list): FWD values.
 
-    Raises:
-        Exception: If any error occurs during the processing of the subject.
+    Returns:
+        bool: True if processing was successful (even if skipped), False if error.
     """
     try:
         bold_file = bold_pattern.format(subject=subject, ses=ses)
         scrubbed_file = scrubbed_pattern.format(subject=subject, ses=ses, threshold=threshold, output_data=output_data)
+        
+        # Define remote path 
+        remote_pattern_str = scrubbed_pattern.replace("{output_data}", str(root))
+        remote_scrubbed_file = remote_pattern_str.format(subject=subject, ses=ses, threshold=threshold)
+
+        # Derive JSON filename for the sidecar
+        if scrubbed_file.endswith(".nii.gz"):
+            json_file = scrubbed_file.replace(".nii.gz", ".json")
+        elif scrubbed_file.endswith(".nii"):
+            json_file = scrubbed_file.replace(".nii", ".json")
+        else:
+             json_file = scrubbed_file + ".json"
 
         print(f"Processing subject: {subject}")
 
@@ -199,14 +294,18 @@ def process_subject(
             bold_file,
             fwd_data,
             scrubbed_file,
+            remote_scrubbed_file,
+            json_file,
             threshold=threshold,
             method="interpolate",
         )
+        return True
 
     except Exception as e:
         print(f"Error processing subject {subject}: {e}")
         with open(error_log, "a") as f:
             f.write(f"Error processing subject {subject}: {e}\n")
+        return False
 
 
 def main(
@@ -232,14 +331,18 @@ def main(
     8. Logs errors to `scrubbing_errors.txt`.
 
     Args:
-        ses (str): Session (timepoint).
-        root (str): Root directory path.
-        output_data (str): Output data directory path (for MRI data).
-        threshold (float): Threshold value for scrubbing.
-        bold_pattern (str): Pattern for the BOLD file names.
-        scrubbed_pattern (str): Pattern for the scrubbed file names.
-        subject_dir_pattern (str): Relative path pattern to the session/native_T1 directory.
-        multi (bool): If True, enables parallel processing using multiprocessing. Defaults to False.
+        ses (str): Session identifier (e.g., "01", "02").
+        root (str): Root directory path where subject data is located.
+        output_data (Path): Path to the directory where scrubbed data will be saved.
+        threshold (float): The Framewise Displacement (FWD) threshold for scrubbing.
+        bold_pattern (str): A format string for the input BOLD file path,
+            e.g., "{root}/{subject}/ses-{ses}/.../{subject}_ses-{ses}_..._bold.nii.gz".
+        scrubbed_pattern (str): A format string for the output scrubbed BOLD file path,
+            e.g., "{output_data}/{subject}/ses-{ses}/.../{subject}_ses-{ses}_..._scrubbed_{threshold}.nii.gz".
+        subject_dir_pattern (str): A format string for the subject's session-specific
+            directory containing FWD data, e.g., "ses-{ses}/native_T1".
+        multi (bool, optional): If True, use multiprocessing for parallel execution.
+            Defaults to False.
     """
     folder_name = subject_dir_pattern.split('/')[-1]
     summary_dir = os.path.join(output_data, folder_name)
@@ -256,7 +359,7 @@ def main(
     potential_subjects = os.listdir(root)
     subjects = []
 
-    # Filter subjects based on whether they have the required session directory and don't have scrubbed data
+    # Filter subjects based on whether they have the required session directory and collect FWD data 
     for subject in potential_subjects:
         if not subject.startswith("sub-"):
             continue
@@ -273,46 +376,69 @@ def main(
             
         if not session_exists:
             continue
-            
-        # Check if scrubbed data already exists in either location
-        threshold_str = str(threshold)
-        local_scrubbed_file = Path(scrubbed_pattern.format(subject=subject, ses=ses, threshold=threshold, output_data=output_data))
-        remote_pattern_str = scrubbed_pattern.replace("{output_data}", str(root))
-        remote_scrubbed_file = Path(remote_pattern_str.format(subject=subject, ses=ses, threshold=threshold))
-        
-        # Only add subject if scrubbed data doesn't exist in either location
-        if not local_scrubbed_file.exists() and not remote_scrubbed_file.exists():
-            subjects.append(subject)
-        else:
-            if local_scrubbed_file.exists():
-                location = "local"
-            else:
-                location = "remote"
-            print(f"Skipping {subject} - scrubbed data already exists in {location} directory")
 
-    # Iterate over all subjects in the root directory
-    for subject in subjects:
+        # FWD data collection
         subject_dir = os.path.join(root, subject, subject_dir_pattern)
         fwd_file = os.path.join(subject_dir, "framewise_displ.txt")
 
-        # Check if the framewise_displ.txt file exists for the subject
         if os.path.exists(fwd_file):
-            # Read the framewise_displ.txt file
-            fwd_data = pd.read_csv(fwd_file)
+            try:
+                # Read the framewise_displ.txt file
+                fwd_data_df = pd.read_csv(fwd_file)
 
-            # Convert each participant's column of data into a list to make it a single row of data instead
-            fwd_series = pd.Series(fwd_data["FramewiseDisplacement"].tolist(), name=subject)
-            fwd_row_df = fwd_series.to_frame().T
+                # Convert each participant's column of data into a list to make it a single row of data instead
+                fwd_series = pd.Series(fwd_data_df["FramewiseDisplacement"].tolist(), name=subject)
+                fwd_row_df = fwd_series.to_frame().T
 
-            # Append the row DataFrame to the list
-            fwd_list.append(fwd_row_df)
-            
-            # Store for processing
-            subject_fwd_map[subject] = fwd_data["FramewiseDisplacement"].tolist()
+                # Append the row DataFrame to the list
+                fwd_list.append(fwd_row_df)
+                
+                # Store for processing later
+                subject_fwd_map[subject] = fwd_data_df["FramewiseDisplacement"].tolist()
+            except Exception as e:
+                 print(f"Error reading FWD for {subject}: {e}")
         else:
-            print(f"No framewise_displ.txt found for {subject} at {fwd_file}")
+            print(f"No framewise_displ.txt found for {subject}")
 
-    print(f"Total subjects needing scrubbing: {len(subjects)}")
+        # Check if scrubbed data AND json sidecar already exists in either location
+        threshold_str = str(threshold)
+        local_scrubbed_file = Path(scrubbed_pattern.format(subject=subject, ses=ses, threshold=threshold, output_data=output_data))
+        
+        # Determine JSON path logic (replicating process_subject logic)
+        if str(local_scrubbed_file).endswith(".nii.gz"):
+            local_json_file = Path(str(local_scrubbed_file).replace(".nii.gz", ".json"))
+        elif str(local_scrubbed_file).endswith(".nii"):
+             local_json_file = Path(str(local_scrubbed_file).replace(".nii", ".json"))
+        else:
+             local_json_file = Path(str(local_scrubbed_file) + ".json")
+
+        remote_pattern_str = scrubbed_pattern.replace("{output_data}", str(root))
+        remote_scrubbed_file = Path(remote_pattern_str.format(subject=subject, ses=ses, threshold=threshold))
+        
+        # Determine processing needs:
+        # 1. Full scrub if no scrubbed data exists (local or remote).
+        # 2. JSON regeneration if scrubbed data exists but sidecar is missing.
+        should_process = False
+        
+        local_exists = local_scrubbed_file.exists()
+        remote_exists = remote_scrubbed_file.exists()
+        json_exists = local_json_file.exists()
+        
+        if not local_exists and not remote_exists:
+             should_process = True # Full scrub needed
+        elif local_exists and not json_exists:
+             print(f"Subject {subject} - Local NIfTI exists, but JSON missing. Adding to process list.")
+             should_process = True
+        elif remote_exists and not json_exists:
+             print(f"Subject {subject} - Remote NIfTI exists, but JSON missing. Adding to process list.")
+             should_process = True
+
+        if should_process:
+            subjects.append(subject)
+        else:
+            pass
+
+    print(f"Total subjects needing processing: {len(subjects)}")
 
     # Save the concatenated DataFrame to all_fwd.csv
     if fwd_list:
