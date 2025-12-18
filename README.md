@@ -47,12 +47,14 @@ This repository contains the analysis scripts for our study on superagers, which
     - The scripts used to preprocesses the fMRI data used here are available in another [repository](https://github.com/rachmorse/fmri_preprocessing).
 
 ### structural_analysis
-- **Purpose:** This script extract the structural connectivity matrices data using MRTrix. 
+- **Purpose:** These scripts use multishell mutitissue constrained spherical deconvolution to calculate white matter tracts using FSL, SPM, FreeSurfer and MRTrix and extract the structural connectivity matrices data using MRTrix. 
 - **Scripts:**
+    - `tractography_parallelized.py`:
+        - `spm_coregister_parcellation`:
     - `generate_structural_matrices.py`: Computes various structural connectivity matrices from the MRTrix data include all-to-all ROI and network specific matrices. Also, visualizes the matrices. 
         - Uses functions from the script `compute_functional_connectivity.py`.
 - **Notes:**
-    - The scripts used in DWI preprocessing are available in another [repository](https://github.com/rachmorse/dwi_preprocessing) and the multishell mutitissue constrained spherical deconvolution for calculated white matter tracts scripts are not publically available. 
+    - The scripts used in DWI preprocessing are available in another [repository](https://github.com/rachmorse/dwi_preprocessing). 
 
 ### structural_functional_coupling
 - **Purpose:** These scripts run prepare and calculate the structural functional coupling (SFC) metrics. To calculate SFC, we use the Pearson's correlation coefficient between the row for a given ROI in the structural connectome and the corresponding row in the functional connectome. We exclude self-connections and any connections where either the structural or functional connectivity value equaled zero (method from this [paper](https://doi.org/10.1038/s41467-023-41686-9)).

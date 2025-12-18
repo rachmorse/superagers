@@ -8,7 +8,6 @@
 *.jpeg
 *.RData
 *.Rhistory
-*.m
 *.annot
 *.txt
 *.gcs
