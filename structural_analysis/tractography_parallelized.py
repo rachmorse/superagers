@@ -7,12 +7,12 @@ from pathlib import Path
 import shutil
 import glob
 import multiprocessing
+import json
+import socket
 
-# ------------------------------------------------------------------------------
-# MATLAB Script Configuration
-# ------------------------------------------------------------------------------
-# The MATLAB script 'spm_coregister_parcellation.m' is expected to be in the
-# same directory as this Python script.
+# NOTE: The MATLAB script 'spm_coregister_parcellation.m', 
+# the fs_default.txt, and FreeSurferColorLUT.txt files
+# should be in the same directory as this Python script.
 
 def setup_logging(output_dir):
     """Setup basic logging to file and console
@@ -39,7 +39,7 @@ def setup_logging(output_dir):
 
 
 def setup_environment():
-    """Set up environment variables for FSL, FreeSurfer, and MATLAB."""
+    """Set up environment variables for FSL and FreeSurfer."""
     # Set up FSL
     os.environ["FSLDIR"] = "/vol/software/fsl_6_0_4"
     os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:" + os.environ["PATH"]
@@ -77,12 +77,12 @@ def run_command(cmd, shell=True):
         raise e
 
 
-def get_subjects_to_process(dti_dirs, done_list_path=None):
+def get_subjects_to_process(dti_dirs, working_dir_root):
     """Generate a list of subjects to process from multiple directories.
     
     Args:
-        dti_dirs (list of Path): List of directories containing subject folders.
-        done_list_path (Path, optional): Path to a text file listing completed subjects.
+        dti_dirs (list of Path): List of directories containing subject DTI files.
+        working_dir_root (Path): Root directory where processed subjects are stored.
 
     Returns:
         list: List of tuples (subject_id, source_dir).
@@ -98,13 +98,19 @@ def get_subjects_to_process(dti_dirs, done_list_path=None):
         for sub_path in dti_dir.glob("sub-*"):
             subjects_info.append((sub_path.name, dti_dir))
         
-    # Filter out done subjects if a list is provided
-    if done_list_path and done_list_path.exists():
-        with open(done_list_path, 'r') as f:
-            done_subjects = set(line.strip() for line in f)
-        subjects_info = [(s, d) for s, d in subjects_info if s not in done_subjects]
-        
-    return sorted(subjects_info, key=lambda x: x[0])
+    # Filter out done subjects based on the output directory
+    filtered_subjects = []
+
+    for subject_id, source_dir in subjects_info:
+        wd_sub = working_dir_root / subject_id
+
+        if wd_sub.exists() and any(wd_sub.glob("*_tractogram_1M_SIFT.tck")):
+            logging.info(f"Skipping {subject_id}, already processed.")
+            continue
+
+        filtered_subjects.append((subject_id, source_dir))
+
+    return sorted(filtered_subjects, key=lambda x: x[0])
 
 
 def check_inputs(subject, input_corr_dwi, fs_dir):
@@ -113,7 +119,7 @@ def check_inputs(subject, input_corr_dwi, fs_dir):
     Args:
         subject (str): Subject ID.
         input_corr_dwi (Path): Path to the eddy corrected DWI data.
-        fs_dir (Path): Path to the subject's FreeSurfer directory.
+        fs_dir (Path): Path to the subject's recon-all directory.
 
     Returns:
         bool: True if inputs exist, False otherwise.
@@ -130,7 +136,7 @@ def check_inputs(subject, input_corr_dwi, fs_dir):
 def run_coregistration(subject, wd, input_corr_dwi, fs_dir, git_dir, spm_path, matlab_cmd):
     """Performs structural to diffusion coregistration.
 
-    This function copies and unzips the eddy corrected data, converts FreeSurfer
+    This function copies and unzips the eddy corrected data, converts recon-all
     T1 and segmentation files to NIfTI format, extracts the b0 image, and
     estimates the coregistration using a MATLAB script.
 
@@ -138,16 +144,19 @@ def run_coregistration(subject, wd, input_corr_dwi, fs_dir, git_dir, spm_path, m
         subject (str): Subject ID.
         wd (Path): Working directory.
         input_corr_dwi (Path): Path to the eddy corrected DWI data.
-        fs_dir (Path): Path to the subject's FreeSurfer directory.
-        git_dir (Path): Directory containing the scripts (for MATLAB path).
+        fs_dir (Path): Path to the subject's recon-all directory.
+        git_dir (Path): Directory containing the MATLAB script.
         matlab_cmd (str): Command to execute MATLAB.
+
+    Returns:
+        str: Path to the unzipped eddy corrected DWI data.
     """
     logging.info(f"{subject}: Structural 2 diff. coregistration")
     
     if not (Path(f"{wd}_fs2diff_coords_T1w_brainmask_diff.nii.gz").exists()):
         # Copy and unzip eddy data
         run_command(f"cp -f {input_corr_dwi} {wd}_eddy_corrected_data.nii.gz")
-        input_corr_dwi_temp = f"{wd}_eddy_corrected_data.nii" # No .gz
+        input_corr_dwi_temp = f"{wd}_eddy_corrected_data.nii" 
         run_command(f"gunzip -f {wd}_eddy_corrected_data.nii.gz")
         
         # Convert recon-all T1 and aparc+aseg
@@ -165,30 +174,11 @@ def run_coregistration(subject, wd, input_corr_dwi, fs_dir, git_dir, spm_path, m
         )
         run_command(matlab_cmd_full)
 
-
-def get_working_dwi_file(wd, input_corr_dwi):
-    """Resolves the path to the DWI file to use for processing.
-
-    It checks for an unzipped or zipped copy in the working directory first,
-    falling back to the original input file.
-
-    Args:
-        wd (Path): Working directory.
-        input_corr_dwi (Path): Path to the original input DWI file.
-
-    Returns:
-        Path: Path to the DWI file to use.
-    """
-    current_dwi = Path(f"{wd}_eddy_corrected_data.nii")
-    if not current_dwi.exists():
-        current_dwi = Path(f"{wd}_eddy_corrected_data.nii.gz")
-    if not current_dwi.exists():
-        current_dwi = input_corr_dwi
-    return current_dwi
+        return input_corr_dwi_temp
 
 
 def prepare_brain_mask(subject, wd, input_corr_dwi_brainMASK):
-    """Prepares the brain mask by copying the robust T1-derived mask.
+    """Prepares the brain mask by copying the T1-derived mask.
 
     This function exclusively uses the pre-computed T1w_brain_mask_dMRIres.nii.gz.
     If this mask is missing, processing for this subject will fail.
@@ -308,11 +298,10 @@ def run_tractography(subject, wd, threads):
         ])
 
 
-def cleanup_files(subject, wd):
+def cleanup_files(wd):
     """Removes intermediate files to save disk space.
 
     Args:
-        subject (str): Subject ID.
         wd (Path): Working directory.
     """
     files_to_remove = [
@@ -332,6 +321,7 @@ def cleanup_files(subject, wd):
     ]
     
     # Uncomment to enable cleanup
+    # logging.info(f"Cleaning up intermediate files for {wd.name}")
     # for f_path in files_to_remove:
     #     p = Path(f_path)
     #     if p.exists():
@@ -355,7 +345,7 @@ def process_subject(subject, dti_dir, recon_all_dir, working_dir_root, git_dir, 
         tuple: (subject, success)
     """
     
-    start_cwd = Path.cwd()
+    # start_cwd = Path.cwd()
     
     # Directories
     id_dir = dti_dir / subject
@@ -394,8 +384,8 @@ def process_subject(subject, dti_dir, recon_all_dir, working_dir_root, git_dir, 
     input_corr_dwi_brainMASK = id_dir / "T1w_brain_mask_dMRIres.nii.gz"
     
     # Dependencies
-    fs_default = git_dir / "fs_default.txt"
-    fs_colorlut = git_dir / "FreeSurferColorLUT.txt"
+    # fs_default = git_dir / "fs_default.txt"
+    # fs_colorlut = git_dir / "FreeSurferColorLUT.txt"
     
     if not check_inputs(subject, input_corr_dwi, fs_dir):
         return (subject, False)
@@ -405,22 +395,19 @@ def process_subject(subject, dti_dir, recon_all_dir, working_dir_root, git_dir, 
         
         # 1. Coregistration
         print(f"Running coregistration for {subject}")
-        run_coregistration(subject, wd, input_corr_dwi, fs_dir, git_dir, spm_path, matlab_cmd)
-
-        # Resolve DWI file for subsequent steps
-        dwi_file = get_working_dwi_file(wd, input_corr_dwi)
+        input_corr_dwi_temp = run_coregistration(subject, wd, input_corr_dwi, fs_dir, git_dir, spm_path, matlab_cmd)
 
         # 2. Masking
-        print(f"Running masking (copying robust T1 mask) for {subject}")
+        print(f"Running masking (copying T1 mask) for {subject}")
         prepare_brain_mask(subject, wd, input_corr_dwi_brainMASK)
 
         # 3. Response Function
         print(f"Running dwi2response for {subject}")
-        run_dwi2response(subject, wd, dwi_file, input_corr_val, input_corr_vec, threads)
+        run_dwi2response(subject, wd, input_corr_dwi_temp, input_corr_val, input_corr_vec, threads)
 
         # 4. FOD Estimation
         print(f"Running dwi2fod for {subject}")
-        run_dwi2fod(subject, wd, dwi_file, input_corr_val, input_corr_vec, threads)
+        run_dwi2fod(subject, wd, input_corr_dwi_temp, input_corr_val, input_corr_vec, threads)
 
         # 5. 5TT Generation
         print(f"Running 5ttgen for {subject}")
@@ -431,7 +418,7 @@ def process_subject(subject, dti_dir, recon_all_dir, working_dir_root, git_dir, 
         run_tractography(subject, wd, threads)
             
         # 7. Cleanup
-        cleanup_files(subject, wd)
+        cleanup_files(wd)
 
         logging.info(f"Finished {subject}")
         return (subject, True)
@@ -441,13 +428,100 @@ def process_subject(subject, dti_dir, recon_all_dir, working_dir_root, git_dir, 
         return (subject, False)
 
 
+def create_dataset_description(output_path: str, spm_path: Path, final_subjects: str):
+    """Create a BIDS-compliant dataset_description.json file.
+
+    Args:
+        output_path (str): The path to the output directory where the JSON file will be saved.
+        spm_path (Path): The path to the SPM installation directory.
+        final_subjects (str): A string listing the subjects that were processed.
+    """
+    # Get the versions of FSL, FreeSurfer, SPM and MRTrix
+    try:
+        with open(os.path.join(os.environ["FSLDIR"], "etc", "fslversion")) as f:
+            fsl_version = f.read().strip()
+    except:
+        fsl_version = "unknown"
+
+    try:
+        with open(os.path.join(os.environ["FREESURFER_HOME"], "build-stamp.txt")) as f:
+            freesurfer_version = f.read().strip()
+    except:
+        freesurfer_version = "unknown"
+
+    try:
+        spm_version = "unknown"
+        with open(spm_path / "Contents.m") as f:
+            for line in f:
+                if "Version" in line and "SPM" in line:
+                    spm_version = line.strip().lstrip('% ').strip()
+                    break
+    except:
+        spm_version = "unknown"
+
+    try:
+        mrtrix_version = subprocess.check_output(
+            ["mrconvert", "-version"], text=True
+        ).splitlines()[0]
+    except Exception:
+        mrtrix_version = "unknown"
+
+    # Get the exact time
+    current_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    
+    # Get the hostname of the machine
+    hostname = socket.gethostname()
+
+    # Get the current user
+    user = os.getlogin()
+
+    description = {
+        "Name": "Tractography Output " + current_date,
+        "BIDSVersion": "1.10.1",
+        "PipelineDescription": {
+            "Name": "Tractography Pipeline",
+            "Version": "1.0",
+            "RunOnMachine": hostname,
+            "RunByUser": user,
+            "Software": [
+                {
+                    "Name": "FSL",
+                    "Version": fsl_version
+                },
+                {
+                    "Name": "SPM",
+                    "Version": spm_version
+                },
+                {
+                    "Name": "FreeSurfer",
+                    "Version": freesurfer_version
+                }, 
+                {
+                    "Name": "MRTrix",
+                    "Version": mrtrix_version
+                }
+            ],
+            "SubjectsProcessed": final_subjects
+        },
+    }
+
+    output_file = os.path.join(output_path, f"dataset_description_{current_date}.json")
+    
+    # Ensure the output directory exists
+    os.makedirs(output_path, exist_ok=True)
+
+    try:
+        with open(output_file, 'w') as f:
+            json.dump(description, f, indent=2)
+        print(f"Successfully created {output_file}")
+    except Exception as e:
+        print(f"Error creating dataset_description.json: {e}")
+
+
 def main():
-    # --------------------------------------------------------------------------
     # Configuration
-    # --------------------------------------------------------------------------
-    # Resource Management
     jobs = 1          # Number of subjects to process in parallel
-    threads = 10      # Number of threads per subject (for MRTrix)
+    threads = 1       # Number of threads per subject (for MRTrix)
     sessions = ["ses-01", "ses-02"]
 
     # Paths - using multiple cohorts
@@ -474,24 +548,23 @@ def main():
     if not working_dir_root.exists():
         working_dir_root.mkdir(parents=True, exist_ok=True)
 
-    logger = setup_logging(Path.cwd()) # Log to current dir
+    # logger = setup_logging(Path.cwd()) # Log to current dir
     
     # Use the directory where this script is running from as the location for the .m file
-    script_dir = Path(__file__).resolve().parent
+    # script_dir = Path(__file__).resolve().parent
 
     # Get subjects
-    subjects_info = get_subjects_to_process(dti_dirs)
+    subjects_info = get_subjects_to_process(dti_dirs, working_dir_root)
     
-    # --- TEST MODE: Run on only one subject ---
+    # TEST MODE: Run on a specific list of subs. They must be in the list from get_subjects_to_process 
     if subjects_info:
-        logging.info(f"TEST MODE ENABLED: Filtering for single subject test.")
+        logging.info(f"TEST MODE ENABLED: Filtering for specific test subjects.")
         # Filters the list of subjects to only include the target subject
-        subjects_info = [s for s in subjects_info if s[0] == "sub-1014_ses-01"] 
+        subjects_info = [s for s in subjects_info if s[0] == "sub-4145_ses-01" or s[0] == "sub-4141_ses-02"]
         if not subjects_info:
              logging.info("Target test subject not found.")
              sys.exit(0)
-    # ------------------------------------------
-    
+
     if not subjects_info:
         logging.info("No subjects found to process.")
         sys.exit(0)
@@ -527,7 +600,7 @@ def main():
     # Prepare arguments for starmap
     pool_args = []
     for subject, dti_dir in subjects_info:
-        # Determine correct recon-all dir based on DTI path (Cohort determination)
+        # Determine correct recon-all dir based on DTI path for each cohort
         if "BBHI" in str(dti_dir):
             current_recon_dir = recon_all_bbhi
         else:
@@ -544,9 +617,8 @@ def main():
             threads
         ))
 
-    # Parallel Execution with Multiprocessing Pool
+    # Parallel execution
     with multiprocessing.Pool(processes=jobs) as pool:
-        # starmap blocks until all results are ready
         results = pool.starmap(process_subject, pool_args)
 
     for subject, success in results:
@@ -557,9 +629,7 @@ def main():
             failed_subjects.append(subject)
             print(f"FAILED: {subject}")
             
-    # --------------------------------------------------------------------------
     # Summary
-    # --------------------------------------------------------------------------
     print("\n------------------------------")
     print("Processing Summary")
     print("------------------------------")
@@ -573,6 +643,11 @@ def main():
         
     logging.info(f"Processing complete. Success: {len(successful_subjects)}, Failed: {len(failed_subjects)}")
 
+    create_dataset_description(
+        str(working_dir_root),
+        spm_path,
+        final_subjects=', '.join(successful_subjects)
+    )
 
 if __name__ == "__main__":
     main()
