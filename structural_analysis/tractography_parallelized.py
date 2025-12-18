@@ -343,10 +343,7 @@ def process_subject(subject, dti_dir, recon_all_dir, working_dir_root, git_dir, 
         
     Returns:
         tuple: (subject, success)
-    """
-    
-    # start_cwd = Path.cwd()
-    
+    """    
     # Directories
     id_dir = dti_dir / subject
     
@@ -382,10 +379,6 @@ def process_subject(subject, dti_dir, recon_all_dir, working_dir_root, git_dir, 
     input_corr_val = id_dir / "BVAL_concat_APPA.bval"
     input_corr_vec = id_dir / "BVEC_concat_APPA.bvec"
     input_corr_dwi_brainMASK = id_dir / "T1w_brain_mask_dMRIres.nii.gz"
-    
-    # Dependencies
-    # fs_default = git_dir / "fs_default.txt"
-    # fs_colorlut = git_dir / "FreeSurferColorLUT.txt"
     
     if not check_inputs(subject, input_corr_dwi, fs_dir):
         return (subject, False)
@@ -548,11 +541,6 @@ def main():
     if not working_dir_root.exists():
         working_dir_root.mkdir(parents=True, exist_ok=True)
 
-    # logger = setup_logging(Path.cwd()) # Log to current dir
-    
-    # Use the directory where this script is running from as the location for the .m file
-    # script_dir = Path(__file__).resolve().parent
-
     # Get subjects
     subjects_info = get_subjects_to_process(dti_dirs, working_dir_root)
     
@@ -648,6 +636,7 @@ def main():
         spm_path,
         final_subjects=', '.join(successful_subjects)
     )
+
 
 if __name__ == "__main__":
     main()
