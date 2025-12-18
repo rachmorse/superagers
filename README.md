@@ -47,10 +47,10 @@ This repository contains the analysis scripts for our study on superagers, which
     - The scripts used to preprocesses the fMRI data used here are available in another [repository](https://github.com/rachmorse/fmri_preprocessing).
 
 ### structural_analysis
-- **Purpose:** These scripts use multishell mutitissue constrained spherical deconvolution to calculate white matter tracts using FSL, SPM, FreeSurfer and MRTrix and extract the structural connectivity matrices data using MRTrix. 
+- **Purpose:** These scripts use Multi-Shell Multi-Tissue Constrained Spherical Deconvolution (MSMT-CSD) to calculate white matter tracts using FSL, SPM, FreeSurfer and MRTrix and extract the structural connectivity matrices data using MRTrix. 
 - **Scripts:**
-    - `tractography_parallelized.py`:
-        - `spm_coregister_parcellation`:
+    - `tractography_parallelized.py`: Runs the complete tractography pipeline. It handles parallel processing of subjects to perform rigid-body coregistration (structural to diffusion), tissue response function estimation, FOD estimation using MSMT-CSD, and Anatomically-Constrained Tractography (ACT) with SIFT filtering to generate the final tractograms.
+        - Uses `spm_coregister_parcellation.m`: A MATLAB script used for the rigid-body coregistration step. It aligns the structural T1 and parcellation files to the diffusion b0 image using Normalized Mutual Information (NMI), modifying the NIfTI headers in-place.
     - `generate_structural_matrices.py`: Computes various structural connectivity matrices from the MRTrix data include all-to-all ROI and network specific matrices. Also, visualizes the matrices. 
         - Uses functions from the script `compute_functional_connectivity.py`.
 - **Notes:**
