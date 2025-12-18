@@ -558,6 +558,9 @@ def main():
     if not working_dir_root.exists():
         working_dir_root.mkdir(parents=True, exist_ok=True)
 
+    # Setup logging
+    logger = setup_logging(Path.cwd()) # Log to current dir
+
     # Get subjects
     subjects_info = get_subjects_to_process(dti_dirs, working_dir_root, recon_all_bbhi, recon_all_senior)
     
