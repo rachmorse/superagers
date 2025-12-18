@@ -10,8 +10,7 @@ import multiprocessing
 import json
 import socket
 
-# NOTE: The MATLAB script 'spm_coregister_parcellation.m', 
-# the fs_default.txt, and FreeSurferColorLUT.txt files
+# NOTE: The MATLAB script 'spm_coregister_parcellation.m' 
 # should be in the same directory as this Python script.
 
 def setup_logging(output_dir):
@@ -77,18 +76,21 @@ def run_command(cmd, shell=True):
         raise e
 
 
-def get_subjects_to_process(dti_dirs, working_dir_root):
+def get_subjects_to_process(dti_dirs, working_dir_root, recon_all_bbhi, recon_all_senior):
     """Generate a list of subjects to process from multiple directories.
     
     Args:
         dti_dirs (list of Path): List of directories containing subject DTI files.
         working_dir_root (Path): Root directory where processed subjects are stored.
+        recon_all_bbhi (Path): Directory containing recon-all data for BBHI cohort.
+        recon_all_senior (Path): Directory containing recon-all data for Senior cohort.
 
     Returns:
         list: List of tuples (subject_id, source_dir).
     """
     subjects_info = []
     
+    # Scan each DTI directory for subjects
     for dti_dir in dti_dirs:
         if not dti_dir.exists():
             logging.warning(f"DTI directory not found: {dti_dir}")
@@ -97,11 +99,26 @@ def get_subjects_to_process(dti_dirs, working_dir_root):
         # Scan directory
         for sub_path in dti_dir.glob("sub-*"):
             subjects_info.append((sub_path.name, dti_dir))
-        
+
+    # Check recon-all directories and filter subjects
+    valid_subjects_info = []
+
+    for subject_id, source_dir in subjects_info:
+        # BBHI: sub-x_ses-0y_run-01
+        bbhi_recon = recon_all_bbhi / f"{subject_id}_run-01"
+
+        # Senior: sub-x_ses-0y
+        senior_recon = recon_all_senior / subject_id
+
+        if bbhi_recon.exists() or senior_recon.exists():
+            valid_subjects_info.append((subject_id, source_dir))
+        else:
+            logging.info(f"Skipping {subject_id}, no recon-all found.")
+
     # Filter out done subjects based on the output directory
     filtered_subjects = []
 
-    for subject_id, source_dir in subjects_info:
+    for subject_id, source_dir in valid_subjects_info:
         wd_sub = working_dir_root / subject_id
 
         if wd_sub.exists() and any(wd_sub.glob("*_tractogram_1M_SIFT.tck")):
@@ -514,7 +531,7 @@ def create_dataset_description(output_path: str, spm_path: Path, final_subjects:
 def main():
     # Configuration
     jobs = 1          # Number of subjects to process in parallel
-    threads = 1       # Number of threads per subject (for MRTrix)
+    threads = 20      # Number of threads per subject (for MRTrix)
     sessions = ["ses-01", "ses-02"]
 
     # Paths - using multiple cohorts
@@ -542,13 +559,13 @@ def main():
         working_dir_root.mkdir(parents=True, exist_ok=True)
 
     # Get subjects
-    subjects_info = get_subjects_to_process(dti_dirs, working_dir_root)
+    subjects_info = get_subjects_to_process(dti_dirs, working_dir_root, recon_all_bbhi, recon_all_senior)
     
     # TEST MODE: Run on a specific list of subs. They must be in the list from get_subjects_to_process 
     if subjects_info:
         logging.info(f"TEST MODE ENABLED: Filtering for specific test subjects.")
         # Filters the list of subjects to only include the target subject
-        subjects_info = [s for s in subjects_info if s[0] == "sub-4145_ses-01" or s[0] == "sub-4141_ses-02"]
+        subjects_info = [s for s in subjects_info if s[0] == "sub-3079_ses-02"]
         if not subjects_info:
              logging.info("Target test subject not found.")
              sys.exit(0)
