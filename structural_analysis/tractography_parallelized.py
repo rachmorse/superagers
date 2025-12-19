@@ -338,11 +338,11 @@ def cleanup_files(wd):
     ]
     
     # Uncomment to enable cleanup
-    # logging.info(f"Cleaning up intermediate files for {wd.name}")
-    # for f_path in files_to_remove:
-    #     p = Path(f_path)
-    #     if p.exists():
-    #         p.unlink()
+    logging.info(f"Cleaning up intermediate files for {wd.name}")
+    for f_path in files_to_remove:
+        p = Path(f_path)
+        if p.exists():
+            p.unlink()
 
 
 def process_subject(subject, dti_dir, recon_all_dir, working_dir_root, git_dir, spm_path, matlab_cmd, threads=10):
@@ -536,12 +536,15 @@ def main():
 
     # Paths - using multiple cohorts
     dti_dirs = []
-    
+    cohorts = ["bbhi senior"]
+
     for ses in sessions:
         # bbhi
-        dti_dirs.append(Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/dtifit_{ses}_fsl-604"))
+        if "bbhi" in cohorts:
+            dti_dirs.append(Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/dtifit_{ses}_fsl-604"))
         # bbhi senior
-        dti_dirs.append(Path(f"/pool/guttmann/institut/UB/Superagers/MRI/dtifit_{ses}_fsl-604"))
+        if "bbhi senior" in cohorts:
+            dti_dirs.append(Path(f"/pool/guttmann/institut/UB/Superagers/MRI/dtifit_{ses}_fsl-604"))
         
     recon_all_bbhi = Path("/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6")
     recon_all_senior = Path("/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6")
@@ -565,13 +568,13 @@ def main():
     subjects_info = get_subjects_to_process(dti_dirs, working_dir_root, recon_all_bbhi, recon_all_senior)
     
     # TEST MODE: Run on a specific list of subs. They must be in the list from get_subjects_to_process 
-    if subjects_info:
-        logging.info(f"TEST MODE ENABLED: Filtering for specific test subjects.")
-        # Filters the list of subjects to only include the target subject
-        subjects_info = [s for s in subjects_info if s[0] == "sub-3079_ses-02"]
-        if not subjects_info:
-             logging.info("Target test subject not found.")
-             sys.exit(0)
+    # if subjects_info:
+    #     logging.info(f"TEST MODE ENABLED: Filtering for specific test subjects.")
+    #     # Filters the list of subjects to only include the target subject/s
+    #     subjects_info = [s for s in subjects_info if s[0] == "sub-62333_ses-01" or s[0] == "sub-77813_ses-01"]
+    #     if not subjects_info:
+    #          logging.info("Target test subject not found.")
+    #          sys.exit(0)
 
     if not subjects_info:
         logging.info("No subjects found to process.")
