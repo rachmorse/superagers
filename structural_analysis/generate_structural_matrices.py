@@ -231,6 +231,11 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
 
     # Create a temporary file for the output
     temp_output_file = Path(temp_dir) / f"{subject}_ses-{ses}_temp_output.txt"
+
+    # Create the out_assignments file path
+    # This allows future use of connectome2tck
+    out_assignments_file = Path(output_dir) / f"out_assignments/{subject}_ses-{ses}_out_assignments.txt"
+    out_assignments_file.parent.mkdir(parents=True, exist_ok=True)
     
     # Run tck2connectome to generate the connectivity matrix
     cmd = [
@@ -238,11 +243,12 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
         str(tractogram_file), 
         str(mask_file), 
         str(temp_matrix_file),
-        "-tck_weights_in", str(weights_file), # File for SIFT2 weights
-        "-force",                             # Overwrite existing files
-        "-zero_diagonal",                     # Set diagonal elements to zero
-        "-symmetric",                         # Ensure matrix is symmetric
-        "-scale_invnodevol"                   # Scale by the inverse size of each node that the streamlines connect to
+        "-out_assignments", str(out_assignments_file), # Save assignments
+        "-tck_weights_in", str(weights_file),          # File for SIFT2 weights
+        "-force",                                      # Overwrite existing files
+        "-zero_diagonal",                              # Set diagonal elements to zero
+        "-symmetric",                                  # Ensure matrix is symmetric
+        "-scale_invnodevol"                            # Scale by the inverse size of each node that the streamlines connect to
     ]
     
     try:
