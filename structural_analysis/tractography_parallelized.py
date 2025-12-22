@@ -76,11 +76,12 @@ def run_command(cmd, shell=True):
         raise e
 
 
-def get_subjects_to_process(dti_dirs, working_dir_root, recon_all_bbhi, recon_all_senior):
+def get_subjects_to_process(dti_dirs, tracto_dirs, working_dir_root, recon_all_bbhi, recon_all_senior):
     """Generate a list of subjects to process from multiple directories.
     
     Args:
         dti_dirs (list of Path): List of directories containing subject DTI files.
+        tracto_dirs (list of Path): List of directories containing tractography output files in shared directories.
         working_dir_root (Path): Root directory where processed subjects are stored.
         recon_all_bbhi (Path): Directory containing recon-all data for BBHI cohort.
         recon_all_senior (Path): Directory containing recon-all data for Senior cohort.
@@ -121,10 +122,16 @@ def get_subjects_to_process(dti_dirs, working_dir_root, recon_all_bbhi, recon_al
     for subject_id, source_dir in valid_subjects_info:
         wd_sub = working_dir_root / subject_id
 
-        if wd_sub.exists() and any(wd_sub.glob("*_tractogram_1M_SIFT.tck")):
-            logging.info(f"Skipping {subject_id}, already processed.")
+        if wd_sub.exists() and any(wd_sub.glob("*_tractogram_10M_SIFT2_weights.txt")):
+            logging.info(f"Skipping {subject_id}, already processed (in local directory).")
             continue
 
+        for tracto_dir in tracto_dirs:
+            tracto_file = tracto_dir / subject_id / f"{subject_id}_dwi_tractogram_10M_SIFT2_weights.txt"
+            if tracto_file.exists():
+                logging.info(f"Skipping {subject_id}, already processed (in shared directory).")
+                continue
+            
         filtered_subjects.append((subject_id, source_dir))
 
     return sorted(filtered_subjects, key=lambda x: x[0])
@@ -304,13 +311,13 @@ def run_tractography(subject, wd, threads):
             "-nthreads", str(threads)
         ])
 
-    if not Path(f"{wd}_tractogram_1M_SIFT.tck").exists():
+    logging.info(f"{subject}: SIFT2 filtering")
+    if not Path(f"{wd}_tractogram_10M_SIFT2_weights.txt").exists():
         run_command([
-            "tcksift", f"{wd}_tractogram_10M.tck",
+            "tcksift2", f"{wd}_tractogram_10M.tck",
             f"{wd}_desc-wm_fod.mif",
-            f"{wd}_tractogram_1M_SIFT.tck",
+            f"{wd}_tractogram_10M_SIFT2_weights.txt",
             "-act", f"{wd}_fs2diff_coords_aparc+aseg_5TT.nii",
-            "-term_number", "1M",
             "-nthreads", str(threads)
         ])
 
@@ -334,7 +341,6 @@ def cleanup_files(wd):
             f"{wd}_desc-csf_response.txt",
             f"{wd}_desc-gm_response.txt",
             f"{wd}_desc-wm_response.txt",
-            f"{wd}_tractogram_10M.tck",
     ]
     
     # Uncomment to enable cleanup
@@ -536,15 +542,18 @@ def main():
 
     # Paths - using multiple cohorts
     dti_dirs = []
-    cohorts = ["bbhi senior"]
+    tracto_dirs = []
+    cohorts = ["bbhi"]
 
     for ses in sessions:
         # bbhi
         if "bbhi" in cohorts:
             dti_dirs.append(Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/dtifit_{ses}_fsl-604"))
+            tracto_dirs.append(Path(f"/pool/guttmann/institut/BBHI/MRI/tracto_SIFT2"))
         # bbhi senior
         if "bbhi senior" in cohorts:
             dti_dirs.append(Path(f"/pool/guttmann/institut/UB/Superagers/MRI/dtifit_{ses}_fsl-604"))
+            tracto_dirs.append(Path(f"/pool/guttmann/institut/UB/Superagers/MRI/tracto_SIFT2"))
         
     recon_all_bbhi = Path("/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6")
     recon_all_senior = Path("/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6")
@@ -565,13 +574,26 @@ def main():
     logger = setup_logging(Path.cwd()) # Log to current dir
 
     # Get subjects
-    subjects_info = get_subjects_to_process(dti_dirs, working_dir_root, recon_all_bbhi, recon_all_senior)
+    subjects_info = get_subjects_to_process(dti_dirs, tracto_dirs, working_dir_root, recon_all_bbhi, recon_all_senior)
     
     # TEST MODE: Run on a specific list of subs. They must be in the list from get_subjects_to_process 
     # if subjects_info:
     #     logging.info(f"TEST MODE ENABLED: Filtering for specific test subjects.")
     #     # Filters the list of subjects to only include the target subject/s
-    #     subjects_info = [s for s in subjects_info if s[0] == "sub-62333_ses-01" or s[0] == "sub-77813_ses-01"]
+    #     included_subs = {
+    #         "sub-1283_ses-02",
+    #         "sub-3079_ses-02",
+    #         "sub-4141_ses-02",
+    #         "sub-4145_ses-01",
+    #         "sub-62333_ses-01",
+    #         "sub-77813_ses-01",
+    #         "sub-95133_ses-01",
+    #         "sub-95272_ses-01",
+    #         "sub-95653_ses-01",
+    #         "sub-100204_ses-01",
+    #         "sub-1014_ses-01",
+    #     }
+    #     subjects_info = [s for s in subjects_info if s[0] in included_subs]
     #     if not subjects_info:
     #          logging.info("Target test subject not found.")
     #          sys.exit(0)
