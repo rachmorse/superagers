@@ -55,23 +55,29 @@ def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
     """
     subjects_to_process = []
     tractogram_subjects = []
-    session_dir = f"ses-{ses}"
     
     # Find the subs with tractograms
     for sub_dir in tractogram_dir.glob("sub-*"):
-        dwi_dir = sub_dir / session_dir / "dwi"
-        if not dwi_dir.is_dir():
+        if not sub_dir.is_dir():
             continue
-        fname = f"{sub_dir.name}_{session_dir}_model-MSMTCSD_tractogram.tck"
-        full = dwi_dir / fname
-        if full.is_file():
+        if "_ses-" not in sub_dir.name:
+            continue
+        sub, session = sub_dir.name.split("_", 1) # e.g., sub-1283, ses-02
+
+        fname = f"{sub}_{session}_dwi_tractogram_10M.tck"
+        full = sub_dir / fname
+
+        weights_name = f"{sub}_{session}_dwi_tractogram_10M_SIFT2_weights.txt"
+        weights_full = sub_dir / weights_name
+
+        if full.is_file() and weights_full.is_file() and session == f"ses-{ses}":
             tractogram_subjects.append(sub_dir.name)
-        else: 
-            print(f"Tractogram not found for {sub_dir.name} in {dwi_dir}")
-    
+        elif not full.is_file() and not weights_full.is_file() and session == f"ses-{ses}":
+            print(f"Tractogram not found for {sub_dir.name}")
+
     # Define output CSV paths
     all_to_all_csv = output_dir / f"ses-{ses}/all_to_all_roi_matrices/all_to_all_roi_matrix.csv"
-    
+
     # Load existing subjects from CSV if it exists
     existing_subjects = set()
     if all_to_all_csv.exists():
@@ -84,12 +90,21 @@ def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
     
     # Iterate through subjects with tractograms
     for subject in tractogram_subjects:
+        if "_ses-" not in sub_dir.name:
+            continue
+        sub, session = subject.split("_")  
+
         # Check if native space mask exists
-        mask_file = Path(f"{mask_dir}/ses-{ses}/{subject}/dwi_space_masks/{subject}_ses-{ses}_schaefer200_subcortical14_dwi_space.nii.gz")
-        # Check if subject already processed (in the CSV)
-        if mask_file.exists() and subject not in existing_subjects:
-            subjects_to_process.append(subject)
-    
+        mask_file = Path(
+            f"{mask_dir}/{session}/{sub}/dwi_space_masks/"
+            f"{subject}_schaefer200_subcortical14_dwi_space.nii.gz"
+        )
+        # Check if subject is already processed (in the CSV)
+        if mask_file.exists() and sub not in existing_subjects and session == f"ses-{ses}":
+            subjects_to_process.append(sub)
+        elif not mask_file.exists() and session == f"ses-{ses}":
+            print(f"Native space mask not found for {subject}")
+
     print(f"Number of subjects to process: {len(subjects_to_process)}")
     return subjects_to_process
 
@@ -199,8 +214,12 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
     Returns:
         np.ndarray: The generated connectivity matrix.
     """
-    tractogram_file = tractogram_dir / subject / f"ses-{ses}/dwi/{subject}_ses-{ses}_model-MSMTCSD_tractogram.tck"
+    tractogram_file = tractogram_dir / f"{subject}_ses-{ses}/{subject}_ses-{ses}_dwi_tractogram_10M.tck"
+    weights_file = tractogram_dir / f"{subject}_ses-{ses}/{subject}_ses-{ses}_dwi_tractogram_10M_SIFT2_weights.txt"
+
     print(f"Tractogram file: {tractogram_file}")
+    print(f"Weights file: {weights_file}")
+    
     mask_file = Path(f"{mask_dir}/ses-{ses}/{subject}/dwi_space_masks/{subject}_ses-{ses}_schaefer200_subcortical14_dwi_space.nii.gz")
     
     # Create output directories
@@ -219,10 +238,11 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
         str(tractogram_file), 
         str(mask_file), 
         str(temp_matrix_file),
-        "-force",           # Overwrite existing files
-        "-zero_diagonal",   # Set diagonal elements to zero
-        "-symmetric",       # Ensure matrix is symmetric
-        "-scale_invnodevol" # Scale by the inverse size of each node that the streamlines connect to
+        "-tck_weights_in", str(weights_file), # File for SIFT2 weights
+        "-force",                             # Overwrite existing files
+        "-zero_diagonal",                     # Set diagonal elements to zero
+        "-symmetric",                         # Ensure matrix is symmetric
+        "-scale_invnodevol"                   # Scale by the inverse size of each node that the streamlines connect to
     ]
     
     try:
@@ -406,9 +426,9 @@ def main():
             print("------------------------------")
 
             if cohort == "bbhi":
-                tractogram_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/tracto_MSMTCSD")
+                tractogram_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_SIFT2")
             else:
-                tractogram_dir = Path("/pool/guttmann/institut/UB/Superagers/MRI/derivatives/tracto_MSMTCSD")
+                tractogram_dir = Path("/pool/guttmann/institut/UB/Superagers/MRI/tracto_SIFT2")
 
             # Setup MRTrix 
             os.environ["PATH"] = f"/home/rachel/miniconda3/bin:{os.environ['PATH']}"
