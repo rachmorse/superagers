@@ -126,11 +126,16 @@ def get_subjects_to_process(dti_dirs, tracto_dirs, working_dir_root, recon_all_b
             logging.info(f"Skipping {subject_id}, already processed (in local directory).")
             continue
 
+        found_in_shared = False
         for tracto_dir in tracto_dirs:
             tracto_file = tracto_dir / subject_id / f"{subject_id}_dwi_tractogram_10M_SIFT2_weights.txt"
             if tracto_file.exists():
                 logging.info(f"Skipping {subject_id}, already processed (in shared directory).")
-                continue
+                found_in_shared = True
+                break
+        
+        if found_in_shared:
+            continue
             
         filtered_subjects.append((subject_id, source_dir))
 
@@ -334,13 +339,16 @@ def cleanup_files(wd):
             f"{wd}_eddy_corrected_data.nii",
             f"{wd}_eddy_corrected_data.nii.gz",
             f"{wd}_fs2diff_coords_aparc+aseg.nii",
-            f"{wd}_fs2diff_coords_aparc+aseg_5TT.nii",
+            # f"{wd}_fs2diff_coords_aparc+aseg_5TT.nii",        # not deleting while switching to SIFT2
             f"{wd}_fs2diff_coords_aparc+aseg_nodes.nii.gz",
             f"{wd}_fs2diff_coords_T1w.nii",
             f"{wd}_mask.nii.gz",
             f"{wd}_desc-csf_response.txt",
             f"{wd}_desc-gm_response.txt",
             f"{wd}_desc-wm_response.txt",
+            f"{wd}_desc-csf_fod.mif",
+            f"{wd}_desc-gm_fod.mif",
+            # f"{wd}_desc-wm_fod.mif",                           # not deleting while switching to SIFT2
     ]
     
     # Uncomment to enable cleanup
@@ -549,7 +557,7 @@ def main():
         # bbhi
         if "bbhi" in cohorts:
             dti_dirs.append(Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/dtifit_{ses}_fsl-604"))
-            tracto_dirs.append(Path(f"/pool/guttmann/institut/BBHI/MRI/tracto_SIFT2"))
+            tracto_dirs.append(Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_SIFT2"))
         # bbhi senior
         if "bbhi senior" in cohorts:
             dti_dirs.append(Path(f"/pool/guttmann/institut/UB/Superagers/MRI/dtifit_{ses}_fsl-604"))
