@@ -551,7 +551,7 @@ def main():
     # Paths - using multiple cohorts
     dti_dirs = []
     tracto_dirs = []
-    cohorts = ["bbhi"]
+    cohorts = ["bbhi", "bbhi senior"]
 
     for ses in sessions:
         # bbhi

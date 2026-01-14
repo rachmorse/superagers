@@ -244,9 +244,9 @@ def main():
             output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
 
             if cohort == "bbhi":
-                reconall_folder = Path('/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall')
+                reconall_folder = Path('/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6')
             else:  # cohort == "bbhi senior"
-                reconall_folder = Path('/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall')
+                reconall_folder = Path('/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6')
 
             # Determine subjects to process
             subject_list, already_processed = get_subjects_to_process(output_folder, reconall_folder)

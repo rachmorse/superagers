@@ -496,8 +496,8 @@ def main():
             os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
 
             out_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-0{ses}")
-            dwi_bbhi_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp{ses}")
-            dwi_bbhi_senior_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP{ses}")
+            dwi_bbhi_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/dtifit_ses-0{ses}_fsl-604")
+            dwi_bbhi_senior_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/dtifit_ses-0{ses}_fsl-604")
 
             subject_infos: List[SubjectPaths] = []
             dwi_inputs: dict[str, DwiProcessingPaths] = {}
@@ -521,21 +521,18 @@ def main():
                 bold_mask_output = out_subject_dir / f"bold_space_masks/{subject}_{ses_label}_schaefer200_subcortical14_bold_space.nii.gz"
 
                 if cohort == "bbhi":
-                    t1_mgz_path = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall/{subject}_{ses_label}_run-01/mri/T1.mgz")
-                    brain_mgz_path = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall/{subject}_{ses_label}_run-01/mri/brain.mgz")
-                    dwi_root_dir = dwi_bbhi_dir / subject
+                    t1_mgz_path = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6/{subject}_{ses_label}_run-01/mri/T1.mgz")
+                    brain_mgz_path = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6/{subject}_{ses_label}_run-01/mri/brain.mgz")
+                    dwi_root_dir = dwi_bbhi_dir / f"{subject}_ses-0{ses}"
                     if ses == "2":
                         bold_path = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp{ses}/{subject}/native_T1/{subject}_{ses_label}_run-01_rest_bold_ap_T1-space.nii.gz")
                     else:
                         bold_path = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed/{subject}/native_T1/{subject}_{ses_label}_run-01_rest_bold_ap_T1-space.nii.gz")
                 else:
-                    t1_mgz_path = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall/{subject}_{ses_label}/mri/T1.mgz")
-                    brain_mgz_path = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall/{subject}_{ses_label}/mri/brain.mgz")
-                    if ses == "1":
-                        dwi_root_dir = dwi_bbhi_senior_dir / subject
-                    else:
-                        dwi_root_dir = dwi_bbhi_senior_dir / f"{subject}_ses-0{ses}"
-                    bold_path = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed/{subject}/{ses_label}/native_T1/{subject}_{ses_label}_run-01_rest_bold_ap_T1-space.nii.gz")
+                    t1_mgz_path = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6/{subject}_{ses_label}/mri/T1.mgz")
+                    brain_mgz_path = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6/{subject}_{ses_label}/mri/brain.mgz")
+                    dwi_root_dir = dwi_bbhi_senior_dir / f"{subject}_ses-0{ses}"
+                    bold_path = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preproc_fs6-recon/{subject}/{ses_label}/native_T1/{subject}_{ses_label}_run-01_rest_bold_ap_T1-space.nii.gz")
 
                 eddy_corrected = dwi_root_dir / "eddy_corrected_data.nii.gz"
                 out_b0_dir = out_subject_dir / "b0"
@@ -583,8 +580,8 @@ def main():
             subjects_for_dwi, subjects_for_bold, already_processed = get_subjects_to_process(subject_infos)
 
             # Uncomment the following line to process specific subjects
-            # subjects_for_dwi = [] 
-            # subjects_for_bold = ["sub-187539", "sub-187655"] 
+            # subjects_for_dwi = ["sub-1014"] 
+            # subjects_for_bold = ["sub-1014"] 
 
             # Process each subject
             result_dwi = []

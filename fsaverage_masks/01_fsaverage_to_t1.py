@@ -241,9 +241,9 @@ def main():
             # Set paths based on cohort
             if cohort == "bbhi":
                 # BBHI paths
-                reconall_dir = Path('/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall')
+                reconall_dir = Path('/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6')
             else:  # cohort == "bbhi senior"
-                reconall_dir = Path('/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall')
+                reconall_dir = Path('/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6')
 
             # Set environment variables
             os.environ['SUBJECTS_DIR'] = str(reconall_dir)
@@ -257,7 +257,7 @@ def main():
             
             # Uncomment this code to process a single subject 
             # Format subject_data = [(subject_id, subject_dir)]
-            # subject_data = [("sub-1014", "sub-1014_ses-01")]
+            # subject_data = [("sub-1014", "sub-1014_ses-02")]
 
             subjects = [s[0] for s in subject_data]
             logger.info(f"Will process {len(subjects)} subjects: {', '.join(subjects)}")
