@@ -51,7 +51,7 @@ This repository contains the analysis scripts for our study on superagers, which
 - **Scripts:**
     - `tractography_parallelized.py`: Runs the complete tractography pipeline. It handles parallel processing of subjects to perform rigid-body coregistration (structural to diffusion), tissue response function estimation, Fibre Orientation Distributions (FODs) estimation using MSMT-CSD, and Anatomically-Constrained Tractography (ACT) with SIFT2 to add weighting to the final tractograms.
         - Uses `spm_coregister_parcellation.m`: A MATLAB script used for the rigid-body coregistration step. It aligns the structural T1 and parcellation files to the diffusion b0 image using Normalized Mutual Information (NMI), modifying the NIfTI headers in-place.
-    - `generate_structural_matrices.py`: Computes various structural connectivity matrices from the MRTrix data include all-to-all ROI and network specific matrices. Also, visualizes the matrices. 
+    - `generate_structural_matrices.py`: Computes various structural connectivity matrices from the MRTrix data include all-to-all ROI and network specific matrices. Also, optionally visualizes the matrices. 
         - Uses functions from the script `compute_functional_connectivity.py`.
 - **Notes:**
     - The scripts used in DWI preprocessing are available in another [repository](https://github.com/rachmorse/dwi_preprocessing). 
