@@ -19,20 +19,14 @@ def get_expected_dwi_files(subject_id, ses):
 
     if numeric_id > 5000: # BBHI
         files = [
-            f"/pool/guttmann/institut/BBHI/MRI/processed_data/DWI_dtifit_tp{ses}/{subject_id}/eddy_corrected_data.nii.gz",
-            f"/pool/guttmann/institut/BBHI/MRI/derivatives/tracto_MSMTCSD/{subject_id}/ses-0{ses}/dwi/{subject_id}_ses-0{ses}_model-MSMTCSD_tractogram.tck"
+            f"/pool/guttmann/institut/BBHI/MRI/processed_data/dtifit_ses-0{ses}_fsl-604/{subject_id}_ses-0{ses}/eddy_corrected_data.nii.gz",
+            f"/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_SIFT2/{subject_id}_ses-0{ses}/{subject_id}_ses-0{ses}_dwi_tractogram_10M_SIFT2_weights.txt"
         ] 
     else:
-        if ses == 1:
-            files = [
-                f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP{ses}/{subject_id}/eddy_corrected_data.nii.gz",
-                f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/tracto_MSMTCSD/{subject_id}/ses-0{ses}/dwi/{subject_id}_ses-0{ses}_model-MSMTCSD_tractogram.tck"
-            ]
-        else:
-            files = [
-                f"/pool/guttmann/institut/UB/Superagers/MRI/DTIFIT_TP{ses}/{subject_id}_ses-0{ses}/eddy_corrected_data.nii.gz",
-                f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/tracto_MSMTCSD/{subject_id}/ses-0{ses}/dwi/{subject_id}_ses-0{ses}_model-MSMTCSD_tractogram.tck"
-            ]
+        files = [
+            f"/pool/guttmann/institut/UB/Superagers/MRI/dtifit_ses-0{ses}_fsl-604/{subject_id}_ses-0{ses}/eddy_corrected_data.nii.gz",
+            f"/pool/guttmann/institut/UB/Superagers/MRI/tracto_SIFT2/{subject_id}_ses-0{ses}/{subject_id}_ses-0{ses}_dwi_tractogram_10M_SIFT2_weights.txt"
+        ]
 
     return files
 
@@ -114,11 +108,11 @@ def summarize_dwi_results(ses_number, all_ids):
         print("-----------------------------")
 
     if missing_tract:
-        print(f"Subjects dropped because no dwi_tractogram_1M_SIFT.tck (but with eddy_corrected_data.nii.gz): {len(missing_tract)} subjects")
+        print(f"Subjects dropped because no dwi_tractogram_10M_SIFT2.tck (but with eddy_corrected_data.nii.gz): {len(missing_tract)} subjects")
         print(', '.join(missing_tract))
         print("-----------------------------")
     else:
-        print("No subjects missing <sub-xxx>_dwi_tractogram_1M_SIFT.tck")
+        print("No subjects missing <sub-xxx>_dwi_tractogram_10M_SIFT2.tck")
         print("-----------------------------")
 
     if poor_reg:
@@ -149,25 +143,19 @@ def get_expected_fmri_files(subject_id, ses):
     if numeric_id > 5000: # BBHI
         if ses == 1:
             files = [
-                f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed/{subject_id}/native_T1/{subject_id}_ses-01_run-01_rest_bold_ap_T1-space.nii.gz",
-                f"/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-01/{subject_id}/bold_space_masks/{subject_id}_ses-01_schaefer200_subcortical14_bold_space.nii.gz"
+                f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed/{subject_id}/native_T1/{subject_id}_ses-0{ses}_run-01_rest_bold_ap_T1-space.nii.gz",
+                f"/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-0{ses}/{subject_id}/bold_space_masks/{subject_id}_ses-0{ses}_schaefer200_subcortical14_bold_space.nii.gz"
             ]
         else:
             files = [
-                f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp2/{subject_id}/native_T1/{subject_id}_ses-02_run-01_rest_bold_ap_T1-space.nii.gz",
-                f"/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-02/{subject_id}/bold_space_masks/{subject_id}_ses-02_schaefer200_subcortical14_bold_space.nii.gz"
+                f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp{ses}/{subject_id}/native_T1/{subject_id}_ses-0{ses}_run-01_rest_bold_ap_T1-space.nii.gz",
+                f"/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-0{ses}/{subject_id}/bold_space_masks/{subject_id}_ses-0{ses}_schaefer200_subcortical14_bold_space.nii.gz"
             ]
     else:
-        if ses == 1:
-            files = [
-                f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed/{subject_id}/ses-01/native_T1/{subject_id}_ses-01_run-01_rest_bold_ap_T1-space.nii.gz",
-                f"/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-01/{subject_id}/bold_space_masks/{subject_id}_ses-01_schaefer200_subcortical14_bold_space.nii.gz"
-            ]
-        else:
-            files = [
-                f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preprocessed/{subject_id}/ses-02/native_T1/{subject_id}_ses-02_run-01_rest_bold_ap_T1-space.nii.gz",
-                f"/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-02/{subject_id}/bold_space_masks/{subject_id}_ses-02_schaefer200_subcortical14_bold_space.nii.gz"
-            ]
+        files = [
+            f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preproc_fs6-recon/{subject_id}/ses-0{ses}/native_T1/{subject_id}_ses-0{ses}_run-01_rest_bold_ap_T1-space.nii.gz",
+            f"/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-0{ses}/{subject_id}/bold_space_masks/{subject_id}_ses-0{ses}_schaefer200_subcortical14_bold_space.nii.gz"
+        ]
     return files
 
 
@@ -315,14 +303,27 @@ def main():
     csv_path = "/home/rachel/Desktop/data/superager.csv"
     df = pd.read_csv(csv_path)
     # Ensure IDs are in the format 'sub-xxx'
-    all_ids = []
-    for i in df['id'].dropna().tolist():
+    ids_tp1 = []
+    ids_tp2 = []
+
+    for _, row in df.iterrows():
+        i = row["id"]
+
+        # keep your original ID validity check
         if isinstance(i, int) or (isinstance(i, str) and i.isdigit()):
-             all_ids.append(f"sub-{i}")
+            sub_id = f"sub-{i}"
+
+            has_tp1 = pd.notna(row["superager_tp1"]) and str(row["superager_tp1"]).strip() != ""
+            has_tp2 = pd.notna(row["superager_tp2"]) and str(row["superager_tp2"]).strip() != ""
+
+            if has_tp1:
+                ids_tp1.append(sub_id)
+            if has_tp2:
+                ids_tp2.append(sub_id)
 
     # Reconall dir
-    bbhi_reconall_dir = Path('/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall')
-    bbhi_senior_reconall_dir = Path('/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall')
+    bbhi_reconall_dir = Path('/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6')
+    bbhi_senior_reconall_dir = Path('/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6')
 
     # --- Session 1 ---
     print("\nProcessing Session 1...")
@@ -330,7 +331,7 @@ def main():
     # Filter all_ids to only include subjects with recon-all done
     all_ids_tp1 = []
 
-    for sub in all_ids:
+    for sub in ids_tp1:
         num = int(sub.replace("sub-", ""))
         if num > 6000: 
             if (bbhi_reconall_dir / f"{sub}_ses-01_run-01").exists():
@@ -356,10 +357,10 @@ def main():
 
     # Summarize
     # For func_not_struct: explain why structural is missing
-    missing_tract_tp1, poor_reg_tp1 = summarize_dwi_results(1, all_ids)
+    missing_tract_tp1, poor_reg_tp1 = summarize_dwi_results(1, all_ids_tp1)
 
     # For struct_not_func: explain why functional is missing
-    scrub_exc_tp1, trunc_bold_tp1 = summarize_fmri_results(1, all_ids)
+    scrub_exc_tp1, trunc_bold_tp1 = summarize_fmri_results(1, all_ids_tp1)
 
     # --- Session 2 ---
     print("\nProcessing Session 2...")
@@ -367,7 +368,7 @@ def main():
     # Filter all_ids to only include subjects with recon-all done
     all_ids_tp2 = []
 
-    for sub in all_ids:
+    for sub in ids_tp2:
         num = int(sub.replace("sub-", ""))
         if num > 6000: 
             if (bbhi_reconall_dir / f"{sub}_ses-02_run-01").exists():
@@ -392,8 +393,8 @@ def main():
     ]
 
     # Summarize
-    missing_tract_tp2, poor_reg_tp2 = summarize_dwi_results(2, all_ids)
-    scrub_exc_tp2, trunc_bold_tp2 = summarize_fmri_results(2, all_ids)
+    missing_tract_tp2, poor_reg_tp2 = summarize_dwi_results(2, all_ids_tp2)
+    scrub_exc_tp2, trunc_bold_tp2 = summarize_fmri_results(2, all_ids_tp2)
 
     # Print summary of subjects with both DWI and fMRI
     has_fmri_dwi_long = [
