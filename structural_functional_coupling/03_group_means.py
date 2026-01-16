@@ -443,11 +443,47 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
             coupling_file=output_group_connectivity_file,
             group_name=group_name,
             output_dir=output_directory_group,
+            vmax=None,
             ses=ses)
     
+    # Calculate and visualize the difference
+    if ses == "01":
+        superager_path = output_files['superagers_tp1']
+        non_superager_path = output_files['non_superagers_tp1']
+        diff_name = "diff_superagers_vs_non_superagers_tp1"
+    else:
+        superager_path = output_files['superagers_tp2']
+        non_superager_path = output_files['non_superagers_tp2']
+        diff_name = "diff_superagers_vs_non_superagers_tp2"
+
+    if superager_path.exists() and non_superager_path.exists():
+        print(f"Calculating difference between {superager_path} and {non_superager_path}...")
+        df_super = pd.read_csv(superager_path, index_col=0)
+        df_non = pd.read_csv(non_superager_path, index_col=0)
+        
+        # Calculate difference (Superager - Non-Superager)
+        # Use values to avoid column name mismatch
+        diff_values = df_super.iloc[:, 0] - df_non.iloc[:, 0]
+        df_diff = pd.DataFrame(diff_values, columns=[diff_name])
+
+        # Save the difference
+        output_diff_file = output_directory_group / f"{diff_name}_average.csv"
+        df_diff.to_csv(output_diff_file)
+        print(f"Difference saved to {output_diff_file}")
+        
+        # Visualize the difference with symmetric scale
+        visualize_coupling(
+            coupling_file=output_group_connectivity_file,
+            group_name=diff_name,
+            output_dir=output_directory_group,
+            ses=ses,
+            vmin=-0.03, 
+            vmax=0.03
+        )
+
 
 if __name__ == "__main__":
-    sessions = ["01", "02"]
+    sessions = ["01"]
 
     for ses in sessions:
         if ses == "01":
