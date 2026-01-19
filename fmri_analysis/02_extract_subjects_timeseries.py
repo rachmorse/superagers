@@ -319,9 +319,9 @@ if __name__ == "__main__":
 
             if cohort == "bbhi":
                 if ses == "1":
-                    root_directory = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed")
+                    root_directory = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon")
                 else:
-                    root_directory = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp2")
+                    root_directory = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon_tp2")
             else:
                 root_directory = Path("/pool/guttmann/institut/UB/Superagers/MRI/resting_preproc_fs6-recon")
             error_log_path = output_directory / "error_log.txt"

@@ -143,12 +143,12 @@ def get_expected_fmri_files(subject_id, ses):
     if numeric_id > 5000: # BBHI
         if ses == 1:
             files = [
-                f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed/{subject_id}/native_T1/{subject_id}_ses-0{ses}_run-01_rest_bold_ap_T1-space.nii.gz",
+                f"/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon/{subject_id}/native_T1/{subject_id}_ses-0{ses}_run-01_rest_bold_ap_T1-space.nii.gz",
                 f"/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-0{ses}/{subject_id}/bold_space_masks/{subject_id}_ses-0{ses}_schaefer200_subcortical14_bold_space.nii.gz"
             ]
         else:
             files = [
-                f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp{ses}/{subject_id}/native_T1/{subject_id}_ses-0{ses}_run-01_rest_bold_ap_T1-space.nii.gz",
+                f"/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon_tp{ses}/{subject_id}/native_T1/{subject_id}_ses-0{ses}_run-01_rest_bold_ap_T1-space.nii.gz",
                 f"/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-0{ses}/{subject_id}/bold_space_masks/{subject_id}_ses-0{ses}_schaefer200_subcortical14_bold_space.nii.gz"
             ]
     else:

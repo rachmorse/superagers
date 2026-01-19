@@ -525,9 +525,9 @@ def main():
                     brain_mgz_path = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6/{subject}_{ses_label}_run-01/mri/brain.mgz")
                     dwi_root_dir = dwi_bbhi_dir / f"{subject}_ses-0{ses}"
                     if ses == "2":
-                        bold_path = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed_tp{ses}/{subject}/native_T1/{subject}_{ses_label}_run-01_rest_bold_ap_T1-space.nii.gz")
+                        bold_path = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon_tp{ses}/{subject}/native_T1/{subject}_{ses_label}_run-01_rest_bold_ap_T1-space.nii.gz")
                     else:
-                        bold_path = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/fMRI-preprocessed/{subject}/native_T1/{subject}_{ses_label}_run-01_rest_bold_ap_T1-space.nii.gz")
+                        bold_path = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon/{subject}/native_T1/{subject}_{ses_label}_run-01_rest_bold_ap_T1-space.nii.gz")
                 else:
                     t1_mgz_path = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6/{subject}_{ses_label}/mri/T1.mgz")
                     brain_mgz_path = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6/{subject}_{ses_label}/mri/brain.mgz")
