@@ -60,7 +60,6 @@ def calculate_structure_function_coupling(structural_dir, functional_dir, subjec
     Returns:
         dict: Dictionary containing coupling results
     """
-    
     # Define paths using specific directory structure
     func_conn_path = functional_dir / f"{subject}_{ses}_functional_connectivity_matrix_fisher_z.csv"
     struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix.csv"

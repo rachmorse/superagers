@@ -295,8 +295,8 @@ def run_5ttgen(subject, wd):
 def run_tractography(subject, wd, threads):
     """Performs tractography and SIFT filtering.
 
-    Generates 10 million streamlines initially and filters them down to 1 million
-    using SIFT (Spherical-deconvolution Informed Filtering of Tractograms).
+    Generates 10 million streamlines initially and estimates weights for them
+    using SIFT2.
 
     Args:
         subject (str): Subject ID.

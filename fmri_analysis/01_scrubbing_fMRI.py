@@ -457,7 +457,7 @@ def main(
 
     # Parallel processing
     if multi:
-        with Pool(2) as pool:
+        with Pool(3) as pool:
             pool.starmap(
                 process_subject,
                 [
@@ -491,12 +491,15 @@ def main(
                 subject_fwd_map.get(subject)
             )
 
+    print("Processing complete.")
+
 
 if __name__ == "__main__":
     # Change to your paths and settings
     threshold = 0.5
     ses = "02"
-    root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preproc_fs6-recon"
+    # root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preproc_fs6-recon"
+    root = "/home/rachel/Desktop/preprocessing-updated_reconall/bbhi/resting_preprocessed"
     output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
 
     # Create the output directory if it does not exist
@@ -544,5 +547,5 @@ if __name__ == "__main__":
             bold_pattern,
             scrubbed_pattern,
             subject_dir_pattern,
-            multi=False,
+            multi=True,
         )
