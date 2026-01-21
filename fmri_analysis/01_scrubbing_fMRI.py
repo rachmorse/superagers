@@ -2,36 +2,68 @@ import json
 import os
 from multiprocessing import Pool
 from pathlib import Path
+from re import sub
 import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
 import pandas as pd
 import scipy.interpolate
 
-# This script is only to run on the BBHI senior tp2 data because the BBHI and BBHI senior tp1 data has already been scrubbed.
 
-def analyze_threshold(data, threshold, total_scans=740, affected_percentage=0.5):
-    """Analyzes and validates subjects with high motion using a given threshold.
-
-    This function visualizes the distribution of moved scans to help determine
-    appropriate thresholds for scrubbing.
+def aggregate_fwd_data(roots, output_file, ses, cohort, subject_dir_suffix="native_T1"):
+    """Aggregates framewise_displ.txt from multiple root directories into a single CSV.
 
     Args:
-        data (pd.DataFrame): DataFrame containing Framewise Displacement (FWD) data.
-        threshold (float): The FWD threshold to identify moved scans.
-        total_scans (int, optional): Total number of scans per subject. Defaults to 740.
-        affected_percentage (float, optional): Percentage of scans that must exceed threshold
-            to count a subject as "moved". Defaults to 0.5.
+        roots (list): List of root directory paths to scan for subjects.
+        output_file (str or Path): Path to the output CSV file.
+        ses (str): Session identifier (e.g., "01", "02").
+        cohort (str): Cohort identifier (e.g., "bbhi").
+        subject_dir_suffix (str, optional): Directory suffix where FWD file is located. Defaults to "native_T1".
     """
-    moved_subjects_count = (((data > threshold).sum(1) / total_scans) > affected_percentage).sum()
-    print(
-        f"{moved_subjects_count} subjects with more than {affected_percentage * 100}% of scans moved (threshold {threshold})"
-    )
-    plt.hist((data > threshold).sum(1) / total_scans)
-    plt.title(f"Distribution of Percentage of Moved Scans (Threshold: {threshold})")
-    plt.xlabel("Percentage")
-    plt.ylabel("Number of Subjects")
-    plt.show()
+    fwd_list = []
+    processed_subjects = set()
+    
+    print(f"Aggregating FWD data from roots: {roots}")
+
+    for root_dir in roots:
+        if not os.path.exists(root_dir):
+            print(f"Warning: Root directory not found: {root_dir}")
+            continue
+            
+        potential_subjects = sorted(os.listdir(root_dir))
+        
+        for subject in potential_subjects:
+            if not subject.startswith("sub-"):
+                continue
+            
+            # Avoid duplicates if subject exists in multiple roots (priority to first found)
+            if subject in processed_subjects:
+                continue
+
+            # Construct path to framewise_displ.txt
+            # It is in ses-XX/native_T1/framewise_displ.txt or just native_T1/ for bbhi
+            if cohort == "bbhi":
+                fwd_path = Path(root_dir) / subject / subject_dir_suffix / "framewise_displ.txt"
+            else:
+                fwd_path = Path(root_dir) / subject / f"ses-{ses}" / subject_dir_suffix / "framewise_displ.txt"
+            
+            if fwd_path.exists():
+                try:
+                    fwd_data_df = pd.read_csv(fwd_path)
+                    fwd_series = pd.Series(fwd_data_df["FramewiseDisplacement"].tolist(), name=subject)
+                    fwd_row_df = fwd_series.to_frame().T
+                    fwd_list.append(fwd_row_df)
+                    processed_subjects.add(subject)
+                except Exception as e:
+                    print(f"Error reading FWD for {subject} in {root_dir}: {e}")
+
+    if fwd_list:
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        all_fwd_df = pd.concat(fwd_list)
+        all_fwd_df.to_csv(output_file, index=True, header=False)
+        print(f"Aggregated FWD data saved to {output_file} ({len(fwd_list)} subjects)")
+    else:
+        print("No FWD data found to aggregate.")
 
 
 def save_json_sidecar(json_file, status, threshold, percent_scrubbed, num_bad_frames, total_frames, max_scrub_percent):
@@ -270,11 +302,12 @@ def process_subject(
     """
     try:
         bold_file = bold_pattern.format(subject=subject, ses=ses)
-        scrubbed_file = scrubbed_pattern.format(subject=subject, ses=ses, threshold=threshold, output_data=output_data)
+        threshold_str = str(threshold).replace('.', '')
+        scrubbed_file = scrubbed_pattern.format(subject=subject, ses=ses, threshold=threshold, threshold_str=threshold_str, output_data=output_data)
         
         # Define remote path 
         remote_pattern_str = scrubbed_pattern.replace("{output_data}", str(root))
-        remote_scrubbed_file = remote_pattern_str.format(subject=subject, ses=ses, threshold=threshold)
+        remote_scrubbed_file = remote_pattern_str.format(subject=subject, ses=ses, threshold=threshold, threshold_str=threshold_str)
 
         # Derive JSON filename for the sidecar
         if scrubbed_file.endswith(".nii.gz"):
@@ -321,14 +354,11 @@ def main(
     """Main function to run this script. This function performs the following steps:
 
     1. Defines session, threshold, and directories for data input and output.
-    2. Iterates over all subjects in the root directory to concatenate their 
-        `framewise_displ.txt` files into a single DataFrame.
-    3. Saves the concatenated DataFrame to `all_fwd.csv`.
-    4. Optionally, visualizes data thresholds using the `analyze_threshold` function.
-    5. Generates a list of subjects to be processed and saves it as `todo.csv`.
-    6. Scrubs the BOLD images by either serial or parallel processing of subjects.
-    7. Saves the scrubbed BOLD images to the output directory.
-    8. Logs errors to `scrubbing_errors.txt`.
+    2. Iterates over all subjects in the root directory to collect FWD data for processing.
+    3. Generates a list of subjects to be processed and saves it as `todo.csv`.
+    4. Scrubs the BOLD images by either serial or parallel processing of subjects.
+    5. Saves the scrubbed BOLD images to the output directory.
+    6. Logs errors to `scrubbing_errors.txt`.
 
     Args:
         ses (str): Session identifier (e.g., "01", "02").
@@ -345,14 +375,8 @@ def main(
             Defaults to False.
     """
     folder_name = subject_dir_pattern.split('/')[-1]
-    summary_dir = os.path.join(output_data, folder_name)
-    os.makedirs(summary_dir, exist_ok=True)
 
-    error_log = os.path.join(summary_dir, "scrubbing_errors.txt")
-    all_fwd_path = os.path.join(summary_dir, "all_fwd.csv")
-
-    # Concatenate all framewise_displ.txt files (per subject) into a single DataFrame
-    fwd_list = []
+    error_log = os.path.join(output_data, f"scrubbing_errors_{folder_name}.txt")
     subject_fwd_map = {}
 
     # Determine subjects list 
@@ -389,9 +413,6 @@ def main(
                 # Convert each participant's column of data into a list to make it a single row of data instead
                 fwd_series = pd.Series(fwd_data_df["FramewiseDisplacement"].tolist(), name=subject)
                 fwd_row_df = fwd_series.to_frame().T
-
-                # Append the row DataFrame to the list
-                fwd_list.append(fwd_row_df)
                 
                 # Store for processing later
                 subject_fwd_map[subject] = fwd_data_df["FramewiseDisplacement"].tolist()
@@ -401,8 +422,8 @@ def main(
             print(f"No framewise_displ.txt found for {subject}")
 
         # Check if scrubbed data AND json sidecar already exists in either location
-        threshold_str = str(threshold)
-        local_scrubbed_file = Path(scrubbed_pattern.format(subject=subject, ses=ses, threshold=threshold, output_data=output_data))
+        threshold_str = str(threshold).replace('.', '')
+        local_scrubbed_file = Path(scrubbed_pattern.format(subject=subject, ses=ses, threshold=threshold, threshold_str=threshold_str, output_data=output_data))
         
         # Determine JSON path logic (replicating process_subject logic)
         if str(local_scrubbed_file).endswith(".nii.gz"):
@@ -413,7 +434,7 @@ def main(
              local_json_file = Path(str(local_scrubbed_file) + ".json")
 
         remote_pattern_str = scrubbed_pattern.replace("{output_data}", str(root))
-        remote_scrubbed_file = Path(remote_pattern_str.format(subject=subject, ses=ses, threshold=threshold))
+        remote_scrubbed_file = Path(remote_pattern_str.format(subject=subject, ses=ses, threshold=threshold, threshold_str=threshold_str))
         
         # Determine processing needs:
         # 1. Full scrub if no scrubbed data exists (local or remote).
@@ -439,18 +460,6 @@ def main(
             pass
 
     print(f"Total subjects needing processing: {len(subjects)}")
-
-    # Save the concatenated DataFrame to all_fwd.csv
-    if fwd_list:
-        all_fwd_df = pd.concat(fwd_list)
-        all_fwd_df.to_csv(all_fwd_path, index=True, header=False)
-        print(f"all_fwd.csv has been created at {all_fwd_path}")
-    else:
-        print("No FWD data found to concatenate.")
-
-    # Visualize what different thresholds would look like in the data
-    # analyze_threshold(all_fwd_df, 0.2)
-    # analyze_threshold(all_fwd_df, 0.5)
 
     # Print subjects to be processed
     print(f"Subjects to be processed: {subjects}")
@@ -498,12 +507,26 @@ if __name__ == "__main__":
     # Change to your paths and settings
     threshold = 0.5
     ses = "02"
+    cohort = "bbhi senior"
     # root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preproc_fs6-recon"
-    root = "/home/rachel/Desktop/preprocessing-updated_reconall/bbhi/resting_preprocessed"
-    output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
+    if cohort == "bbhi":
+        root = "/home/rachel/Desktop/preprocessing-updated_reconall/bbhi/resting_preprocessed"
+        if ses == "02":
+            pool_root = "/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon_tp2"
+        else:
+            pool_root = "/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon"
+        output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data/bbhi")
+    else:
+        root = "/home/rachel/Desktop/preprocessing-updated_reconall/resting_preprocessed"
+        pool_root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preproc_fs6-recon"
+        output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
 
     # Create the output directory if it does not exist
     output_data.mkdir(parents=True, exist_ok=True)
+
+    # Aggregate FWD data once
+    roots_to_scan = [pool_root, root]
+    aggregate_fwd_data(roots_to_scan, output_data / f"all_fwd_ses-{ses}.csv", ses, cohort, subject_dir_suffix="native_T1")
 
     configs = [
         {
@@ -531,13 +554,23 @@ if __name__ == "__main__":
             subject_dir_pattern,
             f"{{subject}}_ses-{{ses}}_run-01_rest_bold_ap_{file_suffix}.nii.gz",
         )
-        scrubbed_pattern = os.path.join(
-            "{output_data}",
-            "{subject}",
-            f"ses-{ses}",
-            folder_name,
-            f"{{subject}}_ses-{{ses}}_run-01_rest_bold_ap_{file_suffix}_scrubbed_{{threshold}}.nii.gz",
-        )
+        if cohort == "bbhi senior":
+            scrubbed_pattern = os.path.join(
+                "{output_data}",
+                "{subject}",
+                f"ses-{ses}",
+                folder_name,
+                f"{{subject}}_ses-{{ses}}_run-01_rest_bold_ap_{file_suffix}_scrubbed_{{threshold}}.nii.gz",
+            )
+        else:
+            threshold_str = str(threshold).replace('.', '')
+            scrubbed_pattern = os.path.join(
+                "{output_data}",
+                "{subject}",
+                f"ses-{ses}",
+                folder_name,
+                f"{{subject}}_ses-{{ses}}_run-01_rest_bold_ap_{file_suffix}_scrubbed-interp-{{threshold_str}}.nii.gz",
+            )
 
         main(
             ses,
