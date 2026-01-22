@@ -26,7 +26,7 @@ This repository contains the analysis scripts for our study on superagers, which
             - Score at or above the mean for age 16-29 year olds on the RAVLT long delay free recall based on normative data from [Schmidt (1996)](https://scholar.google.co.uk/scholar?hl=en&as_sdt=0%2C5&q=Schmidt%2C+M.+%281996%29.+Rey+Auditory+and+Verbal+Learning+Test%3A+A+handbook.+Los+Angeles%2C+CA%3A+Western+Psychological+Services&btnG=) at baseline and follow-up. 
             - Score within 1 SD of the norm for age and education on the TMT B, inverse digits and semantic fluency based on the neuronorma data from [Peña-Casanova et al. (2009a)](https://pubmed.ncbi.nlm.nih.gov/19661109/) with Spanish adults at baseline and follow-up. 
 
-### fsaverage_masks
+### fsaverage
 - **Purpose:** These scripts transform the fsaverage Schaefer atlas and aseg parcellation to T1 native space then DWI native space and BOLD native T1 space and combine the two atlases to have a Schaefer + subcortical atlas for each subject using Freesurfer and FSL. 
 - **Scripts:**
     - `01_fsaverage_to_t1.py`: Transforms the Schaefer 200 ROI atlas from FreeSurfer’s ‘fsaverage’ surface space to each subject’s T1 space. It uses FreeSurfer's mri_surf2surf (converts to subject specific surface) and mri_label2vol (conducts surface-to-volume projection in native T1 space).
@@ -39,7 +39,7 @@ This repository contains the analysis scripts for our study on superagers, which
 - **Purpose:** These scripts scrub the preprocessed fMRI data, extract timeseries data, and compute functional connectivity correlations. 
 - **Scripts:**
     - `01_scrubbing_fMRI.py`: Scrubs fMRI BOLD images based on a Framewise Displacement (FWD) threshold to help mitigate motion artifacts. It interpolates frames where a subject has a high FWD.
-    - `02_extract_subjects_timeseries.py`: Extracts timeseries data from fMRI BOLD images using the Schaefer 200 ROI, 7 network atlas and 14 aseg-derived subcortical regions. NOTE - this script excludes participants who had >30% of their frames scrubbed.
+    - `02_extract_subjects_timeseries.py`: Extracts timeseries data from fMRI BOLD images. NOTE - this script excludes participants who had >30% of their frames scrubbed.
         - Uses the functions in the script `extract_timeseries.py`.
     - `03_compute_subject_functional_connectivity.py`: Computes various functional connectivity metrics for subjects from the timeseries data. The script processes timeseries data, computes functional connectivity with and without Fisher z-transformation, and saves the results to CSV files.
         - Uses the functions in the script `compute_functional_connectivity.py`.
@@ -61,11 +61,10 @@ This repository contains the analysis scripts for our study on superagers, which
 - **Scripts:**
     - `01_convert_to_individual_matrix.py`: Converts the functional and structural connectivity data from a shared CSV with all participants into individual 214x214 matrices. 
     - `02_structural_functional_coupling.py`: Computes and visualizes SFC using the normalized structural connectivity data and untransformed functional connectivity data. 
-    - `03_group_means.py`: Consolidates individual SFC data into a single group matrix, applies Fisher z-transform, merges with superager/maintainer status, calculates and saves group means, and creates visualizations.
+    - `03_group_means.py`: Consolidates individual SFC data into a single group matrix, applies Fisher z-transform, calculates and saves group means, and creates visualizations.
    
 ### elastic_net
 - **Purpose:** These scripts run prepare and run a logistic elastic net to classify participants as superagers or non-superagers
- 
 - **Scripts:**
     `prep_data_for_en.py`: Prepares data by generating voxel‑weighted, grouped ROI connectivity summaries for later Elastic Net analysis. Also, ensures the data used in the elastic net only includes subs with sufficiently long follow-up time. 
     `log_en.py`: Run a logistic elastic‑net classification to predict superager status using cross-validation and permutation testing. Provides model level metrics including p-value and feature level p-values. 

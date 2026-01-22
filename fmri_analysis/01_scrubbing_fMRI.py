@@ -12,9 +12,11 @@ import scipy.interpolate
 
 def aggregate_fwd_data(roots, output_file, ses, cohort, subject_dir_suffix="native_T1"):
     """Aggregates framewise_displ.txt from multiple root directories into a single CSV.
+    This creates an FWD file for all subjects who have been processed, not just subjects 
+    scrubbed while running this script. 
 
     Args:
-        roots (list): List of root directory paths to scan for subjects.
+        roots (list): List of root directory paths with processed fMRI data to scan for subjects.
         output_file (str or Path): Path to the output CSV file.
         ses (str): Session identifier (e.g., "01", "02").
         cohort (str): Cohort identifier (e.g., "bbhi").
@@ -41,7 +43,7 @@ def aggregate_fwd_data(roots, output_file, ses, cohort, subject_dir_suffix="nati
                 continue
 
             # Construct path to framewise_displ.txt
-            # It is in ses-XX/native_T1/framewise_displ.txt or just native_T1/ for bbhi
+            # It is in ses-XX/native_T1/framewise_displ.txt or just native_T1/framewise_displ.txt for bbhi
             if cohort == "bbhi":
                 fwd_path = Path(root_dir) / subject / subject_dir_suffix / "framewise_displ.txt"
             else:
@@ -279,7 +281,6 @@ def process_subject(
     error_log,
     bold_pattern,
     scrubbed_pattern,
-    subject_dir_pattern,
     fwd_data,
 ):
     """Processes a single subject by scrubbing the BOLD fMRI images based on the FWD.
@@ -294,7 +295,6 @@ def process_subject(
         error_log (str): Path to error log.
         bold_pattern (str): Filename pattern for input BOLD.
         scrubbed_pattern (str): Filename pattern for output BOLD.
-        subject_dir_pattern (str): Directory pattern (e.g., ses-X/native_T1).
         fwd_data (list): FWD values.
 
     Returns:
@@ -355,7 +355,7 @@ def main(
 
     1. Defines session, threshold, and directories for data input and output.
     2. Iterates over all subjects in the root directory to collect FWD data for processing.
-    3. Generates a list of subjects to be processed and saves it as `todo.csv`.
+    3. Generates a list of subjects to be processed.
     4. Scrubs the BOLD images by either serial or parallel processing of subjects.
     5. Saves the scrubbed BOLD images to the output directory.
     6. Logs errors to `scrubbing_errors.txt`.
@@ -364,7 +364,7 @@ def main(
         ses (str): Session identifier (e.g., "01", "02").
         root (str): Root directory path where subject data is located.
         output_data (Path): Path to the directory where scrubbed data will be saved.
-        threshold (float): The Framewise Displacement (FWD) threshold for scrubbing.
+        threshold (float): The FWD threshold for scrubbing.
         bold_pattern (str): A format string for the input BOLD file path,
             e.g., "{root}/{subject}/ses-{ses}/.../{subject}_ses-{ses}_..._bold.nii.gz".
         scrubbed_pattern (str): A format string for the output scrubbed BOLD file path,
@@ -460,8 +460,6 @@ def main(
             pass
 
     print(f"Total subjects needing processing: {len(subjects)}")
-
-    # Print subjects to be processed
     print(f"Subjects to be processed: {subjects}")
 
     # Parallel processing
@@ -504,7 +502,7 @@ def main(
 
 
 if __name__ == "__main__":
-    # Change to your paths and settings
+    # Paths and settings
     threshold = 0.5
     ses = "02"
     cohort = "bbhi senior"

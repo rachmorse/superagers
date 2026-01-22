@@ -146,6 +146,7 @@ def get_subjects_to_process(subject_infos: List[SubjectPaths]) -> Tuple[List[str
             print(f"Subject {subject} missing BOLD data")
             print(f"{info.bold_data}")
 
+    print(f"Total subjects evaluated: {len(subject_infos)}")
     print(f"Subjects already with DWI mask: {len(already_processed_dwi)}")
     print(f"Subjects already with BOLD mask: {len(already_processed_bold)}")
     print(f"Subjects already fully processed: {len(already_processed)}")
