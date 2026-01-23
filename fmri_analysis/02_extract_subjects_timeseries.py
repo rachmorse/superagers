@@ -303,6 +303,8 @@ def main(
         for arg in args:
             process_subject_extract(arg)
 
+    print("Done.")
+
 
 if __name__ == "__main__":
     sessions = ["1", "2"]  

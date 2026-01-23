@@ -477,7 +477,6 @@ def main(
                         error_log,
                         bold_pattern,
                         scrubbed_pattern,
-                        subject_dir_pattern,
                         subject_fwd_map.get(subject)
                     )
                     for subject in subjects
@@ -494,7 +493,6 @@ def main(
                 error_log,
                 bold_pattern,
                 scrubbed_pattern,
-                subject_dir_pattern,
                 subject_fwd_map.get(subject)
             )
 
