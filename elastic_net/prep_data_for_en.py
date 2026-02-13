@@ -1,5 +1,5 @@
-import numpy as np
 import pandas as pd
+import numpy as np
 from pathlib import Path
 import os, re
 import nibabel as nib
@@ -7,42 +7,34 @@ from collections import Counter
 from nilearn.datasets import fetch_atlas_schaefer_2018
 from functools import lru_cache
 
-def get_subjects_to_process(output_folder, ses, id_csv_path, age_dir):
-    """Generate a list of subjects to process ensuring each subject is 
-    also in the id column of the CSV. Also, filters for any subs with
-    <1.8 years follow-up time.
+def get_subjects_to_process(output_folder, ses, age_dir):
+    """Generate a list of subjects to process. Also, filters for any subs with
+    <1.5 years follow-up time.
 
     Args:
         output_folder (Path): Path to the directory coupling results
         ses (str): Session ID (format: ses-01).
-        id_csv_path (Path or str): Path to CSV file with 'id' column.
         age_dir (Path): Path to the directory containing the age data CSV.
 
     Returns:
         list: List of subject IDs to process.
     """
-    # Load valid subject IDs from the CSV 
-    ids = set(pd.read_csv(id_csv_path)['id'].astype(str))
-
     # Merge in the age data
-    age_data = pd.read_csv(age_dir / "maintainer_superager_data.csv")
+    age_data = pd.read_csv(age_dir / "superager.csv")
     age_data.columns = [re.sub(r"^w(\d)_(.*)", r"\2_\1", col) for col in age_data.columns] # Rename the columns
     age_data['id'] = 'sub-' + age_data['id'].astype(str) # Add 'sub-' to the id
     age_data_filt = age_data[['id', 'age_1', 'age_2']].copy() # Keep only the relevant columns
 
-    # Create a new fu_time variable
-    age_data_filt['fu_time'] = age_data_filt['age_2'] - age_data_filt['age_1'] 
+    # Apply follow-up filter only when both ages are present:
+    has_both_ages = age_data_filt[['age_1', 'age_2']].notna().all(axis=1)
+    fu_time = age_data_filt['age_2'] - age_data_filt['age_1']
+    keep_mask = (~has_both_ages) | (fu_time > 1.5)
 
-    # Drop participant with fu_time NA
-    age_data_filt = age_data_filt.dropna(subset=['fu_time'])
-
-    # Create a set of valid ids that have fu_time >1.8 years
-    valid_ids = set(age_data_filt[age_data_filt['fu_time'] > 1.8]['id'].astype(str))
+    # Create a set of valid ids under the conditional follow-up rule
+    valid_ids = set(age_data_filt.loc[keep_mask, 'id'].astype(str))
 
     # Subset ids to only those in valid_ids
-    ids = ids.intersection(valid_ids)
-
-    subjects = []
+    subjects = set()
     for fname in os.listdir(output_folder):
         if not fname.startswith("sub-") or not fname.endswith(f"{ses}_structure_function_coupling.csv"):
             continue
@@ -52,16 +44,15 @@ def get_subjects_to_process(output_folder, ses, id_csv_path, age_dir):
 
         sfc_path = output_folder / fname
         if sfc_path.exists() and subject in valid_ids:
-            subjects.append(subject)
+            subjects.add(subject)
 
-    return subjects
+    return sorted(subjects)
 
 
 def flatten_connectivity_csv(matrix_csv, measure_col="pearson_rho"):
     """Reads an NxN connectivity CSV (214×214) and flattens it into a long DataFrame
     by taking the row-wise mean to match the format of SFC data which takes the rho
-    of each ROI connection in the row, weighing them the same. Returns columns: 
-    ROI_name, measure_col.
+    of each ROI connection in the row, weighing them the same. 
 
     Args:
         matrix_csv (str or Path): Path to the NxN CSV.
@@ -72,10 +63,27 @@ def flatten_connectivity_csv(matrix_csv, measure_col="pearson_rho"):
     """
     # Read the NxN matrix 
     df_matrix = pd.read_csv(matrix_csv, header=0, index_col=0)
+    row_rois = df_matrix.index.astype(str).tolist()
+    col_rois = df_matrix.columns.astype(str).tolist()
+
+    # Validate structure to avoid silently computing invalid summaries.
+    if df_matrix.shape[0] != df_matrix.shape[1]:
+        raise ValueError(
+            f"Connectivity matrix must be square, got shape {df_matrix.shape} for {matrix_csv}."
+        )
+    if row_rois != col_rois:
+        raise ValueError(
+            f"Row/column ROI labels do not match in {matrix_csv}. "
+            f"First row labels: {row_rois[:5]} | first column labels: {col_rois[:5]}"
+        )
+
     roi_list = df_matrix.index.tolist()  # ROI names
 
-    # Compute the mean connectivity for each ROI (row-wise mean)
-    avg_conn = df_matrix.mean(axis=1).values
+    # Exclude self-connections from the row mean by removing diagonal entries.
+    n = df_matrix.shape[0]
+    arr = df_matrix.to_numpy(dtype=float, copy=True)
+    arr[np.arange(n), np.arange(n)] = np.nan
+    avg_conn = pd.DataFrame(arr, index=df_matrix.index).mean(axis=1, skipna=True).values
 
     # Build the output DataFrame
     df_out = pd.DataFrame({
@@ -100,9 +108,24 @@ def _get_schaefer_label_to_count():
         atlas = nib.load(atl.maps).get_fdata().astype(int)
         cortical_counts = Counter(atlas[atlas > 0].ravel())
         labels = [l.decode() if isinstance(l, bytes) else str(l) for l in atl.labels]
-        _SCHAEFER_LABEL_TO_COUNT = {labels[i]: cortical_counts[i]
-                                    for i in cortical_counts.keys()
-                                    if 0 <= i < len(labels)}
+        max_roi_id = max(cortical_counts.keys())
+        if len(labels) == max_roi_id + 1:
+            # labels includes background at index 0: atlas id i -> labels[i]
+            roi_id_to_label = {i: labels[i] for i in cortical_counts.keys() if 0 <= i < len(labels)}
+        elif len(labels) == max_roi_id:
+            # labels excludes background: atlas id i -> labels[i - 1]
+            roi_id_to_label = {i: labels[i - 1] for i in cortical_counts.keys() if 1 <= i <= len(labels)}
+        else:
+            raise ValueError(
+                f"Unexpected Schaefer label configuration: len(labels)={len(labels)}, "
+                f"roi ids span 1..{max_roi_id}."
+            )
+
+        _SCHAEFER_LABEL_TO_COUNT = {
+            roi_id_to_label[i]: cortical_counts[i]
+            for i in cortical_counts.keys()
+            if i in roi_id_to_label
+        }
     return _SCHAEFER_LABEL_TO_COUNT
 
 
@@ -120,9 +143,9 @@ def _get_subcort_counts(subject: str, ses: str):
     """
     cohort = "bbhi" if int(subject.split("-")[1]) > 5000 else "bbhi senior"
     if cohort == "bbhi":
-        aseg_file = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/freesurfer-reconall/{subject}_{ses}_run-01/mri/aseg.mgz")
+        aseg_file = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6/{subject}_{ses}_run-01/mri/aseg.mgz")
     else:
-        aseg_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/freesurfer-reconall/{subject}_{ses}/mri/aseg.mgz")
+        aseg_file = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6/{subject}_{ses}/mri/aseg.mgz")
     aseg = nib.load(aseg_file).get_fdata().astype(int)
     return Counter(aseg[aseg > 0].ravel())
 
@@ -147,7 +170,7 @@ def save_grouped_roi_averages(csv_path, output_path, group_level, subject, ses):
 
     # Cached Schaefer voxel counts per ROI label 
     label_to_count = _get_schaefer_label_to_count()
-    df["weight"] = df["ROI_name"].map(label_to_count).fillna(1)
+    df["weight"] = df["ROI_name"].map(label_to_count)
 
     # Then get them for the subcortical ROIs
     subcort_counts = _get_subcort_counts(subject, ses)
@@ -166,7 +189,14 @@ def save_grouped_roi_averages(csv_path, output_path, group_level, subject, ses):
 
     # Prefer subcortical voxel count when ROI_name is subcortical
     df.loc[df["ROI_name"].str.startswith("Subcortical"), "weight"] = df["weight_subcort"]
-    df["weight"] = df["weight"].fillna(1).astype(float)
+    missing_weights = df.loc[df["weight"].isna(), "ROI_name"].unique().tolist()
+    if missing_weights:
+        preview = ", ".join(missing_weights[:10])
+        raise ValueError(
+            f"Missing voxel-based weights for {len(missing_weights)} ROI labels. "
+            f"First labels: {preview}"
+        )
+    df["weight"] = df["weight"].astype(float)
 
     # Clean up helper columns
     df.drop(columns=["aseg_id", "weight_subcort"], inplace=True)
@@ -199,7 +229,6 @@ def save_grouped_roi_averages(csv_path, output_path, group_level, subject, ses):
                     return parts[2]
                 # If the name does not match the expected format, return it as is
                 return name
-
         df["network"] = df["ROI_name"].apply(network_key)
 
         # Weighted average of pearson_rho by network using voxel-based weights
@@ -213,8 +242,15 @@ def save_grouped_roi_averages(csv_path, output_path, group_level, subject, ses):
             agg.assign(pearson_rho=agg["wsum"] / agg["w"])[["network", "pearson_rho"]]
                .rename(columns={"network": "ROI_name"})
         )
+    else:
+        raise ValueError(
+            f"Invalid group_level='{group_level}'. Expected 'ROI' or 'network'."
+        )
 
-    print(f"Conversion complete for {subject} {ses}!")
+    print(
+        f"Conversion complete for {subject} {ses}: "
+        f"{Path(csv_path).name} -> {Path(output_path).name}"
+    )
 
     grouped.to_csv(output_path, index=False)
 
@@ -225,14 +261,14 @@ def main():
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
     sc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
-    csv_path = Path("/home/rachel/Desktop/data/clean_data_all.csv")
     age_dir = Path("/home/rachel/Desktop/data")
 
     # Get the list of subjects to process
-    subjects_tp1 = get_subjects_to_process(root_path / "ses-01" / "individual_coupling_matrices", "ses-01", csv_path, age_dir)
-    subjects_tp2 = get_subjects_to_process(root_path / "ses-02" / "individual_coupling_matrices", "ses-02", csv_path, age_dir)
-    subjects = sorted(set(subjects_tp1) & set(subjects_tp2))
-    print(f"Subjects: {len(subjects)}")
+    subjects_tp1 = get_subjects_to_process(root_path / "ses-01" / "individual_coupling_matrices", "ses-01", age_dir)
+    subjects_tp2 = get_subjects_to_process(root_path / "ses-02" / "individual_coupling_matrices", "ses-02", age_dir)
+    print(f"Subjects at tp1: {len(subjects_tp1)}")
+    print(f"Subjects at tp2: {len(subjects_tp2)}")
+    subjects = sorted(set(subjects_tp1) | set(subjects_tp2))
 
     # Make the flattened FC and SC CSVs for each subject
     for sub in subjects:
@@ -257,7 +293,7 @@ def main():
                 save_grouped_roi_averages(fc_output, grouped_output, group_level = group_level, subject=sub, ses=ses) 
 
             # Structural connectivity 
-            sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix_normalized.csv"
+            sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix.csv"
             if sc_csv.is_file():
                 sc_flat = flatten_connectivity_csv(sc_csv, measure_col="pearson_rho")
 
