@@ -66,8 +66,8 @@ This repository contains the analysis scripts for our study on superagers, which
 ### elastic_net
 - **Purpose:** These scripts run prepare and run a logistic elastic net to classify participants as superagers or non-superagers
 - **Scripts:**
-    `prep_data_for_en.py`: Prepares data by generating voxel‑weighted, grouped ROI connectivity summaries for later Elastic Net analysis. Also, ensures the data used in the elastic net only includes subs with sufficiently long follow-up time. 
-    `log_en.py`: Run a logistic elastic‑net classification to predict superager status using cross-validation and permutation testing. Provides model level metrics including p-value and feature level p-values. 
+    `prep_data_for_en.py`: Prepares data by generating voxel‑weighted, grouped ROI connectivity summaries for later elastic net analysis. 
+    `log_en.py`: Runs a logistic elastic net classification to predict superager status using cross-validation and permutation testing. Provides model level metrics including p-value and feature level p-values. 
 
 ## Analysis Scripts
 
