@@ -16,7 +16,7 @@ from prep_data_for_en import get_subjects_to_process
 from sklearn.linear_model import LinearRegression
 
 
-def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type, group_level):
+def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data, connectivity_type, group_level, which_features):
     """Prepares the data for analysis by extracting features, memory outcomes, and superager status
     from the specified directories and memory data.
 
@@ -25,7 +25,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
         root_path (Path): Path to the root directory containing SFC data.
         fc_root_path (Path): Path to the root directory containing FC data.
         sc_root_path (Path): Path to the root directory containing SC data.
-        memory_data (pd.DataFrame): DataFrame containing memory outcomes and demographics.
+        demographic_data (pd.DataFrame): DataFrame containing demographic information.
         connectivity_type (str): Type of connectivity data to process ("SFC", "FC", or "SC").
         group_level (str): Grouping level for ROI averaging ("ROI" or "network").
 
@@ -38,31 +38,111 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
         X_all (np.ndarray): Combined feature matrix for all features.
         covariates (np.ndarray): Matrix of covariates (age, years of education, sex).
     """
-    # Prepare the data 
+    # Prepare the data
+    demographic_data = demographic_data.copy()
+    demographic_data["id"] = demographic_data["id"].astype(str)
+    if not demographic_data["id"].str.startswith("sub-").all():
+        demographic_data["id"] = "sub-" + demographic_data["id"].str.replace("^sub-", "", regex=True)
+
+    roi_refs = {}
     def load_modality(sub, mod):
         """Helper function to load features for a given modality (eg SFC)."""
-        if mod == "SFC":
+        if group_level == "ROI":
+            # Use ungrouped per-ROI features (214 ROIs)
+            if mod == "SFC":
+                p1 = root_path / "ses-01" / "individual_coupling_matrices"
+                p2 = root_path / "ses-02" / "individual_coupling_matrices"
+                f1 = p1 / f"{sub}_ses-01_structure_function_coupling.csv"
+                f2 = p2 / f"{sub}_ses-02_structure_function_coupling.csv"
+            elif mod == "FC":
+                f1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_flat.csv"
+                f2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_flat.csv"
+            else:  # SC
+                f1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_flat.csv"
+                f2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_flat.csv"
+            col = 'pearson_rho'
+        elif mod == "SFC":
             p1 = root_path / "ses-01" / "individual_coupling_matrices"
             p2 = root_path / "ses-02" / "individual_coupling_matrices"
-            f1 = p1 / f"{sub}_ses-01_structure_function_coupling_grouped_by_{group_level}.csv"
-            f2 = p2 / f"{sub}_ses-02_structure_function_coupling_grouped_by_{group_level}.csv"
+            # Backward compatible fallback: grouped_by_ROI for older runs
+            if group_level == "ROI_grouped":
+                f1 = p1 / f"{sub}_ses-01_structure_function_coupling_grouped_by_ROI_grouped.csv"
+                f2 = p2 / f"{sub}_ses-02_structure_function_coupling_grouped_by_ROI_grouped.csv"
+                if not f1.is_file():
+                    f1 = p1 / f"{sub}_ses-01_structure_function_coupling_grouped_by_ROI.csv"
+                if not f2.is_file():
+                    f2 = p2 / f"{sub}_ses-02_structure_function_coupling_grouped_by_ROI.csv"
+            else:
+                f1 = p1 / f"{sub}_ses-01_structure_function_coupling_grouped_by_{group_level}.csv"
+                f2 = p2 / f"{sub}_ses-02_structure_function_coupling_grouped_by_{group_level}.csv"
             col = 'pearson_rho'
         elif mod == "FC":
-            f1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_grouped_by_{group_level}.csv"
-            f2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_grouped_by_{group_level}.csv"
+            if group_level == "ROI_grouped":
+                f1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_grouped_by_ROI_grouped.csv"
+                f2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_grouped_by_ROI_grouped.csv"
+                if not f1.is_file():
+                    f1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_grouped_by_ROI.csv"
+                if not f2.is_file():
+                    f2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_grouped_by_ROI.csv"
+            else:
+                f1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_grouped_by_{group_level}.csv"
+                f2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_grouped_by_{group_level}.csv"
             col = 'pearson_rho' 
         else:  # SC
-            f1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_grouped_by_{group_level}.csv"
-            f2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_grouped_by_{group_level}.csv"
+            if group_level == "ROI_grouped":
+                f1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_grouped_by_ROI_grouped.csv"
+                f2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_grouped_by_ROI_grouped.csv"
+                if not f1.is_file():
+                    f1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_grouped_by_ROI.csv"
+                if not f2.is_file():
+                    f2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_grouped_by_ROI.csv"
+            else:
+                f1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_grouped_by_{group_level}.csv"
+                f2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_grouped_by_{group_level}.csv"
             col = 'pearson_rho'  
 
-        # Read both feature files if they exist (one from each tp), otherwise return None, None
-        if f1.is_file() and f2.is_file():
-            v1 = pd.to_numeric(pd.read_csv(f1)[col].values, errors='coerce')
-            v2 = pd.to_numeric(pd.read_csv(f2)[col].values, errors='coerce')
+        def read_one(path, ses_name):
+            if not path.is_file():
+                return None, None
+            d = pd.read_csv(path)
+            roi = d["ROI_name"].astype(str).tolist()
+            key = f"{mod}_{ses_name}"
+            if key not in roi_refs:
+                roi_refs[key] = roi
+            elif roi_refs[key] != roi:
+                raise ValueError(f"ROI order mismatch across subjects for {mod} {ses_name}")
+            vec = pd.to_numeric(d[col].values, errors='coerce')
+            return vec, roi
+
+        need_both = which_features in {'slope', 't1_slope', 'all', 't1_t2'}
+        if need_both:
+            v1, roi1 = read_one(f1, "ses-01")
+            v2, roi2 = read_one(f2, "ses-02")
+            if v1 is None or v2 is None:
+                return None, None
+            if roi1 != roi2:
+                raise ValueError(f"ROI order mismatch between timepoints for {sub} {mod}")
             return v1, v2
-        else:
-            return None, None
+
+        if which_features == 't1':
+            v1, _ = read_one(f1, "ses-01")
+            if v1 is None:
+                return None, None
+            v2, _ = read_one(f2, "ses-02")
+            if v2 is None:
+                v2 = np.full_like(v1, np.nan, dtype=float)
+            return v1, v2
+
+        if which_features == 't2':
+            v2, _ = read_one(f2, "ses-02")
+            if v2 is None:
+                return None, None
+            v1, _ = read_one(f1, "ses-01")
+            if v1 is None:
+                v1 = np.full_like(v2, np.nan, dtype=float)
+            return v1, v2
+
+        return None, None
 
     records = []
     for sub in subjects:
@@ -86,19 +166,27 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
             if feat1 is None:
                 continue
 
-        # Pull demographics and superager status from memory_data
-        row = memory_data[memory_data['id'] == sub]
+        # Pull demographics and superager status from demographic_data
+        row = demographic_data[demographic_data['id'] == sub]
         if row.empty:
             continue
         age1 = row.iloc[0]['age_1']
         age2 = row.iloc[0]['age_2']
-        superager = row.iloc[0]['superager']
+        superager1 = row.iloc[0]['superager_tp1']
+        superager2 = row.iloc[0]['superager_tp2']
+        superager_long = row.iloc[0]['superager_long']
         YoE = row.iloc[0]['YoE']
         sex = row.iloc[0]['sex']
-        memory_slopes = row.iloc[0]['memory_slopes']
 
-        # Convert sex to binary 0/1
-        sex = 1 if sex == 'male' else 0
+        # Convert sex to binary 0/1, keep missing as NaN for fold-wise imputation
+        if pd.isna(sex):
+            sex = np.nan
+        elif sex == 'male':
+            sex = 1
+        elif sex == 'female':
+            sex = 0
+        else:
+            sex = np.nan
 
         records.append({
             'id'        : sub,
@@ -106,20 +194,28 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
             'feat2'     : feat2,
             'age1'      : age1,
             'age2'      : age2,
-            'superager' : superager,
+            'superager1' : superager1,
+            'superager2' : superager2,
+            'superager_long' : superager_long,
             'YoE'       : YoE,
-            'sex'       : sex,
-            'memory_slopes': memory_slopes
+            'sex'       : sex
              })
 
     # Build DataFrame
     df = pd.DataFrame(records)
+    if df.empty:
+        raise ValueError(
+            "No valid subject records after feature/demographic matching. "
+            "Check ID formatting and required columns in demographic_data."
+        )
 
     # 1) Stack features
     X_t1 = np.stack(df['feat1'].values)
     X_t2 = np.stack(df['feat2'].values)
-    age_diff = (df['age2'] - df['age1']).values
-    X_slope = (X_t2 - X_t1) / age_diff[:, None]
+    age_diff = pd.to_numeric(df['age2'] - df['age1'], errors='coerce').values.astype(float)
+    X_slope = np.full_like(X_t1, np.nan, dtype=float)
+    valid_age_diff = np.isfinite(age_diff) & (age_diff != 0)
+    X_slope[valid_age_diff] = (X_t2[valid_age_diff] - X_t1[valid_age_diff]) / age_diff[valid_age_diff, None]
 
     # Look only at demographics
     covariates = np.vstack([df['age1'].values, df['YoE'].values, df['sex'].values]).T  
@@ -133,16 +229,18 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, memory_data, conn
     # covariates = np.vstack([df['age1'].values, df['YoE'].values, df['sex'].values, df['memory_slopes'].values]).T
 
     # 2) Make a superager vector 
-    superager_vec = df['superager'].values.astype(int)
+    superager_vec_tp1 = pd.to_numeric(df['superager1'], errors='coerce').values
+    superager_vec_tp2 = pd.to_numeric(df['superager2'], errors='coerce').values
+    superager_vec_long = pd.to_numeric(df['superager_long'], errors='coerce').values
 
     # 3) Generate a stacked version of tp1 and tp2 features
     X_all = np.hstack([X_t1, X_t2, X_slope])   # shape: (N_subjects, 2 * len(roi_names))
     X_t1_t2 = np.hstack([X_t1, X_t2])  
 
-    return X_t1, X_t2, X_slope, X_t1_t2, superager_vec, X_all, covariates
+    return X_t1, X_t2, X_slope, X_t1_t2, superager_vec_tp1, superager_vec_tp2, superager_vec_long, X_all, covariates
 
 
-def take_residuals_covars(X, covariates):
+def take_residuals_covars(X_train, covariates_train, X_apply=None, covariates_apply=None):
     """Takes the residuals of ROI features using covariates (age, YoE, sex).
     For each feature column, fits a linear regression using the covariates,
     and the residuals (feature minus predicted component) returned. This
@@ -150,25 +248,33 @@ def take_residuals_covars(X, covariates):
     the covariates.
 
     Args:
-        X (np.ndarray): Feature matrix of shape (n_samples, n_features).
-        covariates (np.ndarray): Matrix of covariates of shape (n_samples, n_covariates).
+        X_train (np.ndarray): Training feature matrix.
+        covariates_train (np.ndarray): Training covariates.
+        X_apply (np.ndarray): Feature matrix to residualize. If None, residualize X_train.
+        covariates_apply (np.ndarray): Covariates for X_apply. If None, uses covariates_train.
 
     Returns:
         np.ndarray: Residualized feature matrix of shape (n_samples, n_features),
                     where each column has been adjusted for the covariates.
     """
-    n_samples, n_features = X.shape
-    X_resid = np.zeros_like(X)
+    if X_apply is None:
+        X_apply = X_train
+    if covariates_apply is None:
+        covariates_apply = covariates_train
+
+    n_samples, n_features = X_apply.shape
+    X_resid = np.zeros_like(X_apply)
 
     for j in range(n_features):
         # Fit linear regression of feature j on covariates
-        model = LinearRegression().fit(covariates, X[:, j])
+        model = LinearRegression().fit(covariates_train, X_train[:, j])
         # Predicted values from covariates
-        pred = model.predict(covariates)
+        pred = model.predict(covariates_apply)
         # Residuals = observed - predicted
-        X_resid[:, j] = X[:, j] - pred
+        X_resid[:, j] = X_apply[:, j] - pred
 
     return X_resid
+
 
 def run_elastic_net(
     X: np.ndarray,
@@ -185,7 +291,7 @@ def run_elastic_net(
     which_features=None,
     covariates: np.ndarray=None,
 ):
-    """Train and evaluate an Elastic-Net logistic classifier with nested cross-validation,
+    """Train and evaluate an elastic net logistic classifier with nested cross-validation,
     out-of-fold predictions, permutation testing, and permutation-based feature importance.
 
     Args:
@@ -225,6 +331,11 @@ def run_elastic_net(
     assert set(np.unique(y)) <= {0, 1}, "y must be binary (0/1)."
     assert X.shape[0] == y.shape[0], "X and y must have the same number of samples."
     assert X.shape[1] == len(feature_names), "feature_names length must match n_features."
+    if covariates is not None:
+        covariates = np.asarray(covariates, dtype=float)
+        assert covariates.shape[0] == X.shape[0], "covariates and X must have the same number of samples."
+    if checkpoint_n is None or checkpoint_n <= 0:
+        checkpoint_n = n_permutations
 
     # Fixed CV configuration for stability
     OUTER_SPLITS = 10
@@ -271,10 +382,19 @@ def run_elastic_net(
         X_tr, X_te = X[tr_idx], X[te_idx] # X_tr is the outer training set, X_te is the test set
 
         # Residualize ROI features against covariates inside the outer split
-        cov_tr = covariates[tr_idx]   # age1, YoE, sex for training subjects
-        cov_te = covariates[te_idx]   # covariates for test subjects
-        X_tr = take_residuals_covars(X_tr, cov_tr)
-        X_te = take_residuals_covars(X_te, cov_te)
+        if covariates is not None:
+            cov_tr = covariates[tr_idx].copy()
+            cov_te = covariates[te_idx].copy()
+            for c in range(cov_tr.shape[1]):
+                fill_value = np.nanmedian(cov_tr[:, c])
+                if np.isnan(fill_value):
+                    fill_value = 0.0
+                cov_tr[np.isnan(cov_tr[:, c]), c] = fill_value
+                cov_te[np.isnan(cov_te[:, c]), c] = fill_value
+            X_tr_raw = X_tr
+            X_te_raw = X_te
+            X_tr = take_residuals_covars(X_tr_raw, cov_tr)
+            X_te = take_residuals_covars(X_tr_raw, cov_tr, X_te_raw, cov_te)
 
         y_tr, y_te = y[tr_idx], y[te_idx]
 
@@ -411,6 +531,19 @@ def run_elastic_net(
 
             for (tr_idx, te_idx) in outer_splits:
                 X_tr, X_te = X[tr_idx], X[te_idx]
+                if covariates is not None:
+                    cov_tr = covariates[tr_idx].copy()
+                    cov_te = covariates[te_idx].copy()
+                    for c in range(cov_tr.shape[1]):
+                        fill_value = np.nanmedian(cov_tr[:, c])
+                        if np.isnan(fill_value):
+                            fill_value = 0.0
+                        cov_tr[np.isnan(cov_tr[:, c]), c] = fill_value
+                        cov_te[np.isnan(cov_te[:, c]), c] = fill_value
+                    X_tr_raw = X_tr
+                    X_te_raw = X_te
+                    X_tr = take_residuals_covars(X_tr_raw, cov_tr)
+                    X_te = take_residuals_covars(X_tr_raw, cov_tr, X_te_raw, cov_te)
                 y_tr_perm = y_perm[tr_idx]       # permuted labels for training
                 # Train and run on permuted labels
                 gs_perm = GridSearchCV(
@@ -510,27 +643,60 @@ def run_elastic_net(
 
 def main():
     connectivity_type = "FC"  # Options: "SFC", "FC", "SC", "all"
-    which_features = 't1' # Options: 't1', 't2', 'slope', 't1_t2', 'all'
-    group_level = "ROI" # Options: "ROI", "network"
+    which_features = 't1_slope' # Options: 't1', 't2', 'slope', 't1_slope', 't1_t2', 'all'
+    group_level = "ROI" # Options: "ROI", "ROI_grouped", "network"
+    type = "long" # Options: "tp1", "tp2", "long"
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
     sc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
-    csv_path = Path("/home/rachel/Desktop/data/clean_data_all.csv")
-    memory_data = pd.read_csv(csv_path)
+    csv_path = Path("/home/rachel/Desktop/data/superager.csv")
+    demographic_data = pd.read_csv(csv_path)
+    demographic_data.columns = [re.sub(r"^w(\d+)_(.*)", r"\2_\1", c) for c in demographic_data.columns]
+    required_cols = {"id", "age_1", "age_2", "YoE", "sex", "superager_tp1", "superager_tp2", "superager_long"}
+    missing_cols = sorted(required_cols - set(demographic_data.columns))
+    if missing_cols:
+        raise ValueError(f"Missing required columns in {csv_path}: {missing_cols}")
     age_dir = Path("/home/rachel/Desktop/data")
 
     # Get the list of subjects to process
-    subjects_tp1 = get_subjects_to_process(root_path / "ses-01" / "individual_coupling_matrices", "ses-01", csv_path, age_dir)
-    subjects_tp2 = get_subjects_to_process(root_path / "ses-02" / "individual_coupling_matrices", "ses-02", csv_path, age_dir)
-    subjects = sorted(set(subjects_tp1) & set(subjects_tp2))
+    subjects_tp1 = get_subjects_to_process(root_path / "ses-01" / "individual_coupling_matrices", "ses-01", age_dir)
+    subjects_tp2 = get_subjects_to_process(root_path / "ses-02" / "individual_coupling_matrices", "ses-02", age_dir)
+    if type == "long":
+        subjects = sorted(set(subjects_tp1) & set(subjects_tp2))
+    elif which_features == "t1":
+        subjects = sorted(set(subjects_tp1))
+    elif which_features == "t2":
+        subjects = sorted(set(subjects_tp2))
+    else:
+        subjects = sorted(set(subjects_tp1) & set(subjects_tp2))
     print(f"Subjects: {len(subjects)}")
 
     # Prepare the data for analysis 
-    X_t1, X_t2, X_slope, X_t1_t2, superager_vec, X_all, covariates = prep_data(
-        subjects, root_path, fc_root_path, sc_root_path, memory_data, connectivity_type, group_level)
+    X_t1, X_t2, X_slope, X_t1_t2, superager_vec_tp1, superager_vec_tp2, superager_vec_long, X_all, covariates = prep_data(
+        subjects, root_path, fc_root_path, sc_root_path, demographic_data, connectivity_type, group_level, which_features)
 
-    # Map feature indices back to ROI names 
-    roi_names_path = root_path / "ses-01" / "individual_coupling_matrices" / f"{subjects[0]}_ses-01_structure_function_coupling_grouped_by_{group_level}.csv"
+    # Map feature indices back to ROI names
+    ses_for_names = "ses-02" if which_features == "t2" else "ses-01"
+    if group_level == "ROI":
+        if connectivity_type == "SFC":
+            roi_names_path = root_path / ses_for_names / "individual_coupling_matrices" / f"{subjects[0]}_{ses_for_names}_structure_function_coupling.csv"
+        elif connectivity_type == "FC":
+            roi_names_path = fc_root_path / f"{ses_for_names}/individual_connectivity_matrices/grouped_rois/{subjects[0]}_{ses_for_names}_functional_connectivity_flat.csv"
+        else:
+            # For SC and "all", use SC ROI names (same ROI list across modalities)
+            roi_names_path = sc_root_path / f"{ses_for_names}/individual_connectivity_matrices/grouped_rois/{subjects[0]}_{ses_for_names}_structural_connectivity_flat.csv"
+    elif connectivity_type == "SFC":
+        roi_names_path = root_path / ses_for_names / "individual_coupling_matrices" / f"{subjects[0]}_{ses_for_names}_structure_function_coupling_grouped_by_{group_level}.csv"
+        if group_level == "ROI_grouped" and not roi_names_path.is_file():
+            roi_names_path = root_path / ses_for_names / "individual_coupling_matrices" / f"{subjects[0]}_{ses_for_names}_structure_function_coupling_grouped_by_ROI.csv"
+    elif connectivity_type == "FC":
+        roi_names_path = fc_root_path / f"{ses_for_names}/individual_connectivity_matrices/grouped_rois/{subjects[0]}_{ses_for_names}_functional_connectivity_grouped_by_{group_level}.csv"
+        if group_level == "ROI_grouped" and not roi_names_path.is_file():
+            roi_names_path = fc_root_path / f"{ses_for_names}/individual_connectivity_matrices/grouped_rois/{subjects[0]}_{ses_for_names}_functional_connectivity_grouped_by_ROI.csv"
+    else:
+        roi_names_path = sc_root_path / f"{ses_for_names}/individual_connectivity_matrices/grouped_rois/{subjects[0]}_{ses_for_names}_structural_connectivity_grouped_by_{group_level}.csv"
+        if group_level == "ROI_grouped" and not roi_names_path.is_file():
+            roi_names_path = sc_root_path / f"{ses_for_names}/individual_connectivity_matrices/grouped_rois/{subjects[0]}_{ses_for_names}_structural_connectivity_grouped_by_ROI.csv"
     roi_names_pre = pd.read_csv(roi_names_path)['ROI_name'].tolist()
 
     if connectivity_type in ["SFC", "SC", "FC"]:
@@ -544,6 +710,7 @@ def main():
     roi_names_tp1 = [f"{r}_1" for r in roi_names]
     roi_names_tp2 = [f"{r}_2" for r in roi_names]
     roi_names_slope = [f"{r}_slope" for r in roi_names]
+    X_t1_slope = np.hstack([X_t1, X_slope])
     all_roi_names = roi_names_tp1 + roi_names_tp2 + roi_names_slope
     
     # Select which features to use, matching them to ROI names
@@ -557,6 +724,9 @@ def main():
         case 'slope':
             X_use = X_slope
             feat_names_use = roi_names
+        case 't1_slope':
+            X_use = X_t1_slope
+            feat_names_use = roi_names_tp1 + roi_names_slope
         case 'all':
             X_use = X_all
             feat_names_use = all_roi_names      # e.g., 59*3 = 177 features
@@ -564,7 +734,21 @@ def main():
             X_use = X_t1_t2
             feat_names_use = roi_names_tp1 + roi_names_tp2
         case _:
-            raise ValueError("which_features must be one of: 't1', 't2', 'slope', 'all', 't1_t2'")
+            raise ValueError("which_features must be one of: 't1', 't2', 'slope', 't1_slope', 'all', 't1_t2'")
+
+    if type == "tp1":
+        y_use = superager_vec_tp1
+    elif type == "tp2":
+        y_use = superager_vec_tp2
+    elif type == "long":
+        y_use = superager_vec_long
+    else:
+        raise ValueError("type must be one of: 'tp1', 'tp2', 'long'")
+
+    valid_rows = np.isfinite(y_use) & np.isfinite(X_use).all(axis=1)
+    X_use = X_use[valid_rows]
+    y_use = y_use[valid_rows].astype(int)
+    covariates = covariates[valid_rows]
 
     print(f"Training EN on {which_features} features "
           f"({X_use.shape[1]} predictors) for {connectivity_type=}...")
@@ -572,8 +756,8 @@ def main():
     t0 = time.time()
     print("Starting time:", time.ctime(t0))
     results = run_elastic_net(
-        X_use, superager_vec, feat_names_use,
-        n_permutations=1000,
+        X_use, y_use, feat_names_use,
+        n_permutations=1,
         n_repeats_importance=20,
         class_weight=None,        
         random_state=7,
@@ -594,7 +778,7 @@ def main():
 
     # Build dataframe of features to be able to look at correlation between timepoints for significant pairs
     df_roi_values = pd.DataFrame(X_use, columns=feat_names_use)
-    df_roi_values["superager"] = superager_vec  # add the label
+    df_roi_values[f"superager_{type}"] = y_use  # add the label
 
     sig_pairs = [
         "7Networks_RH_Cont_PFCl",
@@ -628,18 +812,18 @@ def main():
                 plot_data.append({
                     "ROI": roi,
                     "Value": row[col],
-                    "Group": "Superager" if row["superager"] == 1 else "Non-superager"
+                    "Group": "Superager" if row[f"superager_{type}"] == 1 else "Non-superager"
                 })
 
     # Print superager mean and std for each ROI
     for roi in rois_to_plot:
         col = f"{roi}"
         if col in df_roi_values:
-            superager_vals = df_roi_values[df_roi_values["superager"] == 1][col]
+            superager_vals = df_roi_values[df_roi_values[f"superager_{type}"] == 1][col]
             mean_val = superager_vals.mean()
             std_val = superager_vals.std()
             print(f"{roi} (Superagers): mean={mean_val:.3f}, std={std_val:.3f}")
-            nonsuperager_vals = df_roi_values[df_roi_values["superager"] == 0][col]
+            nonsuperager_vals = df_roi_values[df_roi_values[f"superager_{type}"] == 0][col]
             mean_val_ns = nonsuperager_vals.mean()
             std_val_ns = nonsuperager_vals.std()
             print(f"{roi} (Non-Superagers): mean={mean_val_ns:.3f}, std={std_val_ns:.3f}")
