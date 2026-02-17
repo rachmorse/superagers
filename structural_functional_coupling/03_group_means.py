@@ -116,7 +116,7 @@ def consolidate_sfc_data(ses, sfc_df):
     return consolidated_df
 
 
-def save_group_averages(group_df, group_name, output_file, ses):
+def save_group_averages(group_df, group_name, output_file, ses, label_type):
     """Compute the means for a group, drop non-relevant columns, and save to CSV.
     
     Args:
@@ -124,12 +124,15 @@ def save_group_averages(group_df, group_name, output_file, ses):
         group_name (str): Name of the group.
         output_file (Union[str, Path]): Path to save the output CSV file.
         ses (str): Timepoint
+        label_type (str): Type of labeling ("long", "tp1", "tp2") based on superager definition
     """
     mean_vals = group_df.mean(numeric_only=True)
     
     # Prepare and save the result DataFrame
     result_df = pd.DataFrame([mean_vals], index=[group_name])
-    if ses == "01":
+    if label_type == "long":
+        result_df = result_df.drop(columns=['superager_long'], errors='ignore')
+    elif ses == "01":
         result_df = result_df.drop(columns=['superager_tp1'], errors='ignore')
     else:
         result_df = result_df.drop(columns=['superager_tp2'], errors='ignore')
@@ -147,7 +150,7 @@ def save_group_averages(group_df, group_name, output_file, ses):
     result_df_transposed.to_csv(output_file)
 
 
-def process_connectivity(connectivity_file: Union[str, Path], superager_file: Union[str, Path], output_files: dict, ses: str):
+def process_connectivity(connectivity_file: Union[str, Path], superager_file: Union[str, Path], output_files: dict, ses: str, label_type: str):
     """Process and merge connectivity data with superager status, 
     then calculate averages.
 
@@ -156,6 +159,7 @@ def process_connectivity(connectivity_file: Union[str, Path], superager_file: Un
         superager_file (Union[str, Path]): Path to the superager status CSV file.
         output_files (dict): Dictionary to save averages for each category.
         ses (str): Timepoint
+        label_type (str): Type of labeling ("long", "tp1", "tp2") based on superager definition
     """
     # Load the data
     df_connectivity = pd.read_csv(connectivity_file)
@@ -165,14 +169,19 @@ def process_connectivity(connectivity_file: Union[str, Path], superager_file: Un
     df_connectivity = df_connectivity.rename(columns={df_connectivity.columns[0]: 'id'})
 
     # Ensure necessary columns are present
-    if ses == "01":
+    if label_type == "long":
+        df_superager = df_superager[['id', 'superager_long']]
+    elif ses == "01":
         df_superager = df_superager[['id', 'superager_tp1']]
-    else:   
+    else:
         df_superager = df_superager[['id', 'superager_tp2']]
 
     # Ensure 'id' columns have the same data type
     df_connectivity['id'] = df_connectivity['id'].astype(str)
-    df_superager['id'] = df_superager['id'].astype(str).apply(lambda x: 'sub-' + x) 
+    df_superager['id'] = df_superager['id'].astype(str)
+    if not df_superager['id'].str.startswith('sub-').all():
+        df_superager['id'] = 'sub-' + df_superager['id'].str.replace('^sub-', '', regex=True)
+    df_superager = df_superager.dropna()
 
     # Merge dataframes on 'id'
     df = pd.merge(df_connectivity, df_superager, on='id', how="inner")
@@ -183,10 +192,12 @@ def process_connectivity(connectivity_file: Union[str, Path], superager_file: Un
     group_name = 'all_subjects'
     if group_name in output_files:
         output_file = output_files[group_name]
-        save_group_averages(df, group_name, output_file, ses)
+        save_group_averages(df, group_name, output_file, ses, label_type)
 
     # Process individual groups
-    if ses == "01":
+    if label_type == "long":
+        column_prefix = [('superager_long', 'superagers_long')]
+    elif ses == "01":
         column_prefix = [('superager_tp1', 'superagers_tp1')]
     else:
         column_prefix = [('superager_tp2', 'superagers_tp2')]
@@ -198,7 +209,7 @@ def process_connectivity(connectivity_file: Union[str, Path], superager_file: Un
             else:
                 group_name = f"non_{prefix}"
             output_file = output_files[group_name]
-            save_group_averages(group_df, group_name, output_file, ses)
+            save_group_averages(group_df, group_name, output_file, ses, label_type)
 
     print("CSV files created successfully!")
 
@@ -412,7 +423,7 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
     return fig
 
 
-def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df, output_directory, fisher_z_connectivity_file, output_group_connectivity_file):
+def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df, output_directory, fisher_z_connectivity_file, output_group_connectivity_file, label_type):
     output_directory_group = Path(output_directory_group)
     output_directory_group.mkdir(parents=True, exist_ok=True)
 
@@ -423,6 +434,8 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
         'non_superagers_tp1': output_directory_group / "non_superagers_tp1_average.csv",
         'superagers_tp2': output_directory_group / "superagers_tp2_average.csv",
         'non_superagers_tp2': output_directory_group / "non_superagers_tp2_average.csv",
+        'superagers_long': output_directory_group / "superagers_long_average.csv",
+        'non_superagers_long': output_directory_group / "non_superagers_long_average.csv",
     }
 
     # Combine individual data into one df
@@ -435,7 +448,7 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
     fisher_transform(connectivity_file, output_directory, ses)
 
     # Process the connectivity data and save averages
-    process_connectivity(fisher_z_connectivity_file, superager_file, output_files, ses)
+    process_connectivity(fisher_z_connectivity_file, superager_file, output_files, ses, label_type)
     
     for group_name in group_names:
         # Visualize SFC in selected groups
@@ -447,7 +460,11 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
             ses=ses)
     
     # Calculate and visualize the difference
-    if ses == "01":
+    if label_type == "long":
+        superager_path = output_files['superagers_long']
+        non_superager_path = output_files['non_superagers_long']
+        diff_name = "diff_superagers_vs_non_superagers_long"
+    elif ses == "01":
         superager_path = output_files['superagers_tp1']
         non_superager_path = output_files['non_superagers_tp1']
         diff_name = "diff_superagers_vs_non_superagers_tp1"
@@ -484,9 +501,11 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
 
 if __name__ == "__main__":
     sessions = ["01"]
-
+    label_type = "long"  # Options: "tp1", "tp2", "long" based off of which superager definition you want to use
     for ses in sessions:
-        if ses == "01":
+        if label_type == "long":
+            group_names = ["superagers_long", "non_superagers_long"]
+        elif ses == "01":
             group_names = ["superagers_tp1", "non_superagers_tp1"] # This is to loop through the visualization
         else:
             group_names = ["superagers_tp2", "non_superagers_tp2"]
@@ -516,6 +535,7 @@ if __name__ == "__main__":
                 sfc_df=sfc_df,
                 output_directory=output_directory,
                 fisher_z_connectivity_file=fisher_z_connectivity_file,
-                output_group_connectivity_file=output_group_connectivity_file
+                output_group_connectivity_file=output_group_connectivity_file,
+                label_type=label_type
             )
             
