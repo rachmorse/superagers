@@ -6,6 +6,7 @@ import pandas as pd
 from pathlib import Path
 import os, re
 from sklearn.pipeline import Pipeline
+from sklearn.base import clone
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold, GridSearchCV
@@ -16,7 +17,7 @@ from prep_data_for_en import get_subjects_to_process
 from sklearn.linear_model import LinearRegression
 
 
-def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data, connectivity_type, group_level, which_features):
+def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data, connectivity_type, group_level, which_features, label_type=None):
     """Prepares the data for analysis by extracting features, memory outcomes, and superager status
     from the specified directories and memory data.
 
@@ -28,6 +29,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
         demographic_data (pd.DataFrame): DataFrame containing demographic information.
         connectivity_type (str): Type of connectivity data to process ("SFC", "FC", or "SC").
         group_level (str): Grouping level for ROI averaging ("ROI" or "network").
+        label_type (str | None): Outcome timepoint ("tp1", "tp2", "long") to select covariate age.
 
     Returns:
         X_t1 (np.ndarray): Feature matrix for timepoint 1.
@@ -46,7 +48,12 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
 
     roi_refs = {}
     def load_modality(sub, mod):
-        """Helper function to load features for a given modality (eg SFC)."""
+        """Helper function to load features for a given modality (eg SFC).
+        
+        Args:
+            sub (str): Subject ID.
+            mod (str): Modality ("SFC", "FC", or "SC").
+        """
         if group_level == "ROI":
             # Use ungrouped per-ROI features (214 ROIs)
             if mod == "SFC":
@@ -64,44 +71,39 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
         elif mod == "SFC":
             p1 = root_path / "ses-01" / "individual_coupling_matrices"
             p2 = root_path / "ses-02" / "individual_coupling_matrices"
-            # Backward compatible fallback: grouped_by_ROI for older runs
+            # Allow grouped_by_ROI option
             if group_level == "ROI_grouped":
-                f1 = p1 / f"{sub}_ses-01_structure_function_coupling_grouped_by_ROI_grouped.csv"
-                f2 = p2 / f"{sub}_ses-02_structure_function_coupling_grouped_by_ROI_grouped.csv"
-                if not f1.is_file():
-                    f1 = p1 / f"{sub}_ses-01_structure_function_coupling_grouped_by_ROI.csv"
-                if not f2.is_file():
-                    f2 = p2 / f"{sub}_ses-02_structure_function_coupling_grouped_by_ROI.csv"
+                f1 = p1 / f"{sub}_ses-01_structure_function_coupling_grouped_by_ROI.csv"
+                f2 = p2 / f"{sub}_ses-02_structure_function_coupling_grouped_by_ROI.csv"
             else:
                 f1 = p1 / f"{sub}_ses-01_structure_function_coupling_grouped_by_{group_level}.csv"
                 f2 = p2 / f"{sub}_ses-02_structure_function_coupling_grouped_by_{group_level}.csv"
             col = 'pearson_rho'
         elif mod == "FC":
             if group_level == "ROI_grouped":
-                f1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_grouped_by_ROI_grouped.csv"
-                f2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_grouped_by_ROI_grouped.csv"
-                if not f1.is_file():
-                    f1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_grouped_by_ROI.csv"
-                if not f2.is_file():
-                    f2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_grouped_by_ROI.csv"
+                f1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_grouped_by_ROI.csv"
+                f2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_grouped_by_ROI.csv"
             else:
                 f1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_grouped_by_{group_level}.csv"
                 f2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_grouped_by_{group_level}.csv"
             col = 'pearson_rho' 
         else:  # SC
             if group_level == "ROI_grouped":
-                f1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_grouped_by_ROI_grouped.csv"
-                f2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_grouped_by_ROI_grouped.csv"
-                if not f1.is_file():
-                    f1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_grouped_by_ROI.csv"
-                if not f2.is_file():
-                    f2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_grouped_by_ROI.csv"
+                f1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_grouped_by_ROI.csv"
+                f2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_grouped_by_ROI.csv"
             else:
                 f1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_grouped_by_{group_level}.csv"
                 f2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_grouped_by_{group_level}.csv"
             col = 'pearson_rho'  
 
         def read_one(path, ses_name):
+            """Reads a single CSV file for one subject, modality, and session.
+            Checks that the ROI order matches across subjects and sessions.
+            
+            Args:
+                path (Path): Path to the CSV file to read.
+                ses_name (str): Session name ("ses-01" or "ses-02") for ROI reference.
+            """
             if not path.is_file():
                 return None, None
             d = pd.read_csv(path)
@@ -218,15 +220,10 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
     X_slope[valid_age_diff] = (X_t2[valid_age_diff] - X_t1[valid_age_diff]) / age_diff[valid_age_diff, None]
 
     # Look only at demographics
-    covariates = np.vstack([df['age1'].values, df['YoE'].values, df['sex'].values]).T  
-
-    # For tp2 control for age2 
-    # covariates = np.vstack([df['age2'].values, df['YoE'].values, df['sex'].values]).T 
-
-    # Look at demographics + a practice effect variable
-    # The thought is that the tp2 data in particular is influenced by practice effects
-    # because many people meet the superager definition at tp2 
-    # covariates = np.vstack([df['age1'].values, df['YoE'].values, df['sex'].values, df['memory_slopes'].values]).T
+    if label_type == "tp2":
+        covariates = np.vstack([df['age2'].values, df['YoE'].values, df['sex'].values]).T
+    else:
+        covariates = np.vstack([df['age1'].values, df['YoE'].values, df['sex'].values]).T
 
     # 2) Make a superager vector 
     superager_vec_tp1 = pd.to_numeric(df['superager1'], errors='coerce').values
@@ -276,6 +273,25 @@ def take_residuals_covars(X_train, covariates_train, X_apply=None, covariates_ap
     return X_resid
 
 
+def _perm_importance_on_train_cv(pipe, best_params, X_tr, y_tr, inner_cv, n_repeats, random_state):
+    """Compute permutation importance on training data via inner CV splits.
+    This avoids using the outer test fold for importance estimation.
+    """
+    per_fold_imps = []
+    for fold_id, (itr, ival) in enumerate(inner_cv.split(X_tr, y_tr), start=1):
+        est = clone(pipe).set_params(**best_params)
+        est.fit(X_tr[itr], y_tr[itr])
+        pi = permutation_importance(
+            est, X_tr[ival], y_tr[ival],
+            scoring="roc_auc",
+            n_repeats=n_repeats,
+            random_state=random_state + fold_id,
+            n_jobs=10,
+        )
+        per_fold_imps.append(pi.importances_mean)
+    return np.mean(np.vstack(per_fold_imps), axis=0)
+
+
 def run_elastic_net(
     X: np.ndarray,
     y,
@@ -289,6 +305,8 @@ def run_elastic_net(
     connectivity_type=None,
     group_level=None,
     which_features=None,
+    label_type=None,
+    covariate_mode=None,
     covariates: np.ndarray=None,
 ):
     """Train and evaluate an elastic net logistic classifier with nested cross-validation,
@@ -309,6 +327,8 @@ def run_elastic_net(
         group_level (str): Grouping level for ROI averaging ("ROI" or "network") for naming outputs.
         checkpoint_n (int): Save progress every `checkpoint_n` permutations to a pickle file.
         which_features (str): Which features are being used ('t1', 't2', 'slope', 't1_t2', 'all') for naming outputs.
+        label_type (str): Outcome timepoint ("tp1", "tp2", "long") for naming outputs.
+        covariate_mode (str): Covariate handling mode ("residualize", "include") for naming outputs.
         covariates (np.ndarray): Covariate matrix of shape (n_samples, n_covariates) for residualization.
 
     Returns:
@@ -409,7 +429,8 @@ def run_elastic_net(
         gs.fit(X_tr, y_tr) 
 
         best = gs.best_estimator_
-        best_params_per_fold.append(gs.best_params_)
+        best_params = gs.best_params_
+        best_params_per_fold.append(best_params)
 
         prob_te = best.predict_proba(X_te)[:, 1]
         y_prob_oof[te_idx] = prob_te
@@ -439,17 +460,11 @@ def run_elastic_net(
         assert coef.shape[0] == X.shape[1]
         coefs.append(coef)
 
-        # Now determine the importance of features
-        # Permutation importance on the outer test set from the refit/best model
-        # Idea remove one feature at a time and see how much the model performance drops
-        pi = permutation_importance(
-            best, X_te, y_te,
-            scoring="roc_auc", # Considers sensitivity and specificity across all thresholds
-            n_repeats=n_repeats_importance,
-            random_state=random_state + fold_id,
-            n_jobs=10
+        # Permutation importance on inner-CV validation folds (not outer test)
+        pi_mean = _perm_importance_on_train_cv(
+            pipe, best_params, X_tr, y_tr, inner_cv, n_repeats_importance, random_state + fold_id
         )
-        perm_importance_accumulator.append(pi.importances_mean)
+        perm_importance_accumulator.append(pi_mean)
 
     # Metrics for how well the EN model did overall (on all out-of-fold predictions)
     observed_auc = roc_auc_score(y_true_oof, y_prob_oof)
@@ -478,7 +493,10 @@ def run_elastic_net(
 
     # Model-level permutation test - now build the null distribution training the models on shuffled labels
     # Start by adding a check point for if the server crashes while this is running, not all progress is lost
-    checkpoint_file = f"{connectivity_type}_{group_level}_{which_features}_perm_results.pkl"
+    checkpoint_file = (
+        f"{connectivity_type}_{group_level}_{which_features}_"
+        f"{label_type}_{covariate_mode}_perm_results.pkl"
+    )
     start_p = 0
     completed = 0
 
@@ -559,14 +577,17 @@ def run_elastic_net(
                 perm_oof[te_idx] = best_perm.predict_proba(X_te)[:, 1]
 
                 # Now calculate the importance of features in this permutation
-                pi_perm = permutation_importance(
-                    best_perm, X_te, y[te_idx],
-                    scoring="roc_auc",
-                    n_repeats=n_repeats_importance,
-                    random_state=random_state + 10_000 + p,
-                    n_jobs=10,
+                # Use permuted labels and inner-CV validation folds (not outer test)
+                pi_perm_mean = _perm_importance_on_train_cv(
+                    pipe,
+                    gs_perm.best_params_,
+                    X_tr,
+                    y_tr_perm,
+                    inner_cv,
+                    n_repeats_importance,
+                    random_state + 10_000 + p,
                 )
-                per_fold_imps.append(pi_perm.importances_mean)
+                per_fold_imps.append(pi_perm_mean)
         
             perm_aucs[p] = roc_auc_score(y, perm_oof)
 
@@ -642,10 +663,11 @@ def run_elastic_net(
     return results
 
 def main():
-    connectivity_type = "FC"  # Options: "SFC", "FC", "SC", "all"
+    connectivity_type = "SFC"  # Options: "SFC", "FC", "SC", "all"
     which_features = 't1_slope' # Options: 't1', 't2', 'slope', 't1_slope', 't1_t2', 'all'
     group_level = "ROI" # Options: "ROI", "ROI_grouped", "network"
     type = "long" # Options: "tp1", "tp2", "long"
+    covariate_mode = "include"  # Options: "residualize", "include"
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
     sc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
@@ -673,7 +695,7 @@ def main():
 
     # Prepare the data for analysis 
     X_t1, X_t2, X_slope, X_t1_t2, superager_vec_tp1, superager_vec_tp2, superager_vec_long, X_all, covariates = prep_data(
-        subjects, root_path, fc_root_path, sc_root_path, demographic_data, connectivity_type, group_level, which_features)
+        subjects, root_path, fc_root_path, sc_root_path, demographic_data, connectivity_type, group_level, which_features, label_type=type)
 
     # Map feature indices back to ROI names
     ses_for_names = "ses-02" if which_features == "t2" else "ses-01"
@@ -746,18 +768,30 @@ def main():
         raise ValueError("type must be one of: 'tp1', 'tp2', 'long'")
 
     valid_rows = np.isfinite(y_use) & np.isfinite(X_use).all(axis=1)
+    valid_rows = valid_rows & np.isfinite(covariates).all(axis=1)
     X_use = X_use[valid_rows]
     y_use = y_use[valid_rows].astype(int)
     covariates = covariates[valid_rows]
 
-    print(f"Training EN on {which_features} features "
-          f"({X_use.shape[1]} predictors) for {connectivity_type=}...")
+    if covariate_mode == "include":
+        cov_use = covariates.astype(float)
+        X_use = np.hstack([X_use, cov_use])
+        feat_names_use = feat_names_use + ["cov_age", "cov_YoE", "cov_sex"]
+        covariates = None
+    elif covariate_mode != "residualize":
+        raise ValueError("covariate_mode must be one of: 'residualize', 'include'")
+
+    print(
+        f"Training EN on {which_features} features "
+        f"({X_use.shape[1]} predictors) for "
+        f"{connectivity_type=}, {group_level=}, {type=}, {covariate_mode=}..."
+    )
 
     t0 = time.time()
     print("Starting time:", time.ctime(t0))
     results = run_elastic_net(
         X_use, y_use, feat_names_use,
-        n_permutations=1,
+        n_permutations=0,
         n_repeats_importance=20,
         class_weight=None,        
         random_state=7,
@@ -766,10 +800,17 @@ def main():
         connectivity_type=connectivity_type,
         group_level=group_level,
         which_features=which_features,
+        label_type=type,
+        covariate_mode=covariate_mode,
         covariates=covariates
     )
 
     print(results["observed"])
+    print("Best params per fold (C, l1_ratio):")
+    for i, p in enumerate(results["best_params_per_fold"], start=1):
+        c_val = p.get("clf__C")
+        l1_val = p.get("clf__l1_ratio")
+        print(f"  fold {i}: C={c_val}, l1_ratio={l1_val}")
     print("Model-level p-value:", results["permutation_test"]["p_value"])
     with pd.option_context("display.max_columns", None):
         print(results["feat_importance"].head(50))
