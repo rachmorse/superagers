@@ -17,6 +17,33 @@ from prep_data_for_en import get_subjects_to_process
 from sklearn.linear_model import LinearRegression
 
 
+def bootstrap_auc_ci(y_true, y_prob, n_boot=2000, alpha=0.05, random_state=7):
+    """Compute a bootstrap CI for ROC-AUC on out-of-fold predictions.
+    
+    Args:
+        y_true (array-like): True binary labels (0/1).
+        y_prob (array-like): Predicted probabilities for the positive class.
+        n_boot (int): Number of bootstrap samples to draw.
+        alpha (float): Significance level for the confidence interval (e.g., 0.05 for 95% CI).
+        random_state (int): Seed for reproducibility.
+    """
+    rng = np.random.default_rng(random_state)
+    y_true = np.asarray(y_true)
+    y_prob = np.asarray(y_prob)
+    n = y_true.shape[0]
+    aucs = []
+    for _ in range(n_boot):
+        idx = rng.integers(0, n, size=n)
+        if len(np.unique(y_true[idx])) < 2:
+            continue
+        aucs.append(roc_auc_score(y_true[idx], y_prob[idx]))
+    if not aucs:
+        return (np.nan, np.nan)
+    lo = np.percentile(aucs, 100 * (alpha / 2))
+    hi = np.percentile(aucs, 100 * (1 - alpha / 2))
+    return (float(lo), float(hi))
+
+
 def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data, connectivity_type, group_level, which_features, label_type=None):
     """Prepares the data for analysis by extracting features, memory outcomes, and superager status
     from the specified directories and memory data.
@@ -286,7 +313,7 @@ def _perm_importance_on_train_cv(pipe, best_params, X_tr, y_tr, inner_cv, n_repe
             scoring="roc_auc",
             n_repeats=n_repeats,
             random_state=random_state + fold_id,
-            n_jobs=10,
+            n_jobs=1,
         )
         per_fold_imps.append(pi.importances_mean)
     return np.mean(np.vstack(per_fold_imps), axis=0)
@@ -380,7 +407,7 @@ def run_elastic_net(
 
     # Hyperparameter grid 
     param_grid = {
-        "clf__C": np.logspace(-4, 2, 10), # higher c = less regularization, may be overfit
+        "clf__C": np.logspace(-4, 3, 10), # higher c = less regularization, may be overfit
         "clf__l1_ratio": [0.01, 0.1, 0.3, 0.5], # l1_ratio=1 is fully Lasso where some coeffs = 0
     }
 
@@ -424,7 +451,7 @@ def run_elastic_net(
             scoring="roc_auc",
             cv=inner_cv, # runs inner CV on X_tr split into inner train/val sets
             refit=True, # fits the best model on the whole X_tr after tuning
-            n_jobs=10,
+            n_jobs=18,
         )
         gs.fit(X_tr, y_tr) 
 
@@ -570,7 +597,7 @@ def run_elastic_net(
                     scoring="roc_auc",
                     cv=inner_cv, # runs inner CV search grid to make the comparisons fair
                     refit=True,
-                    n_jobs=10,
+                    n_jobs=18,
                 )
                 gs_perm.fit(X_tr, y_tr_perm)
                 best_perm = gs_perm.best_estimator_
@@ -664,10 +691,11 @@ def run_elastic_net(
 
 def main():
     connectivity_type = "SFC"  # Options: "SFC", "FC", "SC", "all"
-    which_features = 't1_slope' # Options: 't1', 't2', 'slope', 't1_slope', 't1_t2', 'all'
+    which_features = 't1' # Options: 't1', 't2', 'slope', 't1_slope', 't1_t2', 'all'
     group_level = "ROI" # Options: "ROI", "ROI_grouped", "network"
     type = "long" # Options: "tp1", "tp2", "long"
     covariate_mode = "include"  # Options: "residualize", "include"
+    class_weight = None  # Options: None, "balanced"
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
     sc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
@@ -792,8 +820,8 @@ def main():
     results = run_elastic_net(
         X_use, y_use, feat_names_use,
         n_permutations=0,
-        n_repeats_importance=20,
-        class_weight=None,        
+        n_repeats_importance=10,
+        class_weight=class_weight,
         random_state=7,
         verbose=1,
         checkpoint_n=10,
@@ -806,6 +834,18 @@ def main():
     )
 
     print(results["observed"])
+    fold_metrics = results["cv_fold_metrics"]
+    print("Fold-wise AUCs:")
+    for _, row in fold_metrics.iterrows():
+        print(f"  fold {int(row['fold'])}: auc={row['auc']:.3f}")
+    auc_ci = bootstrap_auc_ci(
+        results["oof"]["y_true"],
+        results["oof"]["y_prob"],
+        n_boot=2000,
+        alpha=0.05,
+        random_state=7,
+    )
+    print(f"AUC 95% CI (bootstrap, oof): [{auc_ci[0]:.3f}, {auc_ci[1]:.3f}]")
     print("Best params per fold (C, l1_ratio):")
     for i, p in enumerate(results["best_params_per_fold"], start=1):
         c_val = p.get("clf__C")
@@ -816,58 +856,6 @@ def main():
         print(results["feat_importance"].head(50))
     dt = time.time() - t0
     print(f"Run took {dt:.2f}s")
-
-    # Build dataframe of features to be able to look at correlation between timepoints for significant pairs
-    df_roi_values = pd.DataFrame(X_use, columns=feat_names_use)
-    df_roi_values[f"superager_{type}"] = y_use  # add the label
-
-    sig_pairs = [
-        "7Networks_RH_Cont_PFCl",
-        "7Networks_RH_Default_PFCdPFCm",
-        "Subcortical 213: Right Accumbens",
-    ]
-
-    for roi in sig_pairs:
-        t1, t2 = f"{roi}_1", f"{roi}_2"
-        if t1 in df_roi_values and t2 in df_roi_values:
-            r = df_roi_values[t1].corr(df_roi_values[t2])
-            print(f"{roi}: corr(t1 vs t2) = {r:.3f}")
-        else:
-            print(f"{roi}: missing one of t1/t2")
-
-    # Then look whether they vary between superagers and non-superagers
-    sig_pairs_by_tp = [
-        "7Networks_RH_Cont_PFCl_2",
-        "7Networks_RH_Default_PFCdPFCm_2",
-        "Subcortical 213: Right Accumbens_1",
-        "Subcortical 213: Right Accumbens_2",
-    ]
-    rois_to_plot = sig_pairs_by_tp  
-
-    # Switch to long df
-    plot_data = []
-    for roi in rois_to_plot:
-        col = f"{roi}"
-        if col in df_roi_values:
-            for _, row in df_roi_values.iterrows():
-                plot_data.append({
-                    "ROI": roi,
-                    "Value": row[col],
-                    "Group": "Superager" if row[f"superager_{type}"] == 1 else "Non-superager"
-                })
-
-    # Print superager mean and std for each ROI
-    for roi in rois_to_plot:
-        col = f"{roi}"
-        if col in df_roi_values:
-            superager_vals = df_roi_values[df_roi_values[f"superager_{type}"] == 1][col]
-            mean_val = superager_vals.mean()
-            std_val = superager_vals.std()
-            print(f"{roi} (Superagers): mean={mean_val:.3f}, std={std_val:.3f}")
-            nonsuperager_vals = df_roi_values[df_roi_values[f"superager_{type}"] == 0][col]
-            mean_val_ns = nonsuperager_vals.mean()
-            std_val_ns = nonsuperager_vals.std()
-            print(f"{roi} (Non-Superagers): mean={mean_val_ns:.3f}, std={std_val_ns:.3f}")
     
 
 if __name__ == "__main__":
