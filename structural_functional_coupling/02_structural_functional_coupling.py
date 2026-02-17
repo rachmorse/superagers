@@ -9,7 +9,7 @@ from nilearn.datasets import fetch_atlas_schaefer_2018, fetch_surf_fsaverage
 import matplotlib.pyplot as plt
 
 
-def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, structural_dir):
+def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, structural_dir, require_fisher_z=False):
     """Generate a list of subjects to process based on whether they have
     a structural and functional matrix and do not have coupling for the
     specified timepoint.
@@ -20,6 +20,8 @@ def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, struct
         functional_dir (Path): Path to the directory containing functional connectivity matrices.
         structural_dir (Path): Path to the directory containing structural connectivity matrices.
         mask_dir (Path): Path to the directory containing the mask files to use to check which subjects to process.
+        require_fisher_z (bool): If True, only consider subjects that are missing the Fisher z-transformed coupling file as needing processing. 
+            If False, only consider subjects missing the raw coupling file.
 
     Returns:
         list: List of subject IDs to process.
@@ -37,10 +39,15 @@ def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, struct
         func_conn_path = functional_dir / f"{subject}_{ses}_functional_connectivity_matrix_fisher_z.csv"
         struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix.csv"
         output_file_path = output_folder / f"{subject}_{ses}_structure_function_coupling.csv"
+        output_file_fz_path = output_folder / f"{subject}_{ses}_structure_function_coupling_fisher_z.csv"
 
-        if func_conn_path.exists() and struct_conn_path.exists() and not output_file_path.exists():
+        needs_processing = not output_file_path.exists()
+        if require_fisher_z:
+            needs_processing = needs_processing or not output_file_fz_path.exists()
+
+        if func_conn_path.exists() and struct_conn_path.exists() and needs_processing:
             subjects_to_process.append(subject)
-        elif output_file_path.exists():
+        elif output_file_path.exists() and (not require_fisher_z or output_file_fz_path.exists()):
             already_processed.append(subject)
         elif struct_conn_path.exists() and not func_conn_path.exists():
             print(f"Functional connectivity matrix not found for {subject} {ses} likely due to scrubbing exclusion.")
@@ -112,12 +119,14 @@ def calculate_structure_function_coupling(structural_dir, functional_dir, subjec
     return coupling
 
 
-def save_coupling_results(coupling_dict, output_path):
+def save_coupling_results(coupling_dict, output_path, save_raw=True, save_fisher_z=False):
     """Save coupling results to CSV files
     
     Args:
         coupling_dict (dict): The coupling dictionary returned by calculate_structure_function_coupling
         output_path (str or Path): Directory to save results
+        save_raw (bool): Whether to save the raw Pearson's rho values
+        save_fisher_z (bool): Whether to save the Fisher z-transformed values 
     """
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -126,23 +135,36 @@ def save_coupling_results(coupling_dict, output_path):
     ses = coupling_dict["ses"]
     
     # Combine ROI index and rho into a single DataFrame
-    results_df = pd.DataFrame({
-        'ROI_name': coupling_dict["roi_names"],
-        'pearson_rho': coupling_dict["rho"].flatten(),
-    })
-    
-    # Save to CSV
-    output_file = output_path / f"{subject}_{ses}_structure_function_coupling.csv"
-    results_df.to_csv(output_file, index=False)
-    
-    print(f"Completed processing for {subject}: {output_file}")
-    
+    rho_raw = coupling_dict["rho"].flatten()
+
+    output_file = None
+    if save_raw:
+        results_df = pd.DataFrame({
+            'ROI_name': coupling_dict["roi_names"],
+            'pearson_rho': coupling_dict["rho"].flatten(),
+        })
+        output_file = output_path / f"{subject}_{ses}_structure_function_coupling.csv"
+        results_df.to_csv(output_file, index=False)
+        print(f"Completed processing for {subject}: {output_file}")
+
+    if save_fisher_z:
+        rho_fz = np.arctanh(rho_raw)
+        results_df_fz = pd.DataFrame({
+            'ROI_name': coupling_dict["roi_names"],
+            'pearson_rho': rho_fz,
+        })
+        output_file_fz = output_path / f"{subject}_{ses}_structure_function_coupling_fisher_z.csv"
+        results_df_fz.to_csv(output_file_fz, index=False)
+        print(f"Completed processing for {subject}: {output_file_fz}")
+
     return output_file
 
 
 def main():
     # Define the directories using Path
     sessions = ["ses-01", "ses-02"]
+    save_raw = True
+    save_fisher_z = True  # When True, saves *_fisher_z.csv alongside raw
 
     for ses in sessions:
         print("--------------------------")
@@ -157,7 +179,14 @@ def main():
         # Make sure the output directory exists
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        subjects_to_process, already_processed = get_subjects_to_process(output_dir, ses, mask_dir, functional_dir, structural_dir)
+        subjects_to_process, already_processed = get_subjects_to_process(
+            output_dir,
+            ses,
+            mask_dir,
+            functional_dir,
+            structural_dir,
+            require_fisher_z=save_fisher_z,
+        )
         print(f"Number of subjects already processed: {len(already_processed)}")
         print(f"Number of subjects to process: {len(subjects_to_process)}")
         
@@ -168,7 +197,7 @@ def main():
             # Calculate structure-function coupling for the specified ses
             results = calculate_structure_function_coupling(structural_dir, functional_dir, subject, ses)
 
-            save_coupling_results(results, output_dir)
+            save_coupling_results(results, output_dir, save_raw=save_raw, save_fisher_z=save_fisher_z)
         
         
 if __name__ == "__main__":
