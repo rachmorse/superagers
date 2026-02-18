@@ -17,8 +17,122 @@ from prep_data_for_en import get_subjects_to_process
 from sklearn.linear_model import LinearRegression
 
 
+def _compute_feature_group_stats(
+    X: np.ndarray,
+    y: np.ndarray,
+    feature_names: list,
+    prefix: str,
+    n_boot: int = 2000,
+    alpha: float = 0.05,
+    random_state: int = 7,
+):
+    """Compute per-feature SA vs non-SA group differences and uncertainty.
+    
+    Args:
+        X (np.ndarray): Feature matrix of shape (n_samples, n_features).
+        y (np.ndarray): Binary labels (0 = non-superager, 1 = superager).
+        feature_names (list): List of feature names corresponding to columns of X.
+        prefix (str): Prefix for column names in the output DataFrame (e.g. "raw" or "adj").
+        n_boot (int): Number of bootstrap samples for confidence intervals.
+        alpha (float): Significance level for confidence intervals.
+        random_state (int): Seed for reproducibility in bootstrapping.
+    
+    Returns:
+        pd.DataFrame: DataFrame with group statistics for each feature,
+            including means, differences, Cohen's d, direction, and confidence intervals.
+    """
+    X = np.asarray(X, dtype=float)
+    y = np.asarray(y).astype(int)
+    mask_sa = (y == 1)
+    mask_non = (y == 0)
+    X_sa = X[mask_sa]
+    X_non = X[mask_non]
+    n_sa = X_sa.shape[0]
+    n_non = X_non.shape[0]
+    if n_sa < 2 or n_non < 2:
+        raise ValueError("Need at least 2 samples per class to compute group statistics.")
+
+    mean_sa = X_sa.mean(axis=0)
+    mean_non = X_non.mean(axis=0)
+    delta = mean_sa - mean_non
+
+    var_sa = X_sa.var(axis=0, ddof=1)
+    var_non = X_non.var(axis=0, ddof=1)
+
+    # Cohen's d with pooled SD.
+    pooled_var = ((n_sa - 1) * var_sa + (n_non - 1) * var_non) / (n_sa + n_non - 2)
+    pooled_sd = np.sqrt(np.clip(pooled_var, a_min=0.0, a_max=None))
+    cohen_d = np.divide(delta, pooled_sd, out=np.full_like(delta, np.nan), where=pooled_sd > 0)
+
+    # Stratified bootstrap CI for mean difference.
+    rng = np.random.default_rng(random_state)
+    boot_deltas = np.empty((n_boot, X.shape[1]), dtype=float)
+    for b in range(n_boot):
+        idx_sa = rng.integers(0, n_sa, size=n_sa)
+        idx_non = rng.integers(0, n_non, size=n_non)
+        boot_deltas[b] = X_sa[idx_sa].mean(axis=0) - X_non[idx_non].mean(axis=0)
+    lo = np.percentile(boot_deltas, 100.0 * (alpha / 2.0), axis=0)
+    hi = np.percentile(boot_deltas, 100.0 * (1.0 - alpha / 2.0), axis=0)
+
+    direction = np.where(delta > 0, "higher_in_SA", "lower_in_SA")
+    direction = np.where(np.isclose(delta, 0.0), "no_difference", direction)
+
+    return pd.DataFrame({
+        "feature": feature_names,
+        f"{prefix}_n_sa": n_sa,
+        f"{prefix}_n_non_sa": n_non,
+        f"{prefix}_mean_sa": mean_sa,
+        f"{prefix}_mean_non_sa": mean_non,
+        f"{prefix}_delta_sa_minus_non_sa": delta,
+        f"{prefix}_delta_ci_low": lo,
+        f"{prefix}_delta_ci_high": hi,
+        f"{prefix}_cohen_d": cohen_d,
+        f"{prefix}_direction": direction,
+    })
+
+
+def compute_group_effects(
+    X: np.ndarray,
+    y: np.ndarray,
+    feature_names: list,
+    covariates: np.ndarray = None,
+    n_boot: int = 2000,
+    alpha: float = 0.05,
+    random_state: int = 7,
+):
+    """Build raw and covariate-adjusted SA vs non-SA feature summaries.
+    
+    Args:
+        X (np.ndarray): Feature matrix of shape (n_samples, n_features).
+        y (np.ndarray): Binary labels (0 = non-superager, 1 = superager).
+        feature_names (list): List of feature names corresponding to columns of X.
+        covariates (np.ndarray): Covariate matrix of shape (n_samples, n_covariates) for adjustment. If None, no adjustment is done.
+        n_boot (int): Number of bootstrap samples for confidence intervals.
+        alpha (float): Significance level for confidence intervals.
+        random_state (int): Seed for reproducibility in bootstrapping.
+    
+    Returns:
+        pd.DataFrame: DataFrame with group statistics for each feature,
+            including raw and adjusted means, differences, Cohen's d, direction, and confidence intervals.
+    """
+    raw_df = _compute_feature_group_stats(
+        X, y, feature_names, prefix="raw", n_boot=n_boot, alpha=alpha, random_state=random_state
+    )
+    if covariates is None:
+        return raw_df
+
+    X_adj = take_residuals_covars(X_train=X, covariates_train=covariates)
+    adj_df = _compute_feature_group_stats(
+        X_adj, y, feature_names, prefix="adj", n_boot=n_boot, alpha=alpha, random_state=random_state + 1000
+    )
+    return raw_df.merge(adj_df, on="feature", how="left")
+
+
 def bootstrap_auc_ci(y_true, y_prob, n_boot=2000, alpha=0.05, random_state=7):
-    """Compute a bootstrap CI for ROC-AUC on out-of-fold predictions.
+    """Compute a bootstrap CI for AUC on out-of-fold predictions.
+    So can think of this as how stable is the AUC across different resampling of
+    the subjects in the outer folds (e.g., some subjects appear multiple times 
+    and some not at all in each resample).
     
     Args:
         y_true (array-like): True binary labels (0/1).
@@ -45,8 +159,8 @@ def bootstrap_auc_ci(y_true, y_prob, n_boot=2000, alpha=0.05, random_state=7):
 
 
 def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data, connectivity_type, group_level, which_features, label_type=None):
-    """Prepares the data for analysis by extracting features, memory outcomes, and superager status
-    from the specified directories and memory data.
+    """Prepares the data for analysis by extracting features and superager status
+    from the specified directories.
 
     Args:
         subjects (list): List of subject IDs to process.
@@ -258,7 +372,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
     superager_vec_long = pd.to_numeric(df['superager_long'], errors='coerce').values
 
     # 3) Generate a stacked version of tp1 and tp2 features
-    X_all = np.hstack([X_t1, X_t2, X_slope])   # shape: (N_subjects, 2 * len(roi_names))
+    X_all = np.hstack([X_t1, X_t2, X_slope])   # shape: (N_subjects, 3 * n_features)
     X_t1_t2 = np.hstack([X_t1, X_t2])  
 
     return X_t1, X_t2, X_slope, X_t1_t2, superager_vec_tp1, superager_vec_tp2, superager_vec_long, X_all, covariates
@@ -268,7 +382,7 @@ def take_residuals_covars(X_train, covariates_train, X_apply=None, covariates_ap
     """Takes the residuals of ROI features using covariates (age, YoE, sex).
     For each feature column, fits a linear regression using the covariates,
     and the residuals (feature minus predicted component) returned. This
-    ensures that downstream models operate only on variance unexplained by
+    ensures that downstream models can operate only on variance unexplained by
     the covariates.
 
     Args:
@@ -303,6 +417,18 @@ def take_residuals_covars(X_train, covariates_train, X_apply=None, covariates_ap
 def _perm_importance_on_train_cv(pipe, best_params, X_tr, y_tr, inner_cv, n_repeats, random_state):
     """Compute permutation importance on training data via inner CV splits.
     This avoids using the outer test fold for importance estimation.
+
+    Args:
+        pipe: The sklearn Pipeline with the model to fit.
+        best_params: The best hyperparameters found from GridSearchCV on the training fold.
+        X_tr: The training feature matrix for the current outer fold.
+        y_tr: The training labels for the current outer fold.
+        inner_cv: The cross-validation splitter for the inner loop.
+        n_repeats: The number of repeats for permutation importance.
+        random_state: The random seed for reproducibility.
+
+    Returns:
+        np.ndarray: The mean permutation importance for each feature, averaged across inner CV folds.
     """
     per_fold_imps = []
     for fold_id, (itr, ival) in enumerate(inner_cv.split(X_tr, y_tr), start=1):
@@ -335,6 +461,8 @@ def run_elastic_net(
     label_type=None,
     covariate_mode=None,
     covariates: np.ndarray=None,
+    group_effect_covariates: np.ndarray=None,
+    n_boot_group_effects: int = 2000,
 ):
     """Train and evaluate an elastic net logistic classifier with nested cross-validation,
     out-of-fold predictions, permutation testing, and permutation-based feature importance.
@@ -347,16 +475,19 @@ def run_elastic_net(
             (used to compute model-level p-value).
         n_repeats_importance (int): Number of repeats per feature for permutation importance
             (evaluated on each outer test fold).
-        class_weight ({dict, None}): Class weighting for LogisticRegression.
+        class_weight ({dict, None}): Class weighting for LogisticRegression 
+            (e.g. whether to add balancing weights for imbalanced group numbers).
         random_state (int): Seed for random number generation in splits and shuffles.
         verbose (int): Verbosity level; prints ~10% progress during permutations if > 0.
         connectivity_type (str): Type of connectivity data ("SFC", "FC", "SC", or "all") for naming outputs.
         group_level (str): Grouping level for ROI averaging ("ROI" or "network") for naming outputs.
         checkpoint_n (int): Save progress every `checkpoint_n` permutations to a pickle file.
-        which_features (str): Which features are being used ('t1', 't2', 'slope', 't1_t2', 'all') for naming outputs.
+        which_features (str): Which features are being used ('t1', 't2', 'slope', 't1_slope', 't1_t2', 'all') for naming outputs.
         label_type (str): Outcome timepoint ("tp1", "tp2", "long") for naming outputs.
         covariate_mode (str): Covariate handling mode ("residualize", "include") for naming outputs.
         covariates (np.ndarray): Covariate matrix of shape (n_samples, n_covariates) for residualization.
+        group_effect_covariates (np.ndarray): Covariates used for post-hoc group-difference adjustment.
+        n_boot_group_effects (int): Bootstrap samples for SA-vs-nonSA delta confidence intervals.
 
     Returns:
         dict containing:
@@ -381,6 +512,11 @@ def run_elastic_net(
     if covariates is not None:
         covariates = np.asarray(covariates, dtype=float)
         assert covariates.shape[0] == X.shape[0], "covariates and X must have the same number of samples."
+    if group_effect_covariates is not None:
+        group_effect_covariates = np.asarray(group_effect_covariates, dtype=float)
+        assert group_effect_covariates.shape[0] == X.shape[0], (
+            "group_effect_covariates and X must have the same number of samples."
+        )
     if checkpoint_n is None or checkpoint_n <= 0:
         checkpoint_n = n_permutations
 
@@ -432,12 +568,6 @@ def run_elastic_net(
         if covariates is not None:
             cov_tr = covariates[tr_idx].copy()
             cov_te = covariates[te_idx].copy()
-            for c in range(cov_tr.shape[1]):
-                fill_value = np.nanmedian(cov_tr[:, c])
-                if np.isnan(fill_value):
-                    fill_value = 0.0
-                cov_tr[np.isnan(cov_tr[:, c]), c] = fill_value
-                cov_te[np.isnan(cov_te[:, c]), c] = fill_value
             X_tr_raw = X_tr
             X_te_raw = X_te
             X_tr = take_residuals_covars(X_tr_raw, cov_tr)
@@ -451,7 +581,7 @@ def run_elastic_net(
             scoring="roc_auc",
             cv=inner_cv, # runs inner CV on X_tr split into inner train/val sets
             refit=True, # fits the best model on the whole X_tr after tuning
-            n_jobs=18,
+            n_jobs=10,
         )
         gs.fit(X_tr, y_tr) 
 
@@ -487,7 +617,7 @@ def run_elastic_net(
         assert coef.shape[0] == X.shape[1]
         coefs.append(coef)
 
-        # Permutation importance on inner-CV validation folds (not outer test)
+        # Permutation importance on inner-CV validation folds 
         pi_mean = _perm_importance_on_train_cv(
             pipe, best_params, X_tr, y_tr, inner_cv, n_repeats_importance, random_state + fold_id
         )
@@ -517,6 +647,16 @@ def run_elastic_net(
         "selected_freq": selection_freq,
         "abs_coef_mean": np.abs(coef_mean)
     }).sort_values(["abs_coef_mean"], ascending=False)
+    group_effects_df = compute_group_effects(
+        X=X,
+        y=y,
+        feature_names=feature_names,
+        covariates=group_effect_covariates,
+        n_boot=n_boot_group_effects,
+        alpha=0.05,
+        random_state=random_state,
+    )
+    feature_df = feature_df.merge(group_effects_df, on="feature", how="left")
 
     # Model-level permutation test - now build the null distribution training the models on shuffled labels
     # Start by adding a check point for if the server crashes while this is running, not all progress is lost
@@ -527,7 +667,7 @@ def run_elastic_net(
     start_p = 0
     completed = 0
 
-    # Resume if checkpoint exists (ie from a previous crash)
+    # Resume if checkpoint exists (i.e. from a previous crash or stoppage)
     if os.path.exists(checkpoint_file):
         print(f"Checkpoint file found: {checkpoint_file}")
         with open(checkpoint_file, "rb") as f:
@@ -579,12 +719,6 @@ def run_elastic_net(
                 if covariates is not None:
                     cov_tr = covariates[tr_idx].copy()
                     cov_te = covariates[te_idx].copy()
-                    for c in range(cov_tr.shape[1]):
-                        fill_value = np.nanmedian(cov_tr[:, c])
-                        if np.isnan(fill_value):
-                            fill_value = 0.0
-                        cov_tr[np.isnan(cov_tr[:, c]), c] = fill_value
-                        cov_te[np.isnan(cov_te[:, c]), c] = fill_value
                     X_tr_raw = X_tr
                     X_te_raw = X_te
                     X_tr = take_residuals_covars(X_tr_raw, cov_tr)
@@ -595,16 +729,16 @@ def run_elastic_net(
                     estimator=pipe,
                     param_grid=param_grid,
                     scoring="roc_auc",
-                    cv=inner_cv, # runs inner CV search grid to make the comparisons fair
+                    cv=inner_cv, # runs inner CV search grid to make the comparisons fair (e.g. 5-fold)
                     refit=True,
-                    n_jobs=18,
+                    n_jobs=10,
                 )
                 gs_perm.fit(X_tr, y_tr_perm)
                 best_perm = gs_perm.best_estimator_
                 perm_oof[te_idx] = best_perm.predict_proba(X_te)[:, 1]
 
                 # Now calculate the importance of features in this permutation
-                # Use permuted labels and inner-CV validation folds (not outer test)
+                # Use permuted labels and inner-CV validation folds 
                 pi_perm_mean = _perm_importance_on_train_cv(
                     pipe,
                     gs_perm.best_params_,
@@ -638,7 +772,7 @@ def run_elastic_net(
                 print(f"[Permutation {p+1}/{target_total}] Null AUC (mean so far): {np.nanmean(perm_aucs):.3f}")
 
     # One-sided p-value (>= observed AUC), add 1 to numerator/denominator for stability
-    # Must run a sufficient number of permutations to get a good estimate of the p-value
+    # Needs a sufficient number of permutations to get a good estimate of the p-value
     p_value = (np.sum(perm_aucs >= observed_auc) + 1.0) / (target_total + 1.0)
 
     # Feature-level p-values corrected FDR
@@ -691,10 +825,14 @@ def run_elastic_net(
 
 def main():
     connectivity_type = "SFC"  # Options: "SFC", "FC", "SC", "all"
-    which_features = 't1' # Options: 't1', 't2', 'slope', 't1_slope', 't1_t2', 'all'
-    group_level = "ROI" # Options: "ROI", "ROI_grouped", "network"
+    # These are the features used to predict superager status 
+    which_features = 't1_slope' # Options: 't1', 't2', 'slope', 't1_slope', 't1_t2', 'all'
+    group_level = "ROI" # Options: "ROI" (n=214), "ROI_grouped" (n=59), "network" (n=7)
+    # The outcome variable being predicted - superager defined at tp1, tp2, or longitudinally
     type = "long" # Options: "tp1", "tp2", "long"
+    # Either take the residuals of covars and use the residualized features, or include covars as additional features in the model
     covariate_mode = "include"  # Options: "residualize", "include"
+    # Balancing option to consider uneven numbers of superagers and controls
     class_weight = None  # Options: None, "balanced"
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
@@ -800,6 +938,7 @@ def main():
     X_use = X_use[valid_rows]
     y_use = y_use[valid_rows].astype(int)
     covariates = covariates[valid_rows]
+    covariates_for_group_effects = covariates.copy()
 
     if covariate_mode == "include":
         cov_use = covariates.astype(float)
@@ -830,7 +969,9 @@ def main():
         which_features=which_features,
         label_type=type,
         covariate_mode=covariate_mode,
-        covariates=covariates
+        covariates=covariates,
+        group_effect_covariates=covariates_for_group_effects,
+        n_boot_group_effects=2000,
     )
 
     print(results["observed"])
@@ -852,8 +993,31 @@ def main():
         l1_val = p.get("clf__l1_ratio")
         print(f"  fold {i}: C={c_val}, l1_ratio={l1_val}")
     print("Model-level p-value:", results["permutation_test"]["p_value"])
-    with pd.option_context("display.max_columns", None):
-        print(results["feat_importance"].head(50))
+    feat = results["feat_importance"].copy()
+    feat = feat[~feat["feature"].str.startswith("cov_", na=False)]
+    compact_cols = [
+        "feature",
+        "perm_importance_mean",
+        "selected_freq",
+        "adj_delta_sa_minus_non_sa",
+        "adj_delta_ci_low",
+        "adj_delta_ci_high",
+        "adj_direction",
+        "p_fdr",
+    ]
+    compact = feat.loc[:, compact_cols].copy()
+    same_sign_ci = (
+        ((compact["adj_delta_ci_low"] > 0) & (compact["adj_delta_ci_high"] > 0))
+        | ((compact["adj_delta_ci_low"] < 0) & (compact["adj_delta_ci_high"] < 0))
+    )
+    compact = compact[(compact["selected_freq"] >= 0.7) & same_sign_ci]
+    compact = compact.sort_values("perm_importance_mean", ascending=False).head(15)
+    if compact.empty:
+        print("Compact interpretation table is empty with current filters (selected_freq >= 0.7 and CI not crossing 0).")
+    else:
+        print("Top stable features (selected_freq >= 0.7, adjusted CI excludes 0):")
+        with pd.option_context("display.max_columns", None):
+            print(compact.to_string(index=False))
     dt = time.time() - t0
     print(f"Run took {dt:.2f}s")
     
