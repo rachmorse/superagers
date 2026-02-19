@@ -58,8 +58,31 @@ ids_complete_weighted <- weighted %>%
   pull(id)
 analysis_ids <- intersect(ids_in_all_files, ids_complete_weighted)
 
+# Remove unsuffixed columns when paired _1/_2 versions exist
+weighted <- weighted %>%
+  {
+    nm <- names(.)
+    paired_base <- unique(sub("_(1|2)$", "", nm[grepl("_(1|2)$", nm)]))
+    drop_unsuffixed <- setdiff(intersect(nm, paired_base), "id")
+    dplyr::select(., -dplyr::any_of(drop_unsuffixed))
+  }
+
 # Build master wide df
 weighted_cols <- setdiff(names(weighted), "id")
+weighted_base_cols <- unique(sub("_(1|2)$", "", weighted_cols))
+
+# Keep only SFC ROI cols not already supplied by weighted
+sfc_cols_keep <- setdiff(setdiff(names(sfc_data_1), "id"), weighted_base_cols)
+
+sfc1_wide <- sfc_data_1 %>%
+  filter(id %in% analysis_ids) %>%
+  dplyr::select(id, all_of(sfc_cols_keep)) %>%
+  rename_with(~ paste0(.x, "_1"), -id)
+
+sfc2_wide <- sfc_data_2 %>%
+  filter(id %in% analysis_ids) %>%
+  dplyr::select(id, all_of(sfc_cols_keep)) %>%
+  rename_with(~ paste0(.x, "_2"), -id)
 
 base_wide <- raw_data %>%
   filter(id %in% analysis_ids) %>%
@@ -69,20 +92,22 @@ base_wide <- raw_data %>%
 
 data_wide <- base_wide %>%
   dplyr::select(-any_of(weighted_cols)) %>%
-  left_join(weighted %>% filter(id %in% analysis_ids), by = "id")
+  left_join(weighted %>% filter(id %in% analysis_ids), by = "id") %>%
+  left_join(sfc1_wide, by = "id") %>%
+  left_join(sfc2_wide, by = "id")
 
 # Build master long df
 timepoint_cols <- names(data_wide)[grepl("_(1|2)$", names(data_wide))]
 data_long <- data_wide %>%
-  pivot_longer(
-    cols = all_of(timepoint_cols),
+  tidyr::pivot_longer(
+    cols = dplyr::all_of(timepoint_cols),
     names_to = c(".value", "timepoint"),
     names_pattern = "(.*)_(1|2)$"
   ) %>%
-  mutate(timepoint = as.integer(timepoint)) %>%
-  group_by(id) %>%
-  mutate(time = age - min(age, na.rm = TRUE)) %>%
-  ungroup()
+  dplyr::mutate(timepoint = as.integer(timepoint)) %>%
+  dplyr::group_by(id) %>%
+  dplyr::mutate(time = age - min(age, na.rm = TRUE)) %>%
+  dplyr::ungroup()
 
 # Cohort summary table
 fmt_mean_sd <- function(x) {
@@ -297,14 +322,15 @@ if (length(sig_features) > 0) {
 
 #####
 # Quick models directly on data_long
-summary(lmer(sfc_weighted_mean ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE))
-summary(lmer(sfc_weighted_mean ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(scale(sfc_weighted_mean) ~ superager_long + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(scale(sfc_hmod) ~ superager_long + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(scale(sfc_sensory) ~ superager_long + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
 
 summary(lmer(fc_weighted_mean ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE))
 summary(lmer(sc_weighted_mean ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE))
 
 # SFC-only significance label from the adjusted mixed model
-m_sfc <- lmer(sfc_weighted_mean ~ superager_long + time + age + sex + YoE + (1 | id),
+m_sfc <- lmer(sfc_hmod ~ superager_long + time + age + sex + YoE + (1 | id),
               data = data_long, REML = FALSE)
 p_sfc <- as.data.frame(summary(m_sfc)$coefficients)["superager_long", "Pr(>|t|)"]
 p_star <- dplyr::case_when(
@@ -315,27 +341,27 @@ p_star <- dplyr::case_when(
 )
 
 plot_df <- data_long %>%
-  dplyr::select(superager_long, sfc_weighted_mean) %>%
-  tidyr::drop_na() %>%
-  dplyr::mutate(
+  dplyr::select(superager_long, sfc_hmod) %>%
+  drop_na() %>%
+  mutate(
     superager_group = factor(superager_long, levels = c(0, 1),
                              labels = c("non-superager", "superager"))
   )
 
-y_min <- min(plot_df$sfc_weighted_mean, na.rm = TRUE)
-y_max <- max(plot_df$sfc_weighted_mean, na.rm = TRUE)
+y_min <- min(plot_df$sfc_hmod, na.rm = TRUE)
+y_max <- max(plot_df$sfc_hmod, na.rm = TRUE)
 y_bar <- y_max + 0.06 * (y_max - y_min)
 y_star <- y_max + 0.10 * (y_max - y_min)
 
-ggplot(plot_df, aes(x = superager_group, y = sfc_weighted_mean, fill = superager_group)) +
+ggplot(plot_df, aes(x = superager_group, y = sfc_hmod, fill = superager_group)) +
   geom_violin(trim = FALSE, alpha = 0.30, color = NA) +
   geom_boxplot(width = 0.18, outlier.shape = NA, alpha = 0.65, color = "black") +
   geom_jitter(width = 0.08, alpha = 0.22, size = 0.9, color = "black") +
   stat_summary(fun = mean, geom = "point", shape = 23, size = 2.5, fill = "white", color = "black") +
-  geom_segment(aes(x = 1, xend = 2, y = y_bar, yend = y_bar), inherit.aes = FALSE, linewidth = 0.45) +
-  geom_text(aes(x = 1.5, y = y_star, label = p_star), inherit.aes = FALSE, size = 5) +
+  annotate("segment", x = 1, xend = 2, y = y_bar, yend = y_bar, linewidth = 0.45) +
+  annotate("text", x = 1.5, y = y_star, label = p_star, size = 5) +
   scale_fill_manual(values = c("non-superager" = "#B39DDB", "superager" = "#F4D03F")) +
-  labs(x = NULL, y = "SFC weighted mean") +
+  labs(x = NULL, y = "SFC heteromodal mean") +
   theme_classic(base_size = 12) +
   theme(legend.position = "none")
 
@@ -451,7 +477,7 @@ data_long <- data_long %>%
 # PACC model
 m_pacc <- lmer(pacc5 ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE)
 summary(m_pacc)
-summary(lmer(pacc5 ~ superager_long * age + time + sex + YoE + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(scale(pacc5) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
 
 plot_df <- data_long %>%
   dplyr::select(id, age, superager_long, pacc5) %>%
