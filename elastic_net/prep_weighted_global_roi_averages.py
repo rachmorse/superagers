@@ -199,20 +199,20 @@ def main():
                 if include_sfc_sensory_hmod:
                     sensory, hmod = get_sfc_sensory_hmod_means(sfc_df, subject=sub, ses=ses)
                     if ses == "ses-01":
-                        row["sfc_tp1_sensory"] = sensory
-                        row["sfc_tp1_hmod"] = hmod
+                        row["sfc_sensory_1"] = sensory
+                        row["sfc_hmod_1"] = hmod
                     else:
-                        row["sfc_tp2_sensory"] = sensory
-                        row["sfc_tp2_hmod"] = hmod
+                        row["sfc_sensory_2"] = sensory
+                        row["sfc_hmod_2"] = hmod
             else:
                 row[col] = np.nan
                 if include_sfc_sensory_hmod:
                     if ses == "ses-01":
-                        row["sfc_tp1_sensory"] = np.nan
-                        row["sfc_tp1_hmod"] = np.nan
+                        row["sfc_sensory_1"] = np.nan
+                        row["sfc_hmod_1"] = np.nan
                     else:
-                        row["sfc_tp2_sensory"] = np.nan
-                        row["sfc_tp2_hmod"] = np.nan
+                        row["sfc_sensory_2"] = np.nan
+                        row["sfc_hmod_2"] = np.nan
 
         # FC tp1 / tp2
         for ses, col in [("ses-01", "fc_tp1_weighted_mean"), ("ses-02", "fc_tp2_weighted_mean")]:
@@ -245,9 +245,6 @@ def main():
         out_rows.append(row)
 
     df_out = pd.DataFrame(out_rows)
-    if include_sfc_sensory_hmod:
-        df_out["sfc_sensory"] = df_out[["sfc_tp1_sensory", "sfc_tp2_sensory"]].mean(axis=1, skipna=True)
-        df_out["sfc_hmod"] = df_out[["sfc_tp1_hmod", "sfc_tp2_hmod"]].mean(axis=1, skipna=True)
     output_path = Path("/home/rachel/Desktop/data/weighted_global_roi_averages.csv")
     df_out.to_csv(output_path, index=False)
     print(f"Saved: {output_path} | n_subjects={len(df_out)}")
