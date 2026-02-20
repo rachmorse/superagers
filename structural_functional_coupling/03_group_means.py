@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from typing import Union
+from typing import Dict, Union
 import os
 import glob
 from nilearn.datasets import fetch_surf_fsaverage
@@ -214,28 +214,203 @@ def process_connectivity(connectivity_file: Union[str, Path], superager_file: Un
     print("CSV files created successfully!")
 
 
-def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=0.47):
-    """Create multi-view brain surface visualizations of structure-function coupling from a DataFrame
-    
+def convert_edge_table_to_roi_means(connectivity_file: Union[str, Path], output_file: Union[str, Path]):
+    """Convert an edge-wise connectivity table to ROI-wise mean connectivity.
+
     Args:
-        coupling_file (pd.DataFrame): DataFrame with ROI names as index and coupling values in first column
-        group_name (str): Name of the group (e.g., 'superagers_tp1')
-        output_dir (str or Path): Directory to save visualizations
-        vmin, vmax (float): Min and max values for color scaling
-        ses (str): Timepoint
+        connectivity_file: CSV path with one row per subject and columns named
+            as ``ROI1-ROI2``.
+        output_file: CSV path where ROI-wise subject means are saved. The first
+            column is ``id`` and remaining columns are ROI names.
+
+    Returns:
+        Path: Path to the written ROI-wise CSV.
+    """
+    df = pd.read_csv(connectivity_file)
+    df = df.rename(columns={df.columns[0]: "id"})
+    edge_cols = [col for col in df.columns if col != "id"]
+
+    roi_sums: Dict[str, np.ndarray] = {}
+    roi_counts: Dict[str, np.ndarray] = {}
+    n_subjects = len(df)
+
+    for col in edge_cols:
+        if "-" not in col:
+            continue
+        roi_1, roi_2 = col.split("-", 1)
+        values = pd.to_numeric(df[col], errors="coerce").to_numpy()
+
+        if roi_1 not in roi_sums:
+            roi_sums[roi_1] = np.zeros(n_subjects, dtype=float)
+            roi_counts[roi_1] = np.zeros(n_subjects, dtype=float)
+        if roi_2 not in roi_sums:
+            roi_sums[roi_2] = np.zeros(n_subjects, dtype=float)
+            roi_counts[roi_2] = np.zeros(n_subjects, dtype=float)
+
+        valid = ~np.isnan(values)
+        roi_sums[roi_1][valid] += values[valid]
+        roi_sums[roi_2][valid] += values[valid]
+        roi_counts[roi_1][valid] += 1
+        roi_counts[roi_2][valid] += 1
+
+    roi_means = {"id": df["id"].astype(str)}
+    for roi in sorted(roi_sums.keys()):
+        means = np.full(n_subjects, np.nan, dtype=float)
+        has_values = roi_counts[roi] > 0
+        means[has_values] = roi_sums[roi][has_values] / roi_counts[roi][has_values]
+        roi_means[roi] = means
+
+    out_df = pd.DataFrame(roi_means)
+    output_file = Path(output_file)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    out_df.to_csv(output_file, index=False)
+    print(f"Saved ROI means to {output_file}")
+    return output_file
+
+
+def generate_modality_surface_plots(
+    modality_name: str,
+    modality_slug: str,
+    edge_connectivity_file: Union[str, Path],
+    superager_file: Union[str, Path],
+    output_directory_group: Union[str, Path],
+    ses: str,
+    label_type: str,
+    group_names,
+    group_vmin=None,
+    group_vmax=None,
+    group_symmetric=False,
+    diff_vmin=None,
+    diff_vmax=None,
+    diff_symmetric=True,
+):
+    """Generate group-average surface plots for FC or SC.
+
+    Args:
+        modality_name: Label used in figure titles.
+        modality_slug: Short suffix used in output filenames.
+        edge_connectivity_file: All-subject edge-wise connectivity CSV.
+        superager_file: Superager CSV used for grouping.
+        output_directory_group: Directory for group-average CSVs and figures.
+        ses: Timepoint identifier without prefix (for example, ``"01"``).
+        label_type: Label mode (``"tp1"``, ``"tp2"``, or ``"long"``).
+        group_names: Group names to visualize (same convention as SFC).
+        group_vmin: Color minimum for standard group maps.
+        group_vmax: Color maximum for standard group maps.
+        group_symmetric: Whether group map scaling should be symmetric.
+        diff_vmin: Color minimum for difference map.
+        diff_vmax: Color maximum for difference map.
+        diff_symmetric: Whether difference scaling should be symmetric.
+    """
+    output_directory_group = Path(output_directory_group)
+    output_directory_group.mkdir(parents=True, exist_ok=True)
+
+    roi_means_file = output_directory_group / f"all_{modality_slug}_roi_means_ses-{ses}.csv"
+    convert_edge_table_to_roi_means(edge_connectivity_file, roi_means_file)
+
+    output_files = {
+        "all_subjects": output_directory_group / "all_subjects_average.csv",
+        "superagers_tp1": output_directory_group / "superagers_tp1_average.csv",
+        "non_superagers_tp1": output_directory_group / "non_superagers_tp1_average.csv",
+        "superagers_tp2": output_directory_group / "superagers_tp2_average.csv",
+        "non_superagers_tp2": output_directory_group / "non_superagers_tp2_average.csv",
+        "superagers_long": output_directory_group / "superagers_long_average.csv",
+        "non_superagers_long": output_directory_group / "non_superagers_long_average.csv",
+    }
+    process_connectivity(roi_means_file, superager_file, output_files, ses, label_type)
+
+    for group_name in group_names:
+        visualize_coupling(
+            coupling_file=output_directory_group,
+            group_name=group_name,
+            output_dir=output_directory_group,
+            ses=ses,
+            vmin=group_vmin,
+            vmax=group_vmax,
+            figure_label=modality_name,
+            file_suffix=modality_slug,
+            symmetric_scale=group_symmetric,
+        )
+
+    if label_type == "long":
+        superager_path = output_files["superagers_long"]
+        non_superager_path = output_files["non_superagers_long"]
+        diff_name = "diff_superagers_vs_non_superagers_long"
+    elif ses == "01":
+        superager_path = output_files["superagers_tp1"]
+        non_superager_path = output_files["non_superagers_tp1"]
+        diff_name = "diff_superagers_vs_non_superagers_tp1"
+    else:
+        superager_path = output_files["superagers_tp2"]
+        non_superager_path = output_files["non_superagers_tp2"]
+        diff_name = "diff_superagers_vs_non_superagers_tp2"
+
+    if superager_path.exists() and non_superager_path.exists():
+        df_super = pd.read_csv(superager_path, index_col=0)
+        df_non = pd.read_csv(non_superager_path, index_col=0)
+        diff_values = df_super.iloc[:, 0] - df_non.iloc[:, 0]
+        df_diff = pd.DataFrame(diff_values, columns=[diff_name])
+        output_diff_file = output_directory_group / f"{diff_name}_average.csv"
+        df_diff.to_csv(output_diff_file)
+        print(f"Difference saved to {output_diff_file}")
+
+        visualize_coupling(
+            coupling_file=output_directory_group,
+            group_name=diff_name,
+            output_dir=output_directory_group,
+            ses=ses,
+            vmin=diff_vmin,
+            vmax=diff_vmax,
+            figure_label=modality_name,
+            file_suffix=modality_slug,
+            symmetric_scale=diff_symmetric,
+        )
+
+
+def visualize_coupling(
+    coupling_file,
+    group_name,
+    output_dir,
+    ses,
+    vmin=0,
+    vmax=0.47,
+    figure_label="Structure-Function Coupling",
+    file_suffix="sfc",
+    symmetric_scale=False,
+):
+    """Create multi-view brain surface visualizations from ROI-level values.
+
+    Args:
+        coupling_file: Directory containing ``{group_name}_average.csv`` files.
+        group_name: Name of the group (for example, ``"superagers_tp1"``).
+        output_dir: Directory where visualizations will be written.
+        ses: Timepoint identifier without prefix (for example, ``"01"``).
+        vmin: Minimum value for color scaling. If ``None``, it is inferred.
+        vmax: Maximum value for color scaling. If ``None``, it is inferred.
+        figure_label: Figure title prefix used in the combined image.
+        file_suffix: Suffix used in the output PNG filename.
+        symmetric_scale: Whether to force a symmetric range around zero when
+            inferring color limits.
     """
     coupling_csv = Path(f"{coupling_file}/{group_name}_average.csv")
     coupling_df = pd.read_csv(coupling_csv, index_col=0)
-
-    # Set vmax as the maximum value in the DataFrame
-    if vmax is None:
-        vmax = coupling_df.iloc[:, 0].max()
 
     # Drop the subcoritical ROIs 
     coupling_df = coupling_df[~coupling_df.index.str.contains('Subcortical')]
     
     # Extract data 
     rho_values = coupling_df.iloc[:, 0].values  # Get the first column's values
+    if vmin is None or vmax is None:
+        if symmetric_scale:
+            max_abs = np.nanmax(np.abs(rho_values))
+            inferred_vmin, inferred_vmax = -max_abs, max_abs
+        else:
+            inferred_vmin, inferred_vmax = np.nanmin(rho_values), np.nanmax(rho_values)
+        if vmin is None:
+            vmin = inferred_vmin
+        if vmax is None:
+            vmax = inferred_vmax
+
     subject = group_name
     
     # Create output directory
@@ -394,7 +569,7 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
     # Now combine the images 
     fig, axes = plt.subplots(1, 4, figsize=(18, 5))
     plt.subplots_adjust(wspace=-0.3, hspace=0)  # Reduce horizontal and vertical spacing
-    plt.suptitle(f"Structure-Function Coupling\n{subject} - ses-{ses}", fontsize=16, y=0.98) 
+    plt.suptitle(f"{figure_label}\n{subject} - ses-{ses}", fontsize=16, y=0.98) 
     # plt.tight_layout()
 
     # Load and display the images in order: left lateral, left medial, right medial, right lateral    
@@ -411,7 +586,7 @@ def visualize_coupling(coupling_file, group_name, output_dir, ses, vmin=0, vmax=
     axes[3].axis('off')
     
     # Save the combined figure
-    combined_path = output_path / f"{subject}_ses-{ses}_sfc.png"
+    combined_path = output_path / f"{subject}_ses-{ses}_{file_suffix}.png"
     plt.savefig(combined_path, dpi=300, bbox_inches='tight')
     print(f"Combined visualization saved to {combined_path}")
     
@@ -522,10 +697,24 @@ if __name__ == "__main__":
             connectivity_file = Path(f"{output_directory}/all_sfc_data_ses-{ses}.csv")
             fisher_z_connectivity_file = Path(f"{output_directory}/fisher_z_all_sfc_ses-{ses}.csv")
             output_group_connectivity_file = Path(f"{output_directory_group}")
+            fc_connectivity_file = Path(
+                f"/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space/ses-{ses}/all_to_all_roi_matrices/fisher_z_all_to_all_roi_matrix.csv"
+            )
+            sc_connectivity_file = Path(
+                f"/home/rachel/Desktop/schaefer_analysis/structural_connectivity/ses-{ses}/all_to_all_roi_matrices/all_to_all_roi_matrix.csv"
+            )
+            fc_output_directory_group = Path(
+                f"/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space/ses-{ses}/group_connectivity_matrices"
+            )
+            sc_output_directory_group = Path(
+                f"/home/rachel/Desktop/schaefer_analysis/structural_connectivity/ses-{ses}/group_connectivity_matrices"
+            )
 
             # Make sure the output directory exists
             output_directory.mkdir(parents=True, exist_ok=True)
             output_directory_group.mkdir(parents=True, exist_ok=True)
+            fc_output_directory_group.mkdir(parents=True, exist_ok=True)
+            sc_output_directory_group.mkdir(parents=True, exist_ok=True)
 
             main(
                 output_directory_group=output_directory_group,
@@ -538,4 +727,44 @@ if __name__ == "__main__":
                 output_group_connectivity_file=output_group_connectivity_file,
                 label_type=label_type
             )
+
+            if fc_connectivity_file.exists():
+                generate_modality_surface_plots(
+                    modality_name="Functional Connectivity (Fisher Z)",
+                    modality_slug="fc_fisher_z",
+                    edge_connectivity_file=fc_connectivity_file,
+                    superager_file=superager_file,
+                    output_directory_group=fc_output_directory_group,
+                    ses=ses,
+                    label_type=label_type,
+                    group_names=group_names,
+                    group_vmin=None,
+                    group_vmax=None,
+                    group_symmetric=False,
+                    diff_vmin=None,
+                    diff_vmax=None,
+                    diff_symmetric=True,
+                )
+            else:
+                print(f"Missing FC connectivity file: {fc_connectivity_file}")
+
+            if sc_connectivity_file.exists():
+                generate_modality_surface_plots(
+                    modality_name="Structural Connectivity",
+                    modality_slug="sc",
+                    edge_connectivity_file=sc_connectivity_file,
+                    superager_file=superager_file,
+                    output_directory_group=sc_output_directory_group,
+                    ses=ses,
+                    label_type=label_type,
+                    group_names=group_names,
+                    group_vmin=None,
+                    group_vmax=None,
+                    group_symmetric=False,
+                    diff_vmin=None,
+                    diff_vmax=None,
+                    diff_symmetric=True,
+                )
+            else:
+                print(f"Missing SC connectivity file: {sc_connectivity_file}")
             
