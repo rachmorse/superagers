@@ -6,6 +6,7 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(readxl)
   library(MuMIn)
+  library(emmeans)
 })
 
 # Load source data
@@ -265,7 +266,7 @@ ggplot(weighted_plot_df, aes(x = age, y = value, color = superager_group)) +
   geom_point(alpha = 0.30, size = 1.4) +
   geom_smooth(method = "lm", se = TRUE, linewidth = 1.1) +
   facet_wrap(~ metric, ncol = 3, scales = "free_y") +
-  scale_color_manual(values = c("non-superager" = "#B39DDB", "superager" = "#F4D03F")) +
+  scale_color_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
   labs(x = "Age", y = "Weighted mean", color = NULL) +
   theme_gray()
 
@@ -370,7 +371,7 @@ if (length(sig_features) > 0) {
     geom_segment(data = ann_df, aes(x = 1, xend = 2, y = y_bar, yend = y_bar), inherit.aes = FALSE, linewidth = 0.45) +
     geom_text(data = ann_df, aes(x = 1.5, y = y_star, label = p_star), inherit.aes = FALSE, size = 5) +
     facet_wrap(~ facet_label, scales = "free_y", ncol = 3) +
-    scale_fill_manual(values = c("non-superager" = "#B39DDB", "superager" = "#F4D03F")) +
+    scale_fill_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
     labs(x = NULL, y = "SFC") +
     theme_classic(base_size = 12) +
     theme(legend.position = "none")
@@ -475,7 +476,7 @@ ggplot(plot_df, aes(x = superager_group, y = sfc_hmod, fill = superager_group)) 
   stat_summary(fun = mean, geom = "point", shape = 23, size = 2.5, fill = "white", color = "black") +
   annotate("segment", x = 1, xend = 2, y = y_bar, yend = y_bar, linewidth = 0.45) +
   annotate("text", x = 1.5, y = y_star, label = p_star, size = 5) +
-  scale_fill_manual(values = c("non-superager" = "#B39DDB", "superager" = "#F4D03F")) +
+  scale_fill_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
   labs(x = NULL, y = "SFC heteromodal mean") +
   theme_classic(base_size = 12) +
   theme(legend.position = "none")
@@ -511,7 +512,7 @@ ggplot(plot_df, aes(x = superager_group, y = sfc_hmod, fill = superager_group)) 
   stat_summary(fun = mean, geom = "point", shape = 23, size = 2.5, fill = "white", color = "black") +
   annotate("segment", x = 1, xend = 2, y = y_bar, yend = y_bar, linewidth = 0.45) +
   annotate("text", x = 1.5, y = y_star, label = p_star, size = 5) +
-  scale_fill_manual(values = c("non-superager" = "#B39DDB", "superager" = "#F4D03F")) +
+  scale_fill_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
   labs(x = NULL, y = "SFC heteromodal mean") +
   theme_classic(base_size = 12) +
   theme(legend.position = "none")
@@ -671,8 +672,8 @@ ggplot(plot_df, aes(x = age, y = pacc5)) +
   geom_line(aes(group = id), alpha = 0.18, linewidth = 0.3, color = "grey55") +
   geom_point(aes(color = superager_group), alpha = 0.55, size = 1.8) +
   geom_smooth(aes(color = superager_group), method = "lm", se = TRUE, linewidth = 1.2) +
-  scale_color_manual(values = c("non-superager" = "#B39DDB", "superager" = "#F4D03F")) +
-  labs(x = "Age", y = "PACC5", color = NULL) +
+  scale_color_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
+  labs(x = "Age", y = "PACC", color = NULL) +
   theme_classic(base_size = 12)
 
 # PACC model no EM
@@ -692,7 +693,7 @@ ggplot(plot_df_no_em, aes(x = age, y = pacc5_no_em)) +
   geom_line(aes(group = id), alpha = 0.18, linewidth = 0.3, color = "grey55") +
   geom_point(aes(color = superager_group), alpha = 0.55, size = 1.8) +
   geom_smooth(aes(color = superager_group), method = "lm", se = TRUE, linewidth = 1.2) +
-  scale_color_manual(values = c("non-superager" = "#B39DDB", "superager" = "#F4D03F")) +
+  scale_color_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
   labs(x = "Age", y = "PACC5 without EM", color = NULL) +
   theme_classic(base_size = 12)
 
@@ -744,14 +745,14 @@ ggplot(data_long, aes(x = sfc_hmod_z, y = delayed_recall_raw_z)) +
     data = emm_df,
     aes(x = sfc_hmod_z, ymin = lower.CL, ymax = upper.CL),
     inherit.aes = FALSE,
-    fill = "#2C7FB8",
+    fill = "#de8c8c",
     alpha = 0.18
   ) +
   geom_line(
     data = emm_df,
     aes(x = sfc_hmod_z, y = emmean),
     inherit.aes = FALSE,
-    color = "#2C7FB8",
+    color = "#de8c8c",
     linewidth = 1.2
   ) +
   labs(
