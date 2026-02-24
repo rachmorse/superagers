@@ -826,7 +826,7 @@ def run_elastic_net(
 def main():
     connectivity_type = "SFC"  # Options: "SFC", "FC", "SC", "all"
     # These are the features used to predict superager status 
-    which_features = 't1_slope' # Options: 't1', 't2', 'slope', 't1_slope', 't1_t2', 'all'
+    which_features = 't1' # Options: 't1', 't2', 'slope', 't1_slope', 't1_t2', 'all'
     group_level = "ROI" # Options: "ROI" (n=214), "ROI_grouped" (n=59), "network" (n=7)
     # The outcome variable being predicted - superager defined at tp1, tp2, or longitudinally
     type = "long" # Options: "tp1", "tp2", "long"
@@ -958,7 +958,7 @@ def main():
     print("Starting time:", time.ctime(t0))
     results = run_elastic_net(
         X_use, y_use, feat_names_use,
-        n_permutations=0,
+        n_permutations=1000,
         n_repeats_importance=10,
         class_weight=class_weight,
         random_state=7,
@@ -1003,6 +1003,7 @@ def main():
         "adj_delta_ci_low",
         "adj_delta_ci_high",
         "adj_direction",
+        "p_value",
         "p_fdr",
     ]
     compact = feat.loc[:, compact_cols].copy()
