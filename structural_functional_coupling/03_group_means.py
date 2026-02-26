@@ -377,6 +377,7 @@ def visualize_coupling(
     figure_label="Structure-Function Coupling",
     file_suffix="sfc",
     symmetric_scale=False,
+    roi_selection_mode=None,
 ):
     """Create multi-view brain surface visualizations from ROI-level values.
 
@@ -391,14 +392,32 @@ def visualize_coupling(
         file_suffix: Suffix used in the output PNG filename.
         symmetric_scale: Whether to force a symmetric range around zero when
             inferring color limits.
+        roi_selection_mode: Optional ROI filtering mode. Supported values:
+            ``None`` (no ROI filtering),
+            ``"motor_visual_only"`` (show only motor/visual ROIs),
+            ``"exclude_motor_visual"`` (show all ROIs except motor/visual).
     """
+    roi_keywords = ("_Vis_", "_SomMot_")
+
     coupling_csv = Path(f"{coupling_file}/{group_name}_average.csv")
     coupling_df = pd.read_csv(coupling_csv, index_col=0)
 
     # Drop the subcoritical ROIs 
     coupling_df = coupling_df[~coupling_df.index.str.contains('Subcortical')]
     
-    # Extract data 
+    # Optional simple ROI filtering for alternative figures
+    if roi_selection_mode is not None:
+        roi_mask = coupling_df.index.to_series().apply(
+            lambda x: any(keyword in x for keyword in roi_keywords)
+        )
+        if roi_selection_mode == "motor_visual_only":
+            coupling_df.loc[~roi_mask, coupling_df.columns[0]] = np.nan
+        elif roi_selection_mode == "exclude_motor_visual":
+            coupling_df.loc[roi_mask, coupling_df.columns[0]] = np.nan
+        else:
+            raise ValueError(f"Unknown roi_selection_mode: {roi_selection_mode}")
+
+    # Extract data
     rho_values = coupling_df.iloc[:, 0].values  # Get the first column's values
     if vmin is None or vmax is None:
         if symmetric_scale:
@@ -598,6 +617,51 @@ def visualize_coupling(
     return fig
 
 
+def generate_superager_motor_visual_presentation_maps(
+    coupling_file,
+    output_dir,
+    ses,
+    label_type,
+    figure_label="Structure-Function Coupling",
+    file_suffix="sfc",
+):
+    """Create two superager-only SFC figures focused on motor/visual ROIs.
+
+    1) Keep only motor + visual networks (mask all others).
+    2) Keep all networks except motor + visual.
+    """
+    if label_type == "long":
+        superager_group = "superagers_long"
+    elif ses == "01":
+        superager_group = "superagers_tp1"
+    else:
+        superager_group = "superagers_tp2"
+
+    visualize_coupling(
+        coupling_file=coupling_file,
+        group_name=superager_group,
+        output_dir=output_dir,
+        ses=ses,
+        vmin=0.0,
+        vmax=0.42,
+        figure_label=figure_label,
+        file_suffix=f"{file_suffix}_superagers_motor_visual_only",
+        roi_selection_mode="motor_visual_only",
+    )
+
+    visualize_coupling(
+        coupling_file=coupling_file,
+        group_name=superager_group,
+        output_dir=output_dir,
+        ses=ses,
+        vmin=0.0,
+        vmax=0.42,
+        figure_label=figure_label,
+        file_suffix=f"{file_suffix}_superagers_excluding_motor_visual",
+        roi_selection_mode="exclude_motor_visual",
+    )
+
+
 def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df, output_directory, fisher_z_connectivity_file, output_group_connectivity_file, label_type):
     output_directory_group = Path(output_directory_group)
     output_directory_group.mkdir(parents=True, exist_ok=True)
@@ -672,6 +736,16 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
             vmin=-0.03, 
             vmax=0.03
         )
+
+    # Superager-only presentation maps: motor/visual-only and motor/visual-grey
+    generate_superager_motor_visual_presentation_maps(
+        coupling_file=output_group_connectivity_file,
+        output_dir=output_directory_group,
+        ses=ses,
+        label_type=label_type,
+        figure_label="Structure-Function Coupling",
+        file_suffix="sfc",
+    )
 
 
 if __name__ == "__main__":
