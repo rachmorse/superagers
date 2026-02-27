@@ -1,27 +1,34 @@
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
-
 import nibabel as nib
 import numpy as np
 import pandas as pd
 from nilearn.datasets import fetch_atlas_schaefer_2018
+from prep_data_for_en import get_subjects_to_process
 
-from prep_data_for_en import flatten_connectivity_csv, get_subjects_to_process
+DEBUG = True  # Master switch for verbose diagnostic prints during manual checks.
+_PRINTED_ROI_DOMAIN_EXAMPLES = False  # One-time guard so sensory/hmod ROI examples print once.
+_SUBCORT_DEBUG_PRINTS = 0  # Caps how many aseg file-path debug lines are printed.
+_SCHAEFER_LABEL_TO_COUNT = None  # Lazy-loaded cache of Schaefer ROI -> voxel count weights.
 
-SENSORY_NETWORKS = {"Vis", "SomMot"}
+
+def _dbg(msg: str):
+    """Print debug message if DEBUG is True."""
+    if DEBUG:
+        print(f"[DEBUG] {msg}")
 
 
 def get_weighted_roi_mean(df: pd.DataFrame, subject: str, ses: str) -> float:
-    """Compute voxel-weighted mean of `pearson_rho` across all ROIs.
+    """Compute voxel-weighted global mean of `pearson_rho` across all ROIs.
     
     Args:
         df: DataFrame with columns "ROI_name" and "pearson_rho".
-        subject: Subject ID (e.g. "sub-1234").
-        ses: Session ID (e.g. "ses-01").
+        subject: Subject ID.
+        ses: Session ID.
 
     Returns:
-        Weighted mean of `pearson_rho` across ROIs, or NaN if no valid ROIs.
+        Weighted mean of `pearson_rho` across all ROIs.
     """
     valid = _prepare_weighted_df(df, subject, ses)
     if valid.empty or np.isclose(valid["weight"].sum(), 0.0):
@@ -30,29 +37,47 @@ def get_weighted_roi_mean(df: pd.DataFrame, subject: str, ses: str) -> float:
 
 
 def get_sfc_sensory_hmod_means(df: pd.DataFrame, subject: str, ses: str):
-    """Compute weighted SFC means split by sensory (Vis/SomMot) vs heteromodal.
+    """Compute weighted means split by sensory (Vis/SomMot) vs heteromodal.
     
     Args:
         df: DataFrame with columns "ROI_name" and "pearson_rho".
-        subject: Subject ID (e.g. "sub-1234").
-        ses: Session ID (e.g. "ses-01").
+        subject: Subject ID.
+        ses: Session ID.
 
     Returns:
         Tuple of (sensory_mean, hmod_mean), where each is the weighted mean of
-        `pearson_rho` for the respective domain, or NaN if no valid ROIs in that domain.
+        `pearson_rho` for the respective ROI rows.
     """
+    sensory_networks = {"Vis", "SomMot"}
+
     valid = _prepare_weighted_df(df, subject, ses)
     if valid.empty:
         return np.nan, np.nan
 
     def _domain_from_roi(name: str) -> str:
+        """Classify ROI as "sensory" vs "hmod" based on name. 
+        Subcortical ROIs are classified as "hmod
+        
+        Args: name (str): ROI name.
+
+        Returns:
+            str: "sensory" or "hmod".
+        """
         if name.startswith("Subcortical"):
             return "hmod"
         parts = name.split("_")
         network = parts[2] if len(parts) >= 3 else ""
-        return "sensory" if network in SENSORY_NETWORKS else "hmod"
+        return "sensory" if network in sensory_networks else "hmod"
 
+    global _PRINTED_ROI_DOMAIN_EXAMPLES
     valid["domain"] = valid["ROI_name"].astype(str).apply(_domain_from_roi)
+    if DEBUG and not _PRINTED_ROI_DOMAIN_EXAMPLES:
+        sensory_sample5 = valid.loc[valid["domain"] == "sensory", "ROI_name"].sample(5).tolist()
+        hmod_sample10 = valid.loc[valid["domain"] == "hmod", "ROI_name"].sample(10).tolist()
+        _dbg(f"Example sensory ROIs (sample 5): {sensory_sample5}")
+        _dbg(f"Example hmod ROIs (sample 10): {hmod_sample10}")
+        _PRINTED_ROI_DOMAIN_EXAMPLES = True
+
     out = {}
     for domain in ["sensory", "hmod"]:
         d = valid[valid["domain"] == domain]
@@ -68,14 +93,15 @@ def _prepare_weighted_df(df: pd.DataFrame, subject: str, ses: str) -> pd.DataFra
     
     Args:
         df: DataFrame with columns "ROI_name" and "pearson_rho".
-        subject: Subject ID (e.g. "sub-1234").
-        ses: Session ID (e.g. "ses-01").
+        subject: Subject ID.
+        ses: Session ID.
 
     Returns:
-        DataFrame with additional "weight" column, filtered to rows with valid `pearson_rho`.
+        DataFrame with additional weight column, filtered to rows with valid `pearson_rho`.
     """
     df = df.copy()
     df["ROI_name"] = df["ROI_name"].astype(str)
+    n_before = len(df)
     df["pearson_rho"] = pd.to_numeric(df["pearson_rho"], errors="coerce")
 
     label_to_count = _get_schaefer_label_to_count()
@@ -111,11 +137,13 @@ def _prepare_weighted_df(df: pd.DataFrame, subject: str, ses: str) -> pd.DataFra
         )
 
     valid = df[df["pearson_rho"].notna()].copy()
+    n_dropped = n_before - len(valid)
+    if DEBUG and n_dropped > 0:
+        _dbg(f"{subject} {ses}: dropped {n_dropped}/{n_before} rows with non-numeric pearson_rho")
     valid["weight"] = valid["weight"].astype(float)
+    if DEBUG and np.isclose(valid["weight"].sum(), 0.0):
+        _dbg(f"{subject} {ses}: weight sum is ~0 after filtering")
     return valid
-
-
-_SCHAEFER_LABEL_TO_COUNT = None
 
 
 def _get_schaefer_label_to_count():
@@ -146,12 +174,17 @@ def _get_schaefer_label_to_count():
             for i in cortical_counts.keys()
             if i in roi_id_to_label
         }
+        _dbg(
+            "Loaded Schaefer atlas voxel weights: "
+            f"{len(_SCHAEFER_LABEL_TO_COUNT)} ROI labels"
+        )
     return _SCHAEFER_LABEL_TO_COUNT
 
 
 @lru_cache(maxsize=None)
 def _get_subcort_counts(subject: str, ses: str):
     """Get voxel counts for subcortical regions from aseg.mgz for the given subject/session, with caching."""
+    global _SUBCORT_DEBUG_PRINTS
     cohort = "bbhi" if int(subject.split("-")[1]) > 5000 else "bbhi senior"
     if cohort == "bbhi":
         aseg_file = Path(
@@ -161,6 +194,9 @@ def _get_subcort_counts(subject: str, ses: str):
         aseg_file = Path(
             f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6/{subject}_{ses}/mri/aseg.mgz"
         )
+    if DEBUG and _SUBCORT_DEBUG_PRINTS < 5:
+        _dbg(f"Loading aseg for {subject} {ses} from: {aseg_file}")
+        _SUBCORT_DEBUG_PRINTS += 1
     aseg = nib.load(aseg_file).get_fdata().astype(int)
     return Counter(aseg[aseg > 0].ravel())
 
@@ -180,10 +216,14 @@ def main():
         root_path / "ses-02" / "individual_coupling_matrices", "ses-02", age_dir
     )
     subjects = sorted(set(subjects_tp1) | set(subjects_tp2))
+    _dbg(
+        f"Subjects found: tp1={len(subjects_tp1)}, tp2={len(subjects_tp2)} "
+    )
 
     out_rows = []
-    for sub in subjects:
+    for i, sub in enumerate(subjects, start=1):
         row = {"subject_id": sub}
+        _dbg(f"[{i}/{len(subjects)}] Processing {sub}")
 
         # SFC tp1 / tp2
         for ses, col in [("ses-01", "sfc_tp1_weighted_mean"), ("ses-02", "sfc_tp2_weighted_mean")]:
@@ -196,6 +236,7 @@ def main():
             if sfc_csv.is_file():
                 sfc_df = pd.read_csv(sfc_csv)
                 row[col] = get_weighted_roi_mean(sfc_df, subject=sub, ses=ses)
+                _dbg(f"  SFC {ses}: global weighted mean={row[col]:.6f}")
                 if include_sfc_sensory_hmod:
                     sensory, hmod = get_sfc_sensory_hmod_means(sfc_df, subject=sub, ses=ses)
                     if ses == "ses-01":
@@ -204,7 +245,9 @@ def main():
                     else:
                         row["sfc_sensory_2"] = sensory
                         row["sfc_hmod_2"] = hmod
+                    _dbg(f"  SFC {ses}: sensory={sensory}, hmod={hmod}")
             else:
+                _dbg(f"  SFC {ses}: missing file {sfc_csv.name}")
                 row[col] = np.nan
                 if include_sfc_sensory_hmod:
                     if ses == "ses-01":
@@ -220,12 +263,15 @@ def main():
                 fc_root_path
                 / ses
                 / "individual_connectivity_matrices"
-                / f"{sub}_{ses}_functional_connectivity_matrix_fisher_z.csv"
+                / "grouped_rois"
+                / f"{sub}_{ses}_functional_connectivity_flat.csv"
             )
             if fc_csv.is_file():
-                fc_flat = flatten_connectivity_csv(fc_csv, measure_col="pearson_rho")
+                fc_flat = pd.read_csv(fc_csv)
                 row[col] = get_weighted_roi_mean(fc_flat, subject=sub, ses=ses)
+                _dbg(f"  FC  {ses}: weighted mean={row[col]:.6f}")
             else:
+                _dbg(f"  FC  {ses}: missing file {fc_csv.name}")
                 row[col] = np.nan
 
         # SC tp1 / tp2
@@ -234,18 +280,26 @@ def main():
                 sc_root_path
                 / ses
                 / "individual_connectivity_matrices"
-                / f"{sub}_{ses}_structural_connectivity_matrix.csv"
+                / "grouped_rois"
+                / f"{sub}_{ses}_structural_connectivity_flat.csv"
             )
             if sc_csv.is_file():
-                sc_flat = flatten_connectivity_csv(sc_csv, measure_col="pearson_rho")
+                sc_flat = pd.read_csv(sc_csv)
                 row[col] = get_weighted_roi_mean(sc_flat, subject=sub, ses=ses)
+                _dbg(f"  SC  {ses}: global weighted mean={row[col]:.6f}")
             else:
+                _dbg(f"  SC  {ses}: missing file {sc_csv.name}")
                 row[col] = np.nan
 
         out_rows.append(row)
+        if i % 25 == 0 or i == len(subjects):
+            _dbg(f"Progress: completed {i}/{len(subjects)} subjects")
 
     df_out = pd.DataFrame(out_rows)
     output_path = Path("/home/rachel/Desktop/data/weighted_global_roi_averages.csv")
+    _dbg("NA counts by column:")
+    for col, n_na in df_out.isna().sum().items():
+        _dbg(f"  {col}: {n_na}")
     df_out.to_csv(output_path, index=False)
     print(f"Saved: {output_path} | n_subjects={len(df_out)}")
 
