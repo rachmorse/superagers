@@ -67,6 +67,7 @@ This repository contains the analysis scripts for our study on superagers, which
 - **Purpose:** These scripts run prepare and run a logistic elastic net to classify participants as superagers or non-superagers
 - **Scripts:**
     `prep_data_for_en.py`: Prepares data by generating voxel‑weighted, grouped ROI connectivity summaries for later elastic net analysis. 
+    `prep_weighted_global_roi_averages.py`: Computes voxel-weighted global, sensory, and heteromodal ROI averages for SFC, FC, and SC.
     `log_en.py`: Runs a logistic elastic net classification to predict superager status using cross-validation and permutation testing. Provides model level metrics including p-value and feature level p-values. 
 
 ## Analysis Scripts
