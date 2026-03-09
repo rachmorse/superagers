@@ -11,6 +11,16 @@ DEBUG = True  # Master switch for verbose diagnostic prints during manual checks
 _PRINTED_ROI_DOMAIN_EXAMPLES = False  # One-time guard so sensory/hmod ROI examples print once.
 _SUBCORT_DEBUG_PRINTS = 0  # Caps how many aseg file-path debug lines are printed.
 _SCHAEFER_LABEL_TO_COUNT = None  # Lazy-loaded cache of Schaefer ROI -> voxel count weights.
+SFC_NETWORKS = ("Vis", "SomMot", "DorsAttn", "SalVentAttn", "Limbic", "Cont", "Default")
+SFC_NETWORK_COL_SUFFIX = {
+    "Vis": "vis",
+    "SomMot": "sommot",
+    "DorsAttn": "dorsattn",
+    "SalVentAttn": "salience",
+    "Limbic": "limbic",
+    "Cont": "control",
+    "Default": "dmn",
+}
 
 
 def _dbg(msg: str):
@@ -89,7 +99,7 @@ def get_sfc_sensory_hmod_means(df: pd.DataFrame, subject: str, ses: str):
 
 
 def get_sfc_network_means(
-    df: pd.DataFrame, subject: str, ses: str, networks=("Default", "SalVentAttn")
+    df: pd.DataFrame, subject: str, ses: str, networks=SFC_NETWORKS
 ):
     """Compute weighted means for specific Schaefer networks.
 
@@ -97,7 +107,7 @@ def get_sfc_network_means(
         df: DataFrame with columns "ROI_name" and "pearson_rho".
         subject: Subject ID.
         ses: Session ID.
-        networks: Network names to compute means for (e.g. "Default", "SalVentAttn").
+        networks: Network names to compute means for (e.g. "Vis", "Default").
 
     Returns:
         Dict mapping each requested network name to its weighted mean `pearson_rho`.
@@ -124,6 +134,26 @@ def get_sfc_network_means(
         else:
             out[network] = float((d["pearson_rho"] * d["weight"]).sum() / d["weight"].sum())
     return out
+
+
+def get_sfc_hippocampus_mean(df: pd.DataFrame, subject: str, ses: str) -> float:
+    """Compute weighted mean SFC across left+right hippocampus ROIs only.
+    
+    Args:
+        df: DataFrame with columns "ROI_name" and "pearson_rho".
+        subject: Subject ID.
+        ses: Session ID.
+
+    Returns:
+        float: Weighted mean SFC across hippocampus ROIs.
+    """
+    valid = _prepare_weighted_df(df, subject, ses)
+    if valid.empty:
+        return np.nan
+    hippo = valid[valid["ROI_name"].astype(str).str.contains("Hippocampus", na=False)]
+    if hippo.empty or np.isclose(hippo["weight"].sum(), 0.0):
+        return np.nan
+    return float((hippo["pearson_rho"] * hippo["weight"]).sum() / hippo["weight"].sum())
 
 
 def _prepare_weighted_df(df: pd.DataFrame, subject: str, ses: str) -> pd.DataFrame:
@@ -284,16 +314,18 @@ def main():
                         row["sfc_sensory_2"] = sensory
                         row["sfc_hmod_2"] = hmod
                     _dbg(f"  SFC {ses}: sensory={sensory}, hmod={hmod}")
-                    net_means = get_sfc_network_means(sfc_df, subject=sub, ses=ses)
-                    if ses == "ses-01":
-                        row["sfc_dmn_1"] = net_means["Default"]
-                        row["sfc_salience_1"] = net_means["SalVentAttn"]
-                    else:
-                        row["sfc_dmn_2"] = net_means["Default"]
-                        row["sfc_salience_2"] = net_means["SalVentAttn"]
+                    net_means = get_sfc_network_means(sfc_df, subject=sub, ses=ses, networks=SFC_NETWORKS)
+                    tp_idx = "1" if ses == "ses-01" else "2"
+                    for network in SFC_NETWORKS:
+                        suffix = SFC_NETWORK_COL_SUFFIX[network]
+                        row[f"sfc_{suffix}_{tp_idx}"] = net_means[network]
+                    row[f"sfc_hippocampus_{tp_idx}"] = get_sfc_hippocampus_mean(
+                        sfc_df, subject=sub, ses=ses
+                    )
                     _dbg(
                         f"  SFC {ses}: dmn={net_means['Default']}, "
-                        f"salience={net_means['SalVentAttn']}"
+                        f"salience={net_means['SalVentAttn']}, "
+                        f"hippocampus={row[f'sfc_hippocampus_{tp_idx}']}"
                     )
             else:
                 _dbg(f"  SFC {ses}: missing file {sfc_csv.name}")
@@ -302,13 +334,14 @@ def main():
                     if ses == "ses-01":
                         row["sfc_sensory_1"] = np.nan
                         row["sfc_hmod_1"] = np.nan
-                        row["sfc_dmn_1"] = np.nan
-                        row["sfc_salience_1"] = np.nan
                     else:
                         row["sfc_sensory_2"] = np.nan
                         row["sfc_hmod_2"] = np.nan
-                        row["sfc_dmn_2"] = np.nan
-                        row["sfc_salience_2"] = np.nan
+                    tp_idx = "1" if ses == "ses-01" else "2"
+                    for network in SFC_NETWORKS:
+                        suffix = SFC_NETWORK_COL_SUFFIX[network]
+                        row[f"sfc_{suffix}_{tp_idx}"] = np.nan
+                    row[f"sfc_hippocampus_{tp_idx}"] = np.nan
 
         # FC tp1 / tp2
         for ses, col in [("ses-01", "fc_tp1_weighted_mean"), ("ses-02", "fc_tp2_weighted_mean")]:
