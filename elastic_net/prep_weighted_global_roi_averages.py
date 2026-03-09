@@ -88,6 +88,44 @@ def get_sfc_sensory_hmod_means(df: pd.DataFrame, subject: str, ses: str):
     return out["sensory"], out["hmod"]
 
 
+def get_sfc_network_means(
+    df: pd.DataFrame, subject: str, ses: str, networks=("Default", "SalVentAttn")
+):
+    """Compute weighted means for specific Schaefer networks.
+
+    Args:
+        df: DataFrame with columns "ROI_name" and "pearson_rho".
+        subject: Subject ID.
+        ses: Session ID.
+        networks: Network names to compute means for (e.g. "Default", "SalVentAttn").
+
+    Returns:
+        Dict mapping each requested network name to its weighted mean `pearson_rho`.
+    """
+    valid = _prepare_weighted_df(df, subject, ses)
+    if valid.empty:
+        return {network: np.nan for network in networks}
+
+    cortical = valid[~valid["ROI_name"].astype(str).str.startswith("Subcortical")].copy()
+    if cortical.empty:
+        return {network: np.nan for network in networks}
+
+    def _network_from_roi(name: str) -> str:
+        parts = str(name).split("_")
+        return parts[2] if len(parts) >= 3 else ""
+
+    cortical["network"] = cortical["ROI_name"].astype(str).apply(_network_from_roi)
+    out = {}
+    for network in networks:
+        d = cortical[cortical["network"] == network]
+        _dbg(f"Example ROIs in {network} network: {d['ROI_name'].sample(min(5, len(d))).tolist()}")
+        if d.empty or np.isclose(d["weight"].sum(), 0.0):
+            out[network] = np.nan
+        else:
+            out[network] = float((d["pearson_rho"] * d["weight"]).sum() / d["weight"].sum())
+    return out
+
+
 def _prepare_weighted_df(df: pd.DataFrame, subject: str, ses: str) -> pd.DataFrame:
     """Attach voxel-based weights and return valid rows for weighted averaging.
     
@@ -246,6 +284,17 @@ def main():
                         row["sfc_sensory_2"] = sensory
                         row["sfc_hmod_2"] = hmod
                     _dbg(f"  SFC {ses}: sensory={sensory}, hmod={hmod}")
+                    net_means = get_sfc_network_means(sfc_df, subject=sub, ses=ses)
+                    if ses == "ses-01":
+                        row["sfc_dmn_1"] = net_means["Default"]
+                        row["sfc_salience_1"] = net_means["SalVentAttn"]
+                    else:
+                        row["sfc_dmn_2"] = net_means["Default"]
+                        row["sfc_salience_2"] = net_means["SalVentAttn"]
+                    _dbg(
+                        f"  SFC {ses}: dmn={net_means['Default']}, "
+                        f"salience={net_means['SalVentAttn']}"
+                    )
             else:
                 _dbg(f"  SFC {ses}: missing file {sfc_csv.name}")
                 row[col] = np.nan
@@ -253,9 +302,13 @@ def main():
                     if ses == "ses-01":
                         row["sfc_sensory_1"] = np.nan
                         row["sfc_hmod_1"] = np.nan
+                        row["sfc_dmn_1"] = np.nan
+                        row["sfc_salience_1"] = np.nan
                     else:
                         row["sfc_sensory_2"] = np.nan
                         row["sfc_hmod_2"] = np.nan
+                        row["sfc_dmn_2"] = np.nan
+                        row["sfc_salience_2"] = np.nan
 
         # FC tp1 / tp2
         for ses, col in [("ses-01", "fc_tp1_weighted_mean"), ("ses-02", "fc_tp2_weighted_mean")]:
