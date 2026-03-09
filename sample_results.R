@@ -158,7 +158,7 @@ plot_bar_distributions <- function(df, vars, bins = 20) {
 distribution_vars <- unique(c(
   "YoE", "age", "delayed_recall_raw", "ravlt_total", "pacc5", "pacc5_no_em",
   "sfc_weighted_mean", "fc_weighted_mean", "sc_weighted_mean",
-  "sfc_hmod", "sfc_sensory"
+  "sfc_hmod", "sfc_sensory", "sfc_dmn", "sfc_salience"
 ))
 
 # Plot all requested variables at once from data_long
@@ -457,6 +457,8 @@ run_group_fdr <- function(model_groups, method = "fdr") {
 summary(lmer(scale(sfc_weighted_mean) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
 summary(lmer(scale(sfc_hmod) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
 summary(lmer(scale(sfc_sensory) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(scale(sfc_dmn) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(scale(sfc_salience) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
 
 summary(lmer(fc_weighted_mean ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE))
 summary(lmer(sc_weighted_mean ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE))
@@ -472,11 +474,17 @@ sfc_superager_hmod <- get_mixed_effects_stats(scale(sfc_hmod) ~ scale(superager_
 sfc_superager_hmod
 sfc_superager_sensory <- get_mixed_effects_stats(scale(sfc_sensory) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
 sfc_superager_sensory
+sfc_superager_dmn <- get_mixed_effects_stats(scale(sfc_dmn) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_dmn
+sfc_superager_salience <- get_mixed_effects_stats(scale(sfc_salience) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_salience
 
 sfc_model_stats <- list(
   sfc_weighted_mean = sfc_superager_weighted,
   sfc_hmod = sfc_superager_hmod,
-  sfc_sensory = sfc_superager_sensory
+  sfc_sensory = sfc_superager_sensory,
+  sfc_dmn = sfc_superager_dmn,
+  sfc_salience = sfc_superager_salience
 )
 
 # SFC-only significance label from the adjusted mixed model
@@ -578,6 +586,9 @@ pacc_tp1 <- full_join(
   by = "id"
 ) %>%
   mutate(
+    # Harmonize SDMT to per-minute rate (BBHI: 2.0 min; BBHI-senior: 1.5 min)
+    sdmt_total = sdmt_total / 2,
+    sdmt_total_senior = sdmt_total_senior / 1.5,
     mmse = coalesce(mmse_senior, mmse),
     ravlt_total = coalesce(ravlt_total_senior, ravlt_total),
     sdmt_total = coalesce(sdmt_total_senior, sdmt_total),
@@ -605,6 +616,9 @@ pacc_tp2 <- full_join(
   by = "id"
 ) %>%
   mutate(
+    # Harmonize SDMT to per-minute rate (BBHI: 2.0 min; BBHI-senior: 1.5 min)
+    sdmt_total = sdmt_total / 2,
+    sdmt_total_senior = sdmt_total_senior / 1.5,
     mmse = coalesce(mmse_senior, mmse),
     ravlt_total = coalesce(ravlt_total_senior, ravlt_total),
     sdmt_total = coalesce(sdmt_total_senior, sdmt_total),
@@ -795,29 +809,104 @@ ggplot(plot_df_no_em, aes(x = age, y = pacc5_no_em)) +
   labs(x = "Age", y = "PACC without episodic memory", color = NULL) +
   theme_classic(base_size = 12)
 
+# RAVLT total model (same approach as PACC superager-by-age)
+m_ravlt_total <- lmer(ravlt_total ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE)
+summary(m_ravlt_total)
+summary(lmer(scale(ravlt_total) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+
+vars <- (
+  "scale(superager_long):scale(age)"
+)
+ravlt_total_superager_age <- get_mixed_effects_stats(scale(ravlt_total) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_total_superager_age
+
+vars <- (
+  "scale(superager_long)"
+)
+ravlt_total_superager <- get_mixed_effects_stats(scale(ravlt_total) ~ scale(superager_long) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_total_superager
+
+plot_df_ravlt_total <- data_long %>%
+  dplyr::select(id, age, superager_long, ravlt_total) %>%
+  drop_na() %>%
+  mutate(
+    superager_group = factor(superager_long, levels = c(0, 1),
+                             labels = c("non-superager", "superager"))
+  )
+
+ggplot(plot_df_ravlt_total, aes(x = age, y = ravlt_total)) +
+  geom_line(aes(group = id), alpha = 0.18, linewidth = 0.3, color = "grey55") +
+  geom_point(aes(color = superager_group), alpha = 0.55, size = 1.8) +
+  geom_smooth(aes(color = superager_group), method = "lm", se = TRUE, linewidth = 1.2) +
+  scale_color_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
+  labs(x = "Age", y = "RAVLT total", color = NULL) +
+  theme_classic(base_size = 12)
+
 # Look at sfc and mem
 data_long$delayed_recall_raw_z <- scale(data_long$delayed_recall_raw)
 data_long$sfc_hmod_z <- scale(data_long$sfc_hmod)
+if ("sfc_dmn" %in% names(data_long)) {
+  data_long$sfc_dmn_z <- scale(data_long$sfc_dmn)
+} else {
+  warning("sfc_dmn not found in data_long; setting sfc_dmn_z to NA.")
+  data_long$sfc_dmn_z <- NA_real_
+}
+if ("sfc_salience" %in% names(data_long)) {
+  data_long$sfc_salience_z <- scale(data_long$sfc_salience)
+} else {
+  warning("sfc_salience not found in data_long; setting sfc_salience_z to NA.")
+  data_long$sfc_salience_z <- NA_real_
+}
 
 ravlt_sfc_hmod_z <- (lmer(delayed_recall_raw_z ~ sfc_hmod_z + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
 summary(ravlt_sfc_hmod_z)
+tryCatch({
+  ravlt_sfc_dmn_z <- (lmer(delayed_recall_raw_z ~ sfc_dmn_z + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+  summary(ravlt_sfc_dmn_z)
+}, error = function(e) warning(paste("DMN delayed-recall model failed:", e$message)))
+tryCatch({
+  ravlt_sfc_salience_z <- (lmer(delayed_recall_raw_z ~ sfc_salience_z + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+  summary(ravlt_sfc_salience_z)
+}, error = function(e) warning(paste("Salience delayed-recall model failed:", e$message)))
 summary(lmer(delayed_recall_raw_z ~ scale(sfc_weighted_mean) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
 
 # Get stats
 vars <- c(
   "sfc_hmod_z",
+  "sfc_dmn_z",
+  "sfc_salience_z",
   "scale(sfc_weighted_mean)",
   "scale(sfc_sensory)"
 )
 ravlt_sfc_hmod <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ sfc_hmod_z + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_hmod
+ravlt_sfc_dmn <- tryCatch(
+  get_mixed_effects_stats(scale(delayed_recall_raw) ~ sfc_dmn_z + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars),
+  error = function(e) {
+    warning(paste("DMN delayed-recall stats failed:", e$message))
+    list(p_value = NA_real_)
+  }
+)
+ravlt_sfc_dmn
+ravlt_sfc_salience <- tryCatch(
+  get_mixed_effects_stats(scale(delayed_recall_raw) ~ sfc_salience_z + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars),
+  error = function(e) {
+    warning(paste("Salience delayed-recall stats failed:", e$message))
+    list(p_value = NA_real_)
+  }
+)
+ravlt_sfc_salience
 ravlt_sfc_weighted <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_weighted_mean) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_weighted
 ravlt_sfc_sensory <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_sensory) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_sensory
 
 ravlt_model_stats <- list(
+  ravlt_total_superager = ravlt_total_superager,
+  ravlt_total_superager_age = ravlt_total_superager_age,
   ravlt_sfc_hmod = ravlt_sfc_hmod,
+  ravlt_sfc_dmn = ravlt_sfc_dmn,
+  ravlt_sfc_salience = ravlt_sfc_salience,
   ravlt_sfc_weighted_mean = ravlt_sfc_weighted,
   ravlt_sfc_sensory = ravlt_sfc_sensory
 )
