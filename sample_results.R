@@ -9,6 +9,10 @@ suppressPackageStartupMessages({
   library(emmeans)
 })
 
+#################
+# Data cleaning #
+#################
+
 # Load source data
 raw_data <- read.csv("~/Documents/2023:2024/Data/Exported data/superager.csv")
 sfc_data_1 <- read.csv("~/Documents/2023:2024/Data/Exported data/all_sfc_data_ses-01.csv")
@@ -168,6 +172,10 @@ distribution_plot_results <- plot_bar_distributions(
   bins = 20
 )
 
+#####################
+# Descriptive stats #
+#####################
+
 # Cohort summary table
 fmt_mean_sd <- function(x) {
   paste0(formatC(mean(x, na.rm = TRUE), format = "f", digits = 2), " ± ",
@@ -227,8 +235,10 @@ group_table <- tibble(
 )
 print(group_table)
 
-#######
-# Weighted summaries vs age
+#############################
+# Weighted summaries vs age #
+#############################
+
 weighted_plot_df <- data_long %>%
   dplyr::select(id, age, superager_long, sfc_weighted_mean, fc_weighted_mean, sc_weighted_mean) %>%
   pivot_longer(
@@ -270,114 +280,59 @@ ggplot(weighted_plot_df, aes(x = age, y = value, color = superager_group)) +
   labs(x = "Age", y = "Weighted mean", color = NULL) +
   theme_gray()
 
-#####
-# ROIs in all three models
-cols <- c(
-  "X7Networks_RH_DorsAttn_FEF_1",
-  "X7Networks_RH_Default_PFCdPFCm_5",
-  "X7Networks_RH_SalVentAttn_FrOperIns_1",
-  "X7Networks_LH_Default_pCunPCC_2"
-)
-
-# Superager effect per ROI
-results <- lapply(cols, function(feature_name) {
-  dat <- data_long %>%
-    dplyr::select(id, superager_long, sex, YoE, age, time, all_of(feature_name)) %>%
-    mutate(Value = .data[[feature_name]]) %>%
-    drop_na(Value, superager_long, time, age, sex, YoE, id)
-
-  model <- lmer(Value ~ superager_long + time + age + sex + YoE + (1 | id), data = dat, REML = FALSE)
-  coef_tab <- as.data.frame(summary(model)$coefficients)
-  tibble(Feature = feature_name, beta = coef_tab["superager_long", "Estimate"], p = coef_tab["superager_long", "Pr(>|t|)"])
-})
-
-results_df <- bind_rows(results) %>%
-  mutate(p_fdr = p.adjust(p, method = "fdr")) %>%
-  arrange(p_fdr) %>%
-  dplyr::select(Feature, beta, p, p_fdr)
-print(results_df)
-
-######
-# Delayed recall association per ROI
-memory_results <- lapply(cols, function(feature_name) {
-  dat <- data_long %>%
-    dplyr::select(id, delayed_recall_raw, sex, YoE, age, time, all_of(feature_name)) %>%
-    mutate(Value = .data[[feature_name]]) %>%
-    drop_na(delayed_recall_raw, Value, time, age, sex, YoE, id)
-
-  model <- lmer(delayed_recall_raw ~ Value + time + age + sex + YoE + (1 | id), data = dat, REML = FALSE)
-  coef_tab <- as.data.frame(summary(model)$coefficients)
-  tibble(Feature = feature_name, beta = coef_tab["Value", "Estimate"], p = coef_tab["Value", "Pr(>|t|)"])
-})
-
-memory_results_df <- bind_rows(memory_results) %>%
-  mutate(p_fdr = p.adjust(p, method = "fdr")) %>%
-  arrange(p_fdr) %>%
-  dplyr::select(Feature, beta, p, p_fdr)
-print(memory_results_df)
-
-# Plot FDR-significant ROIs by group
-sig_results <- results_df %>%
-  filter(p_fdr < 0.05) %>%
-  arrange(p_fdr) %>%
+# Weighted summaries within SFC networks
+weighted_plot_networks <- data_long %>%
+  dplyr::select(id, age, superager_long, sfc_dmn, sfc_salience, sfc_vis, sfc_sommot, sfc_hippocampus, sfc_hmod, sfc_sensory) %>%
+  pivot_longer(
+    cols = c(sfc_dmn, sfc_salience, sfc_vis, sfc_sommot, sfc_hippocampus, sfc_hmod, sfc_sensory),
+    names_to = "metric",
+    values_to = "value"
+  ) %>%
+  drop_na(age, value, superager_long) %>%
   mutate(
-    p_star = case_when(
-      p < 0.001 ~ "***",
-      p < 0.01 ~ "**",
-      p < 0.05 ~ "*",
-      TRUE ~ "ns"
-    ),
-    Feature_clean = recode(
-      Feature,
-      "X7Networks_RH_DorsAttn_FEF_1" = "R hemisphere dorsal attention frontal eye fields",
-      "X7Networks_RH_Default_PFCdPFCm_5" = "R hemisphere default dorsal/medial prefrontal cortex",
-      "X7Networks_LH_Default_pCunPCC_2" = "L hemisphere default precuneus posterior cingulate cortex",
-      "X7Networks_RH_SalVentAttn_FrOperIns_1" = "R hemisphere salience/ventral attention frontal operculum insula"
-    ),
-    facet_label = Feature_clean
+    superager_group = factor(superager_long, levels = c(0, 1), labels = c("non-superager", "superager")),
+    metric = recode(
+      metric,
+      sfc_salience = "Salience SFC",
+      sfc_vis = "Visual SFC",
+      sfc_dmn = "DMN SFC",
+      sfc_hippocampus = "HC SFC",
+      sfc_sommot = "Motor SFC",
+      sfc_hmod = "Heteromodal SFC",
+      sfc_sensory = "Sensory SFC"
+    )
   )
 
-sig_features <- sig_results %>% pull(Feature)
+ggplot(weighted_plot_networks, aes(x = age, y = value, color = metric)) +
+  geom_line(aes(group = id), alpha = 0.18, linewidth = 0.3) +
+  geom_point(alpha = 0.35, size = 1.7) +
+  geom_smooth(method = "lm", se = TRUE, linewidth = 1.2) +
+  facet_wrap(~ metric, ncol = 3, scales = "free_y") +
+  scale_color_manual(values = c(
+    "Salience SFC" = "#F8766D",
+    "Visual SFC" = "#00BA38",
+    "DMN SFC" = "#619CFF",
+    "HC SFC" = "#FE9EC7",
+    "Motor SFC" = "#FFA95A",
+    "Heteromodal SFC" = "#B7BDF7",
+    "Sensory SFC" = "#0C7779"
+  )) +
+  labs(x = "Age", y = "Weighted mean") +
+  theme_gray() +
+  guides(color = "none")
 
-if (length(sig_features) > 0) {
-  plot_df <- data_long %>%
-    dplyr::select(id, superager_long, all_of(sig_features)) %>%
-    pivot_longer(cols = all_of(sig_features), names_to = "Feature", values_to = "Value") %>%
-    drop_na(Value, superager_long) %>%
-    left_join(sig_results %>% dplyr::select(Feature, facet_label, p_star), by = "Feature") %>%
-    mutate(
-      superager_group = factor(superager_long, levels = c(0, 1), labels = c("non-superager", "superager")),
-      facet_label = factor(facet_label, levels = sig_results$facet_label)
-    )
+# Weighted summaries by superager status
+ggplot(weighted_plot_networks, aes(x = age, y = value, color = superager_group)) +
+  geom_point(alpha = 0.30, size = 1.4) +
+  geom_smooth(method = "lm", se = TRUE, linewidth = 1.1) +
+  facet_wrap(~ metric, ncol = 3, scales = "free_y") +
+  scale_color_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
+  labs(x = "Age", y = "Weighted mean", color = NULL) +
+  theme_gray()
 
-  ann_df <- plot_df %>%
-    group_by(facet_label) %>%
-    summarise(
-      y_min = min(Value, na.rm = TRUE),
-      y_max = max(Value, na.rm = TRUE),
-      p_star = first(p_star),
-      .groups = "drop"
-    ) %>%
-    mutate(
-      y_bar = y_max + 0.06 * (y_max - y_min),
-      y_star = y_max + 0.10 * (y_max - y_min)
-    )
-
-  ggplot(plot_df, aes(x = superager_group, y = Value, fill = superager_group)) +
-    geom_violin(trim = FALSE, alpha = 0.30, color = NA) +
-    geom_boxplot(width = 0.18, outlier.shape = NA, alpha = 0.65, color = "black") +
-    geom_jitter(width = 0.08, alpha = 0.22, size = 0.9, color = "black") +
-    stat_summary(fun = mean, geom = "point", shape = 23, size = 2.5, fill = "white", color = "black") +
-    geom_segment(data = ann_df, aes(x = 1, xend = 2, y = y_bar, yend = y_bar), inherit.aes = FALSE, linewidth = 0.45) +
-    geom_text(data = ann_df, aes(x = 1.5, y = y_star, label = p_star), inherit.aes = FALSE, size = 5) +
-    facet_wrap(~ facet_label, scales = "free_y", ncol = 3) +
-    scale_fill_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
-    labs(x = NULL, y = "SFC") +
-    theme_classic(base_size = 12) +
-    theme(legend.position = "none")
-} else {
-  cat("No FDR-significant features to plot.\n")
-}
+##############
+# LME models #
+##############
 
 # Add a function for getting the stats from LME models
 get_mixed_effects_stats <- function(formula, data, vars_priority) {
@@ -452,112 +407,9 @@ run_group_fdr <- function(model_groups, method = "fdr") {
     arrange(group, p_fdr)
 }
 
-#####
-# Quick models directly on data_long
-summary(lmer(scale(sfc_weighted_mean) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
-summary(lmer(scale(sfc_hmod) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
-summary(lmer(scale(sfc_sensory) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
-summary(lmer(scale(sfc_dmn) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
-summary(lmer(scale(sfc_salience) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
-
-summary(lmer(fc_weighted_mean ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE))
-summary(lmer(sc_weighted_mean ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE))
-
-# Get stats
-vars <- c(
-  "scale(superager_long)"
-)
-
-sfc_superager_weighted <- get_mixed_effects_stats(scale(sfc_weighted_mean) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
-sfc_superager_weighted
-sfc_superager_hmod <- get_mixed_effects_stats(scale(sfc_hmod) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
-sfc_superager_hmod
-sfc_superager_sensory <- get_mixed_effects_stats(scale(sfc_sensory) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
-sfc_superager_sensory
-sfc_superager_dmn <- get_mixed_effects_stats(scale(sfc_dmn) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
-sfc_superager_dmn
-sfc_superager_salience <- get_mixed_effects_stats(scale(sfc_salience) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
-sfc_superager_salience
-
-sfc_model_stats <- list(
-  sfc_weighted_mean = sfc_superager_weighted,
-  sfc_hmod = sfc_superager_hmod,
-  sfc_sensory = sfc_superager_sensory,
-  sfc_dmn = sfc_superager_dmn,
-  sfc_salience = sfc_superager_salience
-)
-
-# SFC-only significance label from the adjusted mixed model
-m_sfc <- lmer(sfc_hmod ~ superager_long + time + age + sex + YoE + (1 | id),
-              data = data_long, REML = FALSE)
-p_sfc <- as.data.frame(summary(m_sfc)$coefficients)["superager_long", "Pr(>|t|)"]
-p_star <- dplyr::case_when(
-  p_sfc < 0.001 ~ "***",
-  p_sfc < 0.01 ~ "**",
-  p_sfc < 0.05 ~ "*",
-  TRUE ~ "ns"
-)
-
-plot_df <- data_long %>%
-  dplyr::select(superager_long, sfc_hmod) %>%
-  drop_na() %>%
-  mutate(
-    superager_group = factor(superager_long, levels = c(0, 1),
-                             labels = c("non-superager", "superager"))
-  )
-
-y_min <- min(plot_df$sfc_hmod, na.rm = TRUE)
-y_max <- max(plot_df$sfc_hmod, na.rm = TRUE)
-y_bar <- y_max + 0.06 * (y_max - y_min)
-y_star <- y_max + 0.10 * (y_max - y_min)
-
-ggplot(plot_df, aes(x = superager_group, y = sfc_hmod, fill = superager_group)) +
-  geom_violin(trim = FALSE, alpha = 0.30, color = NA) +
-  geom_boxplot(width = 0.18, outlier.shape = NA, alpha = 0.65, color = "black") +
-  geom_jitter(width = 0.08, alpha = 0.22, size = 0.9, color = "black") +
-  stat_summary(fun = mean, geom = "point", shape = 23, size = 2.5, fill = "white", color = "black") +
-  annotate("segment", x = 1, xend = 2, y = y_bar, yend = y_bar, linewidth = 0.45) +
-  annotate("text", x = 1.5, y = y_star, label = p_star, size = 5) +
-  scale_fill_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
-  labs(x = NULL, y = "SFC heteromodal mean") +
-  theme_classic(base_size = 12) +
-  theme(legend.position = "none")
-
-# SFC-only significance label from the adjusted mixed model
-m_sfc <- lmer(sfc_hmod ~ superager_long + time + age + sex + YoE + (1 | id),
-              data = data_long, REML = FALSE)
-p_sfc <- as.data.frame(summary(m_sfc)$coefficients)["superager_long", "Pr(>|t|)"]
-p_star <- dplyr::case_when(
-  p_sfc < 0.001 ~ "***",
-  p_sfc < 0.01 ~ "**",
-  p_sfc < 0.05 ~ "*",
-  TRUE ~ "ns"
-)
-
-plot_df <- data_long %>%
-  dplyr::select(superager_long, sfc_hmod) %>%
-  drop_na() %>%
-  mutate(
-    superager_group = factor(superager_long, levels = c(0, 1),
-                             labels = c("non-superager", "superager"))
-  )
-
-y_min <- min(plot_df$sfc_hmod, na.rm = TRUE)
-y_max <- max(plot_df$sfc_hmod, na.rm = TRUE)
-y_bar <- y_max + 0.06 * (y_max - y_min)
-y_star <- y_max + 0.10 * (y_max - y_min)
-
-ggplot(plot_df, aes(x = superager_group, y = sfc_hmod, fill = superager_group)) +
-  geom_violin(trim = FALSE, alpha = 0.30, color = NA) +
-  geom_boxplot(width = 0.18, outlier.shape = NA, alpha = 0.65, color = "black") +
-  geom_jitter(width = 0.08, alpha = 0.22, size = 0.9, color = "black") +
-  stat_summary(fun = mean, geom = "point", shape = 23, size = 2.5, fill = "white", color = "black") +
-  annotate("segment", x = 1, xend = 2, y = y_bar, yend = y_bar, linewidth = 0.45) +
-  annotate("text", x = 1.5, y = y_star, label = p_star, size = 5) +
-  scale_fill_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
-  labs(x = NULL, y = "SFC heteromodal mean") +
-  theme_classic(base_size = 12) +
-  theme(legend.position = "none")
+#############################
+# Creating & analyzing PACC #
+#############################
 
 # PACC5: z-score each component within wave, then unweighted average
 bbhi_tp2 <- read.csv("~/Documents/2023:2024/Data/BBHI/BBHI Data Timept2 NPS.csv")
@@ -589,6 +441,9 @@ pacc_tp1 <- full_join(
     # Harmonize SDMT to per-minute rate (BBHI: 2.0 min; BBHI-senior: 1.5 min)
     sdmt_total = sdmt_total / 2,
     sdmt_total_senior = sdmt_total_senior / 1.5,
+    # Harmonize SDMT to per-minute rate (BBHI: 2.0 min; BBHI-senior: 1.5 min)
+    sdmt_total = sdmt_total / 2,
+    sdmt_total_senior = sdmt_total_senior / 1.5,
     mmse = coalesce(mmse_senior, mmse),
     ravlt_total = coalesce(ravlt_total_senior, ravlt_total),
     sdmt_total = coalesce(sdmt_total_senior, sdmt_total),
@@ -616,6 +471,9 @@ pacc_tp2 <- full_join(
   by = "id"
 ) %>%
   mutate(
+    # Harmonize SDMT to per-minute rate (BBHI: 2.0 min; BBHI-senior: 1.5 min)
+    sdmt_total = sdmt_total / 2,
+    sdmt_total_senior = sdmt_total_senior / 1.5,
     # Harmonize SDMT to per-minute rate (BBHI: 2.0 min; BBHI-senior: 1.5 min)
     sdmt_total = sdmt_total / 2,
     sdmt_total_senior = sdmt_total_senior / 1.5,
@@ -694,7 +552,6 @@ data_wide <- data_wide %>%
 data_long <- data_long %>%
   left_join(pacc5_long, by = c("id", "timepoint"))
 
-
 # PACC model
 m_pacc <- lmer(pacc5 ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE)
 summary(m_pacc)
@@ -738,60 +595,13 @@ vars <- (
 )
 pacc_no_em_superager_age <- get_mixed_effects_stats(scale(pacc5_no_em) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 pacc_no_em_superager_age
+summary(lmer(scale(pacc5_no_em) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long))
 
 vars <- (
   "scale(superager_long)"
 )
 pacc_no_em_superager <- get_mixed_effects_stats(scale(pacc5_no_em) ~ scale(superager_long) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 pacc_no_em_superager
-
-pacc_model_stats <- list(
-  pacc5_superager = pacc_superager,
-  pacc5_superager_age = pacc_superager_age,
-  pacc5_no_em_superager = pacc_no_em_superager,
-  pacc5_no_em_superager_age = pacc_no_em_superager_age
-)
-
-# PACC model no semantic fluency
-m_pacc_no_sem <- lmer(pacc5_no_sem ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE)
-summary(m_pacc_no_sem)
-summary(lmer(scale(pacc5_no_sem) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
-
-vars <- (
-  "scale(superager_long):scale(age)"
-)
-pacc_no_sem_superager_age <- get_mixed_effects_stats(scale(pacc5_no_sem) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
-pacc_no_sem_superager_age
-
-vars <- (
-  "scale(superager_long)"
-)
-pacc_no_sem_superager <- get_mixed_effects_stats(scale(pacc5_no_sem) ~ scale(superager_long) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
-pacc_no_sem_superager
-
-pacc_model_stats <- c(
-  pacc_model_stats,
-  list(
-    pacc5_no_sem_superager = pacc_no_sem_superager,
-    pacc5_no_sem_superager_age = pacc_no_sem_superager_age
-  )
-)
-
-plot_df_no_sem <- data_long %>%
-  dplyr::select(id, age, superager_long, pacc5_no_sem) %>%
-  drop_na() %>%
-  mutate(
-    superager_group = factor(superager_long, levels = c(0, 1),
-                             labels = c("non-superager", "superager"))
-  )
-
-ggplot(plot_df_no_sem, aes(x = age, y = pacc5_no_sem)) +
-  geom_line(aes(group = id), alpha = 0.18, linewidth = 0.3, color = "grey55") +
-  geom_point(aes(color = superager_group), alpha = 0.55, size = 1.8) +
-  geom_smooth(aes(color = superager_group), method = "lm", se = TRUE, linewidth = 1.2) +
-  scale_color_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
-  labs(x = "Age", y = "PACC without semantic fluency", color = NULL) +
-  theme_classic(base_size = 12)
 
 plot_df_no_em <- data_long %>%
   dplyr::select(id, age, superager_long, pacc5_no_em) %>%
@@ -806,32 +616,51 @@ ggplot(plot_df_no_em, aes(x = age, y = pacc5_no_em)) +
   geom_point(aes(color = superager_group), alpha = 0.55, size = 1.8) +
   geom_smooth(aes(color = superager_group), method = "lm", se = TRUE, linewidth = 1.2) +
   scale_color_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
-  labs(x = "Age", y = "PACC without episodic memory", color = NULL) +
+  labs(x = "Age", y = "PACC", color = NULL) +
   theme_classic(base_size = 12)
 
-# RAVLT total model (same approach as PACC superager-by-age)
+###################
+# Analyzing RAVLT #
+###################
+
+# RAVLT total model (same approach as PACC)
 m_ravlt_total <- lmer(ravlt_total ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE)
 summary(m_ravlt_total)
 summary(lmer(scale(ravlt_total) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
 
-vars <- (
+vars <- c(
   "scale(superager_long):scale(age)"
 )
-ravlt_total_superager_age <- get_mixed_effects_stats(scale(ravlt_total) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+
+ravlt_total_superager_age <- get_mixed_effects_stats(
+  scale(ravlt_total) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id),
+  data_long,
+  vars
+)
+
 ravlt_total_superager_age
 
-vars <- (
+vars <- c(
   "scale(superager_long)"
 )
-ravlt_total_superager <- get_mixed_effects_stats(scale(ravlt_total) ~ scale(superager_long) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+
+ravlt_total_superager <- get_mixed_effects_stats(
+  scale(ravlt_total) ~ scale(superager_long) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id),
+  data_long,
+  vars
+)
+
 ravlt_total_superager
 
 plot_df_ravlt_total <- data_long %>%
   dplyr::select(id, age, superager_long, ravlt_total) %>%
   drop_na() %>%
   mutate(
-    superager_group = factor(superager_long, levels = c(0, 1),
-                             labels = c("non-superager", "superager"))
+    superager_group = factor(
+      superager_long,
+      levels = c(0, 1),
+      labels = c("non-superager", "superager")
+    )
   )
 
 ggplot(plot_df_ravlt_total, aes(x = age, y = ravlt_total)) +
@@ -842,7 +671,123 @@ ggplot(plot_df_ravlt_total, aes(x = age, y = ravlt_total)) +
   labs(x = "Age", y = "RAVLT total", color = NULL) +
   theme_classic(base_size = 12)
 
-# Look at sfc and mem
+###########################
+# SFC by superager status #
+###########################
+
+# Quick models directly on data_long
+summary(lmer(scale(sfc_weighted_mean) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(scale(sfc_hmod) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(scale(sfc_sensory) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(scale(sfc_dmn) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(scale(sfc_salience) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(scale(sfc_control) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(scale(sfc_sommot) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(scale(sfc_vis) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(scale(sfc_hippocampus) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+
+summary(lmer(fc_weighted_mean ~ scale(superager_long) + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(sc_weighted_mean ~ scale(superager_long) + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE))
+
+# Get stats
+vars <- c(
+  "scale(superager_long)"
+)
+
+sfc_superager_weighted <- get_mixed_effects_stats(scale(sfc_weighted_mean) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_weighted
+sfc_superager_hmod <- get_mixed_effects_stats(scale(sfc_hmod) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_hmod
+sfc_superager_sensory <- get_mixed_effects_stats(scale(sfc_sensory) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_sensory
+sfc_superager_dmn <- get_mixed_effects_stats(scale(sfc_dmn) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_dmn
+sfc_superager_salience <- get_mixed_effects_stats(scale(sfc_salience) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_salience
+sfc_superager_control <- get_mixed_effects_stats(scale(sfc_control) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_control
+sfc_superager_vis <- get_mixed_effects_stats(scale(sfc_vis) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_vis
+sfc_superager_sommot <- get_mixed_effects_stats(scale(sfc_sommot) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_sommot
+sfc_superager_hippocampus <- get_mixed_effects_stats(scale(sfc_hippocampus) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_hippocampus
+
+# SFC-only significance label from the adjusted mixed model
+m_sfc <- lmer(sfc_hmod ~ superager_long + time + age + sex + YoE + (1 | id),
+              data = data_long, REML = FALSE)
+p_sfc <- as.data.frame(summary(m_sfc)$coefficients)["superager_long", "Pr(>|t|)"]
+p_star <- dplyr::case_when(
+  p_sfc < 0.001 ~ "***",
+  p_sfc < 0.01 ~ "**",
+  p_sfc < 0.05 ~ "*",
+  TRUE ~ "ns"
+)
+
+plot_df <- data_long %>%
+  dplyr::select(superager_long, sfc_hmod) %>%
+  drop_na() %>%
+  mutate(
+    superager_group = factor(superager_long, levels = c(0, 1),
+                             labels = c("non-superager", "superager"))
+  )
+
+y_min <- min(plot_df$sfc_hmod, na.rm = TRUE)
+y_max <- max(plot_df$sfc_hmod, na.rm = TRUE)
+y_bar <- y_max + 0.06 * (y_max - y_min)
+y_star <- y_max + 0.10 * (y_max - y_min)
+
+ggplot(plot_df, aes(x = superager_group, y = sfc_hmod, fill = superager_group)) +
+  geom_violin(trim = FALSE, alpha = 0.30, color = NA) +
+  geom_boxplot(width = 0.18, outlier.shape = NA, alpha = 0.65, color = "black") +
+  geom_jitter(width = 0.08, alpha = 0.22, size = 0.9, color = "black") +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 2.5, fill = "white", color = "black") +
+  annotate("segment", x = 1, xend = 2, y = y_bar, yend = y_bar, linewidth = 0.45) +
+  annotate("text", x = 1.5, y = y_star, label = p_star, size = 5) +
+  scale_fill_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
+  labs(x = NULL, y = "SFC heteromodal mean") +
+  theme_classic(base_size = 12) +
+  theme(legend.position = "none")
+
+# SFC-only significance label from the adjusted mixed model
+m_sfc <- lmer(sfc_hmod ~ superager_long + time + age + sex + YoE + (1 | id),
+              data = data_long, REML = FALSE)
+p_sfc <- as.data.frame(summary(m_sfc)$coefficients)["superager_long", "Pr(>|t|)"]
+p_star <- dplyr::case_when(
+  p_sfc < 0.001 ~ "***",
+  p_sfc < 0.01 ~ "**",
+  p_sfc < 0.05 ~ "*",
+  TRUE ~ "ns"
+)
+
+plot_df <- data_long %>%
+  dplyr::select(superager_long, sfc_hmod) %>%
+  drop_na() %>%
+  mutate(
+    superager_group = factor(superager_long, levels = c(0, 1),
+                             labels = c("non-superager", "superager"))
+  )
+
+y_min <- min(plot_df$sfc_hmod, na.rm = TRUE)
+y_max <- max(plot_df$sfc_hmod, na.rm = TRUE)
+y_bar <- y_max + 0.06 * (y_max - y_min)
+y_star <- y_max + 0.10 * (y_max - y_min)
+
+ggplot(plot_df, aes(x = superager_group, y = sfc_hmod, fill = superager_group)) +
+  geom_violin(trim = FALSE, alpha = 0.30, color = NA) +
+  geom_boxplot(width = 0.18, outlier.shape = NA, alpha = 0.65, color = "black") +
+  geom_jitter(width = 0.08, alpha = 0.22, size = 0.9, color = "black") +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 2.5, fill = "white", color = "black") +
+  annotate("segment", x = 1, xend = 2, y = y_bar, yend = y_bar, linewidth = 0.45) +
+  annotate("text", x = 1.5, y = y_star, label = p_star, size = 5) +
+  scale_fill_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
+  labs(x = NULL, y = "SFC heteromodal mean") +
+  theme_classic(base_size = 12) +
+  theme(legend.position = "none")
+
+##################
+# SFC and memory #
+##################
 data_long$delayed_recall_raw_z <- scale(data_long$delayed_recall_raw)
 data_long$sfc_hmod_z <- scale(data_long$sfc_hmod)
 if ("sfc_dmn" %in% names(data_long)) {
@@ -869,6 +814,8 @@ tryCatch({
   summary(ravlt_sfc_salience_z)
 }, error = function(e) warning(paste("Salience delayed-recall model failed:", e$message)))
 summary(lmer(delayed_recall_raw_z ~ scale(sfc_weighted_mean) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(delayed_recall_raw_z ~ scale(sfc_dmn) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
+summary(lmer(delayed_recall_raw_z ~ scale(sfc_salience) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
 
 # Get stats
 vars <- c(
@@ -876,7 +823,13 @@ vars <- c(
   "sfc_dmn_z",
   "sfc_salience_z",
   "scale(sfc_weighted_mean)",
-  "scale(sfc_sensory)"
+  "scale(sfc_sensory)",
+  "scale(sfc_dmn)",
+  "scale(sfc_salience)",
+  "scale(sfc_control)",
+  "scale(sfc_sommot)",
+  "scale(sfc_vis)",
+  "scale(sfc_hippocampus)"
 )
 ravlt_sfc_hmod <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ sfc_hmod_z + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_hmod
@@ -900,30 +853,18 @@ ravlt_sfc_weighted <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(
 ravlt_sfc_weighted
 ravlt_sfc_sensory <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_sensory) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_sensory
-
-ravlt_model_stats <- list(
-  ravlt_total_superager = ravlt_total_superager,
-  ravlt_total_superager_age = ravlt_total_superager_age,
-  ravlt_sfc_hmod = ravlt_sfc_hmod,
-  ravlt_sfc_dmn = ravlt_sfc_dmn,
-  ravlt_sfc_salience = ravlt_sfc_salience,
-  ravlt_sfc_weighted_mean = ravlt_sfc_weighted,
-  ravlt_sfc_sensory = ravlt_sfc_sensory
-)
-
-fdr_results <- run_group_fdr(list(
-  pacc_models = pacc_model_stats,
-  sfc_models = sfc_model_stats,
-  ravlt_models = ravlt_model_stats
-))
-
-pacc_fdr_results <- fdr_results %>% filter(group == "pacc_models")
-sfc_fdr_results <- fdr_results %>% filter(group == "sfc_models")
-ravlt_fdr_results <- fdr_results %>% filter(group == "ravlt_models")
-
-print(pacc_fdr_results)
-print(sfc_fdr_results)
-print(ravlt_fdr_results)
+ravlt_sfc_dmn <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_dmn) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_dmn
+ravlt_sfc_salience <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_salience) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_salience
+ravlt_sfc_control <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_control) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_control
+ravlt_sfc_sommat <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_sommot) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_sommat
+ravlt_sfc_vis <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_vis) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_vis
+ravlt_sfc_hippocampus <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_hippocampus) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_hippocampus
 
 m1 <- lmer(
   delayed_recall_raw_z ~ sfc_hmod_z + age + time + sex + YoE + (1 | id),
@@ -967,3 +908,51 @@ ggplot(data_long, aes(x = sfc_hmod_z, y = delayed_recall_raw_z)) +
     y = "RAVLT Delayed"
   ) +
   theme_classic()
+
+##################
+# FDR correction #
+##################
+
+ravlt_model_stats <- list(
+  ravlt_sfc_hmod = ravlt_sfc_hmod,
+  ravlt_sfc_weighted_mean = ravlt_sfc_weighted,
+  ravlt_sfc_sensory = ravlt_sfc_sensory,
+  ravlt_sfc_dmn = ravlt_sfc_dmn,
+  ravlt_sfc_salience = ravlt_sfc_salience
+  # ravlt_sfc_control = ravlt_sfc_control,
+  # ravlt_sfc_vis = ravlt_sfc_vis,
+  # ravlt_sfc_hippocampus = ravlt_sfc_hippocampus
+)
+
+sfc_model_stats <- list(
+  sfc_weighted_mean = sfc_superager_weighted,
+  sfc_hmod = sfc_superager_hmod,
+  sfc_dmn = sfc_superager_dmn,
+  sfc_salience = sfc_superager_salience,
+  sfc_sensory = sfc_superager_sensory
+  # sfc_control = sfc_superager_control,
+  # sfc_sommot = sfc_superager_sommot,
+  # sfc_vis = sfc_superager_vis,
+  # sfc_hippocampus = sfc_superager_hippocampus
+)
+
+pacc_model_stats <- list(
+  pacc5_no_em_superager = pacc_no_em_superager,
+  pacc5_no_em_superager_age = pacc_no_em_superager_age,
+  ravlt_total_superager = ravlt_total_superager,
+  ravlt_total_superager_age = ravlt_total_superager_age
+)
+
+fdr_results <- run_group_fdr(list(
+  cog_mem_models = pacc_model_stats,
+  sfc_models = sfc_model_stats,
+  ravlt_models = ravlt_model_stats
+))
+
+cog_mem_fdr_results <- fdr_results %>% filter(group == "cog_mem_models")
+sfc_fdr_results <- fdr_results %>% filter(group == "sfc_models")
+ravlt_fdr_results <- fdr_results %>% filter(group == "ravlt_models")
+
+print(as.data.frame(cog_mem_fdr_results), row.names = FALSE)
+print(sfc_fdr_results)
+print(ravlt_fdr_results)
