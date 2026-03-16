@@ -56,7 +56,7 @@ This repository contains the analysis scripts for our study on superagers, which
 - **Notes:**
     - The scripts used in DWI preprocessing are available in another [repository](https://github.com/rachmorse/dwi_preprocessing). 
 
-### structural_functional_coupling
+### structure_function_coupling
 - **Purpose:** These scripts run prepare and calculate the structural functional coupling (SFC) metrics. To calculate SFC, we use the Pearson's correlation coefficient between the row for a given ROI in the structural connectome and the corresponding row in the functional connectome. We exclude self-connections and any connections where either the structural or functional connectivity value equaled zero (method from this [paper](https://doi.org/10.1038/s41467-023-41686-9)).
 - **Scripts:**
     - `01_convert_to_individual_matrix.py`: Converts the functional and structural connectivity data from a shared CSV with all participants into individual 214x214 matrices. 
