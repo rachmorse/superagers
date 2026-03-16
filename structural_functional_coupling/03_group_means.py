@@ -525,6 +525,7 @@ def visualize_coupling(
         hemi='right',
         view='lateral',
         colorbar=True,
+        cbar_tick_format="%.2f",
         cmap=cold_hot_cmap,
         vmin=vmin,
         vmax=vmax,
