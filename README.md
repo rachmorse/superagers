@@ -69,6 +69,7 @@ This repository contains the analysis scripts for our study on superagers, which
     `prep_data_for_en.py`: Prepares data by generating voxel‑weighted, grouped ROI connectivity summaries for later elastic net analysis. 
     `prep_weighted_global_roi_averages.py`: Computes voxel-weighted global, sensory, and heteromodal ROI averages for SFC, FC, and SC.
     `log_en.py`: Runs a logistic elastic net classification to predict superager status using cross-validation and permutation testing. Provides model level metrics including p-value and feature level p-values. 
+    `en_fdr.py`: Reads the elastic net nohup log files, extracts the model-level p-values, and reports the Benjamini-Hochberg FDR-adjusted p-values with labels for each model.
 
 ## Analysis Scripts
 
