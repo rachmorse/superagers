@@ -283,6 +283,7 @@ def generate_modality_surface_plots(
     diff_vmin=None,
     diff_vmax=None,
     diff_symmetric=True,
+    plot_difference=True,
 ):
     """Generate group-average surface plots for FC or SC.
 
@@ -354,17 +355,18 @@ def generate_modality_surface_plots(
         df_diff.to_csv(output_diff_file)
         print(f"Difference saved to {output_diff_file}")
 
-        visualize_coupling(
-            coupling_file=output_directory_group,
-            group_name=diff_name,
-            output_dir=output_directory_group,
-            ses=ses,
-            vmin=diff_vmin,
-            vmax=diff_vmax,
-            figure_label=modality_name,
-            file_suffix=modality_slug,
-            symmetric_scale=diff_symmetric,
-        )
+        if plot_difference:
+            visualize_coupling(
+                coupling_file=output_directory_group,
+                group_name=diff_name,
+                output_dir=output_directory_group,
+                ses=ses,
+                vmin=diff_vmin,
+                vmax=diff_vmax,
+                figure_label=modality_name,
+                file_suffix=modality_slug,
+                symmetric_scale=diff_symmetric,
+            )
 
 
 def visualize_coupling(
@@ -663,7 +665,57 @@ def generate_superager_motor_visual_presentation_maps(
     )
 
 
-def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df, output_directory, fisher_z_connectivity_file, output_group_connectivity_file, label_type):
+def average_session_differences(session_dirs, label_type, figure_label, file_suffix, vmin=None, vmax=None):
+    """Average difference maps across sessions and visualize the result to have one 
+    combined figure for the difference between superagers and non-superagers.
+    
+    Args:
+        session_dirs: Dictionary mapping session identifiers (e.g., "01", "02") to their respective directories containing difference CSV files.
+        label_type: Type of labeling ("long", "tp1", "tp2") based on superager definition.
+        figure_label: Label used in figure titles.
+        file_suffix: Suffix used in output filenames.
+        vmin: Minimum value for color scaling. If None, it is inferred from the data.
+        vmax: Maximum value for color scaling. If None, it is inferred from the data.
+    """
+    diff_series = []
+    for ses, session_dir in session_dirs.items():
+        if label_type == "long":
+            diff_name = "diff_superagers_vs_non_superagers_long"
+        elif ses == "01":
+            diff_name = "diff_superagers_vs_non_superagers_tp1"
+        else:
+            diff_name = "diff_superagers_vs_non_superagers_tp2"
+
+        diff_file = Path(session_dir) / f"{diff_name}_average.csv"
+        if not diff_file.exists():
+            continue
+        diff_series.append(pd.read_csv(diff_file, index_col=0).iloc[:, 0].rename(ses))
+
+    if len(diff_series) < 2:
+        print("Skipping averaged difference plot: need both ses-01 and ses-02 difference files.")
+        return
+
+    average_output_dir = Path(next(iter(session_dirs.values()))).parent.parent / "average_across_sessions"
+    average_output_dir.mkdir(parents=True, exist_ok=True)
+
+    average_name = "diff_superagers_vs_non_superagers_average_baseline_followup"
+    average_df = pd.concat(diff_series, axis=1).mean(axis=1).to_frame(name=average_name)
+    average_df.to_csv(average_output_dir / f"{average_name}_average.csv")
+
+    visualize_coupling(
+        coupling_file=average_output_dir,
+        group_name=average_name,
+        output_dir=average_output_dir,
+        ses="average_baseline_followup",
+        vmin=vmin,
+        vmax=vmax,
+        figure_label=figure_label,
+        file_suffix=file_suffix,
+        symmetric_scale=True,
+    )
+
+
+def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df, output_directory, fisher_z_connectivity_file, output_group_connectivity_file, label_type, plot_difference=True):
     output_directory_group = Path(output_directory_group)
     output_directory_group.mkdir(parents=True, exist_ok=True)
 
@@ -729,14 +781,15 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
         print(f"Difference saved to {output_diff_file}")
         
         # Visualize the difference with symmetric scale
-        visualize_coupling(
-            coupling_file=output_group_connectivity_file,
-            group_name=diff_name,
-            output_dir=output_directory_group,
-            ses=ses,
-            vmin=-0.03, 
-            vmax=0.03
-        )
+        if plot_difference:
+            visualize_coupling(
+                coupling_file=output_group_connectivity_file,
+                group_name=diff_name,
+                output_dir=output_directory_group,
+                ses=ses,
+                vmin=-0.03, 
+                vmax=0.03
+            )
 
     # Superager-only presentation maps: motor/visual-only and motor/visual-grey
     generate_superager_motor_visual_presentation_maps(
@@ -750,8 +803,12 @@ def main(output_directory_group, connectivity_file, superager_file, ses, sfc_df,
 
 
 if __name__ == "__main__":
-    sessions = ["01"]
+    sessions = ["01", "02"]
     label_type = "long"  # Options: "tp1", "tp2", "long" based off of which superager definition you want to use
+    average_diff_between_sessions = True
+    sfc_session_dirs = {}
+    fc_session_dirs = {}
+    sc_session_dirs = {}
     for ses in sessions:
         if label_type == "long":
             group_names = ["superagers_long", "non_superagers_long"]
@@ -785,6 +842,10 @@ if __name__ == "__main__":
                 f"/home/rachel/Desktop/schaefer_analysis/structural_connectivity/ses-{ses}/group_connectivity_matrices"
             )
 
+            sfc_session_dirs[ses] = output_directory_group
+            fc_session_dirs[ses] = fc_output_directory_group
+            sc_session_dirs[ses] = sc_output_directory_group
+
             # Make sure the output directory exists
             output_directory.mkdir(parents=True, exist_ok=True)
             output_directory_group.mkdir(parents=True, exist_ok=True)
@@ -800,7 +861,8 @@ if __name__ == "__main__":
                 output_directory=output_directory,
                 fisher_z_connectivity_file=fisher_z_connectivity_file,
                 output_group_connectivity_file=output_group_connectivity_file,
-                label_type=label_type
+                label_type=label_type,
+                plot_difference=not average_diff_between_sessions
             )
 
             if fc_connectivity_file.exists():
@@ -819,6 +881,7 @@ if __name__ == "__main__":
                     diff_vmin=None,
                     diff_vmax=None,
                     diff_symmetric=True,
+                    plot_difference=not average_diff_between_sessions,
                 )
             else:
                 print(f"Missing FC connectivity file: {fc_connectivity_file}")
@@ -839,7 +902,12 @@ if __name__ == "__main__":
                     diff_vmin=None,
                     diff_vmax=None,
                     diff_symmetric=True,
+                    plot_difference=not average_diff_between_sessions,
                 )
             else:
                 print(f"Missing SC connectivity file: {sc_connectivity_file}")
-            
+
+    if average_diff_between_sessions:
+        average_session_differences(sfc_session_dirs, label_type, "Structure-Function Coupling", "sfc", vmin=-0.028, vmax=0.028)
+        average_session_differences(fc_session_dirs, label_type, "Functional Connectivity (Fisher Z)", "fc_fisher_z")
+        average_session_differences(sc_session_dirs, label_type, "Structural Connectivity", "sc")
