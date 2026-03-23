@@ -581,7 +581,7 @@ def run_elastic_net(
             scoring="roc_auc",
             cv=inner_cv, # runs inner CV on X_tr split into inner train/val sets
             refit=True, # fits the best model on the whole X_tr after tuning
-            n_jobs=10,
+            n_jobs=20,
         )
         gs.fit(X_tr, y_tr) 
 
@@ -731,7 +731,7 @@ def run_elastic_net(
                     scoring="roc_auc",
                     cv=inner_cv, # runs inner CV search grid to make the comparisons fair (e.g. 5-fold)
                     refit=True,
-                    n_jobs=10,
+                    n_jobs=20,
                 )
                 gs_perm.fit(X_tr, y_tr_perm)
                 best_perm = gs_perm.best_estimator_
@@ -826,7 +826,7 @@ def run_elastic_net(
 def main():
     connectivity_type = "SFC"  # Options: "SFC", "FC", "SC", "all"
     # These are the features used to predict superager status 
-    which_features = 't1_slope' # Options: 't1', 't2', 'slope', 't1_slope', 't1_t2', 'all'
+    which_features = 't2' # Options: 't1', 't2', 'slope', 't1_slope', 't1_t2', 'all'
     group_level = "ROI" # Options: "ROI" (n=214), "ROI_grouped" (n=59), "network" (n=7)
     # The outcome variable being predicted - superager defined at tp1, tp2, or longitudinally
     type = "long" # Options: "tp1", "tp2", "long"
@@ -1010,7 +1010,7 @@ def main():
     compact = compact[(compact["selected_freq"] >= 0.7)]
     compact = compact.sort_values("perm_importance_mean", ascending=False).head(15)
     if compact.empty:
-        print("Compact interpretation table is empty with current filters (selected_freq >= 0.7 and CI not crossing 0).")
+        print("Compact interpretation table is empty with current filters (selected_freq >= 0.7).")
     else:
         print("Top stable features (selected_freq >= 0.7, adjusted CI excludes 0):")
         with pd.option_context("display.max_columns", None):
