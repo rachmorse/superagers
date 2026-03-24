@@ -826,7 +826,7 @@ def run_elastic_net(
 def main():
     connectivity_type = "SFC"  # Options: "SFC", "FC", "SC", "all"
     # These are the features used to predict superager status 
-    which_features = 't2' # Options: 't1', 't2', 'slope', 't1_slope', 't1_t2', 'all'
+    which_features = 't1' # Options: 't1', 't2', 'slope', 't1_slope', 't1_t2', 'all'
     group_level = "ROI" # Options: "ROI" (n=214), "ROI_grouped" (n=59), "network" (n=7)
     # The outcome variable being predicted - superager defined at tp1, tp2, or longitudinally
     type = "long" # Options: "tp1", "tp2", "long"
@@ -973,6 +973,13 @@ def main():
         group_effect_covariates=covariates_for_group_effects,
         n_boot_group_effects=2000,
     )
+
+    feature_importance_csv = (
+        f"{connectivity_type}_{group_level}_{which_features}_"
+        f"{type}_{covariate_mode}_feature_importance.csv"
+    )
+    results["feat_importance"].to_csv(feature_importance_csv, index=False)
+    print(f"Saved feature importance table: {feature_importance_csv}")
 
     print(results["observed"])
     fold_metrics = results["cv_fold_metrics"]

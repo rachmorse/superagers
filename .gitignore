@@ -18,3 +18,4 @@ temp.py
 *.nii.gz
 *.xlsx
 *.log
+*.csv
