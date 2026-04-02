@@ -19,3 +19,5 @@ temp.py
 *.xlsx
 *.log
 *.csv
+*.png
+*.docx
