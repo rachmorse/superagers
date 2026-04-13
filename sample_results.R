@@ -176,7 +176,7 @@ plot_bar_distributions <- function(df, vars, bins = 20) {
 
 # Variables used in the models/plots in this script (for quick distribution checks)
 distribution_vars <- unique(c(
-  "YoE", "age", "delayed_recall_raw", "ravlt_total", "pacc5", "pacc5_no_em",
+  "YoE", "age", "delayed_recall_raw", "ravlt_total", "cog_composite",
   "sfc_weighted_mean", "fc_weighted_mean", "sc_weighted_mean",
   "sfc_hmod", "sfc_sensory", "sfc_dmn", "sfc_salience"
 ))
@@ -454,11 +454,11 @@ run_group_fdr <- function(model_groups, method = "fdr") {
     arrange(group, p_fdr)
 }
 
-#############################
-# Creating & analyzing PACC #
-#############################
+############################################
+# Creating & analyzing cognitive composite #
+############################################
 
-# PACC5: z-score each component within wave, then unweighted average
+# Cognitive composite: z-score each component relative to baseline, then unweighted average
 bbhi_tp2 <- read.csv("~/Documents/2023:2024/Data/BBHI/BBHI Data Timept2 NPS.csv")
 bbhi_senior_tp2 <- read.csv("~/Documents/2023:2024/Data/BBHI-Senior/Ministerio2024Wave2_DATA_2026-01-20_1245.csv")
 
@@ -538,7 +538,7 @@ tp1_ref <- pacc_tp1 %>%
     tp1_sd_animals_total = sd(animals_total, na.rm = TRUE)
   )
 
-pacc5_tp1 <- pacc_tp1 %>%
+cog_composite_tp1 <- pacc_tp1 %>%
   mutate(
     z_mmse = (mmse - tp1_ref$tp1_mean_mmse) / tp1_ref$tp1_sd_mmse,
     z_ravlt_total = (ravlt_total - tp1_ref$tp1_mean_ravlt_total) / tp1_ref$tp1_sd_ravlt_total,
@@ -546,13 +546,11 @@ pacc5_tp1 <- pacc_tp1 %>%
     z_animals_total = (animals_total - tp1_ref$tp1_mean_animals_total) / tp1_ref$tp1_sd_animals_total
   ) %>%
   mutate(
-    pacc5_1 = rowMeans(cbind(z_mmse, z_ravlt_total, z_sdmt_total, z_animals_total), na.rm = TRUE),
-    pacc5_no_em_1 = rowMeans(cbind(z_mmse, z_sdmt_total, z_animals_total), na.rm = TRUE),
-    pacc5_no_sem_1 = rowMeans(cbind(z_mmse, z_ravlt_total, z_sdmt_total), na.rm = TRUE)
+    cog_composite_1 = rowMeans(cbind(z_mmse, z_sdmt_total, z_animals_total), na.rm = TRUE)
   ) %>%
-  dplyr::select(id, pacc5_1, pacc5_no_em_1, pacc5_no_sem_1)
+  dplyr::select(id, cog_composite_1)
 
-pacc5_tp2 <- pacc_tp2 %>%
+cog_composite_tp2 <- pacc_tp2 %>%
   mutate(
     z_mmse = (mmse - tp1_ref$tp1_mean_mmse) / tp1_ref$tp1_sd_mmse,
     z_ravlt_total = (ravlt_total - tp1_ref$tp1_mean_ravlt_total) / tp1_ref$tp1_sd_ravlt_total,
@@ -560,61 +558,58 @@ pacc5_tp2 <- pacc_tp2 %>%
     z_animals_total = (animals_total - tp1_ref$tp1_mean_animals_total) / tp1_ref$tp1_sd_animals_total
   ) %>%
   mutate(
-    pacc5_2 = rowMeans(cbind(z_mmse, z_ravlt_total, z_sdmt_total, z_animals_total), na.rm = TRUE),
-    pacc5_no_em_2 = rowMeans(cbind(z_mmse, z_sdmt_total, z_animals_total), na.rm = TRUE),
-    pacc5_no_sem_2 = rowMeans(cbind(z_mmse, z_ravlt_total, z_sdmt_total), na.rm = TRUE)
+    cog_composite_2 = rowMeans(cbind(z_mmse, z_sdmt_total, z_animals_total), na.rm = TRUE)
   ) %>%
-  dplyr::select(id, pacc5_2, pacc5_no_em_2, pacc5_no_sem_2)
+  dplyr::select(id, cog_composite_2)
 
-pacc5_wide <- full_join(pacc5_tp1, pacc5_tp2, by = "id") %>%
+cog_composite_wide <- full_join(cog_composite_tp1, cog_composite_tp2, by = "id") %>%
   group_by(id) %>%
   summarise(
-    pacc5_1 = if (all(is.na(pacc5_1))) NA_real_ else mean(pacc5_1, na.rm = TRUE),
-    pacc5_no_em_1 = if (all(is.na(pacc5_no_em_1))) NA_real_ else mean(pacc5_no_em_1, na.rm = TRUE),
-    pacc5_no_sem_1 = if (all(is.na(pacc5_no_sem_1))) NA_real_ else mean(pacc5_no_sem_1, na.rm = TRUE),
-    pacc5_2 = if (all(is.na(pacc5_2))) NA_real_ else mean(pacc5_2, na.rm = TRUE),
-    pacc5_no_em_2 = if (all(is.na(pacc5_no_em_2))) NA_real_ else mean(pacc5_no_em_2, na.rm = TRUE),
-    pacc5_no_sem_2 = if (all(is.na(pacc5_no_sem_2))) NA_real_ else mean(pacc5_no_sem_2, na.rm = TRUE),
+    cog_composite_1 = if (all(is.na(cog_composite_1))) NA_real_ else mean(cog_composite_1, na.rm = TRUE),
+    cog_composite_2 = if (all(is.na(cog_composite_2))) NA_real_ else mean(cog_composite_2, na.rm = TRUE),
     .groups = "drop"
   )
 
-pacc5_long <- pacc5_wide %>%
+cog_composite_long <- cog_composite_wide %>%
   pivot_longer(
-    cols = c(pacc5_1, pacc5_2, pacc5_no_em_1, pacc5_no_em_2, pacc5_no_sem_1, pacc5_no_sem_2),
+    cols = c(cog_composite_1, cog_composite_2),
     names_to = c(".value", "timepoint"),
-    names_pattern = "(pacc5(?:_no_em|_no_sem)?)_(\\d)"
+    names_pattern = "(cog_composite)_(\\d)"
   ) %>%
   mutate(timepoint = as.integer(timepoint))
 
-# Merge both PACC variants into master datasets
+# Merge cognitive composite into master datasets
 data_wide <- data_wide %>%
-  left_join(pacc5_wide, by = "id")
+  left_join(cog_composite_wide, by = "id")
 
 data_long <- data_long %>%
-  left_join(pacc5_long, by = c("id", "timepoint"))
+  left_join(cog_composite_long, by = c("id", "timepoint"))
 
-# PACC model no EM
+data_long <- data_long %>%
+  left_join(data_wide %>% dplyr::select(id, age_1), by = "id")
+
+# Cognitive composite models
 vars <- c(
-  "scale(superager_long):scale(age)"
+  "factor(superager_long)1:scale(time)"
 )
-pacc_no_em_superager_age <- get_mixed_effects_stats(scale(pacc5_no_em) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
-pacc_no_em_superager_age
+cog_composite_superager_age <- get_mixed_effects_stats(scale(cog_composite) ~ factor(superager_long) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data_long, vars)
+cog_composite_superager_age
 
 vars <- c(
-  "scale(superager_long)"
+  "factor(superager_long)1"
 )
-pacc_no_em_superager <- get_mixed_effects_stats(scale(pacc5_no_em) ~ scale(superager_long) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
-pacc_no_em_superager
+cog_composite_superager <- get_mixed_effects_stats(scale(cog_composite) ~ factor(superager_long) + scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data_long, vars)
+cog_composite_superager
 
-plot_df_no_em <- data_long %>%
-  dplyr::select(id, age, superager_long, pacc5_no_em) %>%
+plot_df_cog_composite <- data_long %>%
+  dplyr::select(id, age, superager_long, cog_composite) %>%
   drop_na() %>%
   mutate(
     superager_group = factor(superager_long, levels = c(0, 1),
                              labels = c("non-superager", "superager"))
   )
 
-ggplot(plot_df_no_em, aes(x = age, y = pacc5_no_em)) +
+ggplot(plot_df_cog_composite, aes(x = age, y = cog_composite)) +
   geom_line(aes(group = id), alpha = 0.18, linewidth = 0.3, color = "grey55") +
   geom_point(aes(color = superager_group), alpha = 0.55, size = 1.8) +
   geom_smooth(aes(color = superager_group), method = "lm", se = TRUE, linewidth = 1.2) +
@@ -628,11 +623,11 @@ ggplot(plot_df_no_em, aes(x = age, y = pacc5_no_em)) +
 
 # RAVLT total model
 vars <- c(
-  "scale(superager_long):scale(age)"
+  "factor(superager_long)1:scale(time)"
 )
 
 ravlt_total_superager_age <- get_mixed_effects_stats(
-  scale(ravlt_total) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id),
+  scale(ravlt_total) ~ factor(superager_long) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id),
   data_long,
   vars
 )
@@ -640,11 +635,11 @@ ravlt_total_superager_age <- get_mixed_effects_stats(
 ravlt_total_superager_age
 
 vars <- c(
-  "scale(superager_long)"
+  "factor(superager_long)1"
 )
 
 ravlt_total_superager <- get_mixed_effects_stats(
-  scale(ravlt_total) ~ scale(superager_long) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id),
+  scale(ravlt_total) ~ factor(superager_long) + scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id),
   data_long,
   vars
 )
@@ -676,39 +671,40 @@ ggplot(plot_df_ravlt_total, aes(x = age, y = ravlt_total)) +
 
 # Get stats
 vars <- c(
-  "scale(superager_long)"
+  "factor(superager_long)1"
 )
 
-sfc_superager_weighted <- get_mixed_effects_stats(scale(sfc_weighted_mean) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_weighted <- get_mixed_effects_stats(scale(sfc_weighted_mean) ~ factor(superager_long) + scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data = data_long, vars)
 sfc_superager_weighted
-sfc_superager_hmod <- get_mixed_effects_stats(scale(sfc_hmod) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_hmod <- get_mixed_effects_stats(scale(sfc_hmod) ~ factor(superager_long) + scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data = data_long, vars)
 sfc_superager_hmod
-sfc_superager_sensory <- get_mixed_effects_stats(scale(sfc_sensory) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_sensory <- get_mixed_effects_stats(scale(sfc_sensory) ~ factor(superager_long) + scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data = data_long, vars)
 sfc_superager_sensory
-sfc_superager_dmn <- get_mixed_effects_stats(scale(sfc_dmn) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_dmn <- get_mixed_effects_stats(scale(sfc_dmn) ~ factor(superager_long) + scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data = data_long, vars)
 sfc_superager_dmn
-sfc_superager_salience <- get_mixed_effects_stats(scale(sfc_salience) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_salience <- get_mixed_effects_stats(scale(sfc_salience) ~ factor(superager_long) + scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data = data_long, vars)
 sfc_superager_salience
-sfc_superager_control <- get_mixed_effects_stats(scale(sfc_control) ~ scale(superager_long) + scale(time) + scale(age) + sex + scale(YoE) + (1 | id), data = data_long, vars)
+sfc_superager_control <- get_mixed_effects_stats(scale(sfc_control) ~ factor(superager_long) + scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data = data_long, vars)
 sfc_superager_control
 
-sfc_superager_weighted_slope <- get_regression_stats(scale(sfc_weighted_mean_slope) ~ scale(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars)
+vars_slope <- c("factor(superager_long)1")
+sfc_superager_weighted_slope <- get_regression_stats(scale(sfc_weighted_mean_slope) ~ factor(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars_slope)
 sfc_superager_weighted_slope
-sfc_superager_hmod_slope <- get_regression_stats(scale(sfc_hmod_slope) ~ scale(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars)
+sfc_superager_hmod_slope <- get_regression_stats(scale(sfc_hmod_slope) ~ factor(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars_slope)
 sfc_superager_hmod_slope
-sfc_superager_sensory_slope <- get_regression_stats(scale(sfc_sensory_slope) ~ scale(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars)
+sfc_superager_sensory_slope <- get_regression_stats(scale(sfc_sensory_slope) ~ factor(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars_slope)
 sfc_superager_sensory_slope
-sfc_superager_dmn_slope <- get_regression_stats(scale(sfc_dmn_slope) ~ scale(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars)
+sfc_superager_dmn_slope <- get_regression_stats(scale(sfc_dmn_slope) ~ factor(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars_slope)
 sfc_superager_dmn_slope
-sfc_superager_salience_slope <- get_regression_stats(scale(sfc_salience_slope) ~ scale(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars)
+sfc_superager_salience_slope <- get_regression_stats(scale(sfc_salience_slope) ~ factor(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars_slope)
 sfc_superager_salience_slope
-sfc_superager_control_slope <- get_regression_stats(scale(sfc_control_slope) ~ scale(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars)
+sfc_superager_control_slope <- get_regression_stats(scale(sfc_control_slope) ~ factor(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars_slope)
 sfc_superager_control_slope
 
 # SFC-only significance label from the adjusted mixed model
-m_sfc <- lmer(sfc_hmod ~ superager_long + time + age + sex + YoE + (1 | id),
+m_sfc <- lmer(sfc_hmod ~ factor(superager_long) + time + age_1 + sex + YoE + (1 | id),
               data = data_long, REML = FALSE)
-p_sfc <- as.data.frame(summary(m_sfc)$coefficients)["superager_long", "Pr(>|t|)"]
+p_sfc <- as.data.frame(summary(m_sfc)$coefficients)["factor(superager_long)1", "Pr(>|t|)"]
 p_star <- dplyr::case_when(
   p_sfc < 0.001 ~ "***",
   p_sfc < 0.01 ~ "**",
@@ -757,17 +753,17 @@ vars <- c(
   "scale(sfc_control)"
 )
 
-ravlt_sfc_weighted <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_weighted_mean) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_weighted <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_weighted_mean) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_weighted
-ravlt_sfc_hmod <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_hmod) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_hmod <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_hmod) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_hmod
-ravlt_sfc_sensory <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_sensory) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_sensory <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_sensory) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_sensory
-ravlt_sfc_dmn <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_dmn) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_dmn <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_dmn) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_dmn
-ravlt_sfc_salience <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_salience) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_salience <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_salience) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_salience
-ravlt_sfc_control <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_control) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_control <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_control) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_control
 
 vars <- c(
@@ -779,21 +775,21 @@ vars <- c(
   "scale(sfc_control_slope)"
 )
 
-ravlt_sfc_weighted_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_weighted_mean_slope) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
-ravlt_sfc_weighted_slope 
-ravlt_sfc_hmod_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_hmod_slope) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
-ravlt_sfc_hmod_slope 
-ravlt_sfc_sensory_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_sensory_slope) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_weighted_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_weighted_mean_slope) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_weighted_slope
+ravlt_sfc_hmod_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_hmod_slope) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_hmod_slope
+ravlt_sfc_sensory_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_sensory_slope) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_sensory_slope
-ravlt_sfc_dmn_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_dmn_slope) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
-ravlt_sfc_dmn_slope 
-ravlt_sfc_salience_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_salience_slope) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
-ravlt_sfc_salience_slope 
-ravlt_sfc_control_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_control_slope) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
-ravlt_sfc_control_slope 
+ravlt_sfc_dmn_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_dmn_slope) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_dmn_slope
+ravlt_sfc_salience_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_salience_slope) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_salience_slope
+ravlt_sfc_control_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_control_slope) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_control_slope
 
 m1 <- lmer(
-  delayed_recall_raw_z ~ sfc_hmod_z + age + time + sex + YoE + (1 | id),
+  delayed_recall_raw_z ~ sfc_hmod_z + age_1 + time + sex + YoE + (1 | id),
   data = data_long,
   REML = FALSE
 )
@@ -878,8 +874,8 @@ sfc_slope_model_stats <- list(
 )
 
 pacc_model_stats <- list(
-  pacc5_no_em_superager = pacc_no_em_superager,
-  pacc5_no_em_superager_age = pacc_no_em_superager_age,
+  cog_composite_superager = cog_composite_superager,
+  cog_composite_superager_age = cog_composite_superager_age,
   ravlt_total_superager = ravlt_total_superager,
   ravlt_total_superager_age = ravlt_total_superager_age
 )
