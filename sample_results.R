@@ -676,7 +676,7 @@ fig2 <- (p_cog + p_ravlt) +
   theme(plot.tag = element_text(size = 14, face = "bold"))
 
 ggsave(
-  filename = "~/superagers/figure2_cognition_memory.png",
+  filename = "~/Documents/2023:2024/Superager study/Writing/Figures/Fig2.png",
   plot = fig2,
   width = 10, height = 4.5, dpi = 300
 )
