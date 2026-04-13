@@ -594,16 +594,11 @@ data_long <- data_long %>%
   left_join(pacc5_long, by = c("id", "timepoint"))
 
 # PACC model no EM
-m_pacc_no_em <- lmer(pacc5_no_em ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE)
-summary(m_pacc_no_em)
-summary(lmer(scale(pacc5_no_em) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
-
 vars <- c(
   "scale(superager_long):scale(age)"
 )
 pacc_no_em_superager_age <- get_mixed_effects_stats(scale(pacc5_no_em) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 pacc_no_em_superager_age
-summary(lmer(scale(pacc5_no_em) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long))
 
 vars <- c(
   "scale(superager_long)"
@@ -631,11 +626,7 @@ ggplot(plot_df_no_em, aes(x = age, y = pacc5_no_em)) +
 # Analyzing RAVLT #
 ###################
 
-# RAVLT total model (same approach as PACC)
-m_ravlt_total <- lmer(ravlt_total ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE)
-summary(m_ravlt_total)
-summary(lmer(scale(ravlt_total) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
-
+# RAVLT total model
 vars <- c(
   "scale(superager_long):scale(age)"
 )
@@ -682,16 +673,6 @@ ggplot(plot_df_ravlt_total, aes(x = age, y = ravlt_total)) +
 ###########################
 # SFC by superager status #
 ###########################
-
-summary(lm(scale(sfc_weighted_mean_slope) ~ scale(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide))
-summary(lm(scale(sfc_hmod_slope) ~ scale(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide))
-summary(lm(scale(sfc_sensory_slope) ~ scale(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide))
-summary(lm(scale(sfc_dmn_slope) ~ scale(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide))
-summary(lm(scale(sfc_salience_slope) ~ scale(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide))
-summary(lm(scale(sfc_control_slope) ~ scale(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide))
-
-summary(lmer(fc_weighted_mean ~ scale(superager_long) + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE))
-summary(lmer(sc_weighted_mean ~ scale(superager_long) + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE))
 
 # Get stats
 vars <- c(
