@@ -61,8 +61,8 @@ This repository contains the analysis scripts for our study on superagers, which
 - **Scripts:**
     - `01_convert_to_individual_matrix.py`: Converts the functional and structural connectivity data from a shared CSV with all participants into individual 214x214 matrices. 
     - `02_structural_functional_coupling.py`: Computes and visualizes SFC using the normalized structural connectivity data and untransformed functional connectivity data. 
-    - `03_group_means.py`: Consolidates individual SFC data into a single group matrix, applies Fisher z-transform, calculates and saves group means, and creates visualizations.
-   
+    - `plot_sfc_difference.py`: Averages the per-session superager vs. non-superager SFC difference maps across timepoints and saves a  cortical surface figure.
+
 ### elastic_net
 - **Purpose:** These scripts run prepare and run a logistic elastic net to classify participants as superagers or non-superagers
 - **Scripts:**
@@ -73,7 +73,7 @@ This repository contains the analysis scripts for our study on superagers, which
     `plot_feature_importance.py`: Plots the top 20 ROIs by permutation importance for the baseline and baseline + annual change SFC elastic net models as horizontal bar charts, coloured by network.
     `make_supplementary_table.py`: Generates a supplementary table listing the top 20 features from each SFC elastic net model, including permutation importance, selection frequency, p-value, and FDR-adjusted p-value.
 
-## Analysis Scripts
+## analysis Scripts
 
 1. **`sample_results.R`**
     - **Purpose:** Runs the full results pipeline: data cleaning, cognitive composite construction, mixed-effects and linear models for cognition, episodic memory, and structure-function coupling, and FDR correction across model groups.
