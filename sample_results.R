@@ -757,6 +757,7 @@ ggplot(plot_df, aes(x = superager_group, y = sfc_hmod, fill = superager_group)) 
 # SFC and memory #
 ##################
 data_long$delayed_recall_raw_z <- scale(data_long$delayed_recall_raw)
+data_long$sfc_hmod_z <- scale(data_long$sfc_hmod)
 
 # Get stats
 vars <- c(
@@ -803,53 +804,48 @@ ravlt_sfc_salience_slope
 ravlt_sfc_control_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_control_slope) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_control_slope
 
-make_sfc_memory_panel <- function(sfc_var, x_label, data) {
-  data$sfc_z <- scale(data[[sfc_var]])
-
-  m <- lmer(
-    delayed_recall_raw_z ~ sfc_z + age_1 + time + sex + YoE + (1 | id),
-    data = data, REML = FALSE
-  )
-
-  emm_df <- as.data.frame(emmeans(
-    m, ~ sfc_z,
-    at = list(sfc_z = seq(min(data$sfc_z, na.rm = TRUE),
-                          max(data$sfc_z, na.rm = TRUE),
-                          length.out = 100))
-  ))
-
-  ggplot(data, aes(x = sfc_z, y = delayed_recall_raw_z)) +
-    geom_line(aes(group = id), alpha = 0.25, color = "grey50") +
-    geom_point(alpha = 0.45, color = "grey35", size = 2) +
-    geom_ribbon(
-      data = emm_df,
-      aes(x = sfc_z, ymin = lower.CL, ymax = upper.CL),
-      inherit.aes = FALSE,
-      fill = "#de8c8c", alpha = 0.18
-    ) +
-    geom_line(
-      data = emm_df,
-      aes(x = sfc_z, y = emmean),
-      inherit.aes = FALSE,
-      color = "#de8c8c", linewidth = 1.2
-    ) +
-    labs(x = x_label, y = "RAVLT Delayed Recall") +
-    theme_classic(base_size = 12)
-}
-
-p_sfc_global <- make_sfc_memory_panel("sfc_weighted_mean", "Global SFC",      data_long)
-p_sfc_hmod   <- make_sfc_memory_panel("sfc_hmod",          "Heteromodal SFC", data_long)
-p_sfc_dmn    <- make_sfc_memory_panel("sfc_dmn",           "DMN SFC",         data_long)
-
-fig3 <- (p_sfc_global + p_sfc_hmod + p_sfc_dmn) +
-  plot_annotation(tag_levels = "A") &
-  theme(plot.tag = element_text(size = 14, face = "bold"))
-
-ggsave(
-  filename = "~/superagers/figure3_sfc_memory.png",
-  plot = fig3,
-  width = 14, height = 4.5, dpi = 300
+m1 <- lmer(
+  delayed_recall_raw_z ~ sfc_hmod_z + age_1 + time + sex + YoE + (1 | id),
+  data = data_long,
+  REML = FALSE
 )
+
+emm_sfc <- emmeans(
+  m1,
+  ~ sfc_hmod_z,
+  at = list(
+    sfc_hmod_z = seq(
+      min(data_long$sfc_hmod_z, na.rm = TRUE),
+      max(data_long$sfc_hmod_z, na.rm = TRUE),
+      length.out = 100
+    )
+  )
+)
+
+emm_df <- as.data.frame(emm_sfc)
+
+ggplot(data_long, aes(x = sfc_hmod_z, y = delayed_recall_raw_z)) +
+  geom_line(aes(group = id), alpha = 0.25, color = "grey50") +
+  geom_point(alpha = 0.45, color = "grey35", size = 2) +
+  geom_ribbon(
+    data = emm_df,
+    aes(x = sfc_hmod_z, ymin = lower.CL, ymax = upper.CL),
+    inherit.aes = FALSE,
+    fill = "#de8c8c",
+    alpha = 0.18
+  ) +
+  geom_line(
+    data = emm_df,
+    aes(x = sfc_hmod_z, y = emmean),
+    inherit.aes = FALSE,
+    color = "#de8c8c",
+    linewidth = 1.2
+  ) +
+  labs(
+    x = "Structure-Function Coupling in Heteromodal Regions",
+    y = "RAVLT Delayed"
+  ) +
+  theme_classic()
 
 ##################
 # FDR correction #
