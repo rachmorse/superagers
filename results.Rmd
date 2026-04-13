@@ -1,0 +1,271 @@
+---
+title: "Results"
+output:
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+library(flextable)
+library(dplyr)
+
+# Source all data prep and model results
+source("sample_results.R")
+
+### Formatting helpers ###
+
+# β coefficient 
+fmt_b <- function(x) formatC(as.numeric(x$coef), format = "f", digits = 4)
+
+# 95% CI as "lo to hi" for inline text
+fmt_ci_text <- function(x) {
+  ci <- as.numeric(x$ci)
+  paste0(formatC(ci[1], format = "f", digits = 4), " to ",
+         formatC(ci[2], format = "f", digits = 4))
+}
+
+# 95% CI as "lo-hi" for table cells
+fmt_ci_dash <- function(x) {
+  ci <- as.numeric(x$ci)
+  paste0(formatC(ci[1], format = "f", digits = 4), "-",
+         formatC(ci[2], format = "f", digits = 4))
+}
+
+# "Coef (lo-hi)" combined cell for tables
+fmt_coef_ci <- function(x) paste0(fmt_b(x), " (", fmt_ci_dash(x), ")")
+
+# p-value for inline text: returns "=0.0450" or "<0.0001"
+fmt_p <- function(p) {
+  p <- as.numeric(p)[1]
+  if (is.na(p))     return("=NA")
+  if (p < 0.0001)   return("<0.0001")
+  paste0("=", formatC(p, format = "f", digits = 4))
+}
+
+# p-value for table cells, with significance stars
+fmt_p_star <- function(p) {
+  p <- as.numeric(p)[1]
+  if (is.na(p)) return("")
+  base <- formatC(p, format = "f", digits = 4)
+  if      (p < 0.001) paste0(base, "***")
+  else if (p < 0.01)  paste0(base, "**")
+  else if (p < 0.05)  paste0(base, "*")
+  else                base
+}
+
+# Look up FDR p-value (formatted) from a results tibble by model name
+get_fdr <- function(fdr_df, model_name) {
+  p <- fdr_df$p_fdr[fdr_df$model == model_name]
+  if (length(p) == 0) return("=NA")
+  fmt_p(p)
+}
+
+# Look up FDR p-value (raw numeric) — for table formatting
+get_fdr_raw <- function(fdr_df, model_name) {
+  p <- fdr_df$p_fdr[fdr_df$model == model_name]
+  if (length(p) == 0) return(NA_real_)
+  as.numeric(p)[1]
+}
+
+# Marginal / conditional R² from LME models
+fmt_r2m <- function(x) formatC(as.numeric(x$marginal_r2),    format = "f", digits = 4)
+fmt_r2c <- function(x) formatC(as.numeric(x$conditional_r2), format = "f", digits = 4)
+
+# R² from LM models
+fmt_r2 <- function(x) formatC(as.numeric(x$r2), format = "f", digits = 4)
+
+# Mean ± SD 
+fmt_ms <- function(x) {
+  paste0(formatC(mean(x, na.rm = TRUE), format = "f", digits = 2),
+         " \u00b1 ",
+         formatC(sd(x,   na.rm = TRUE), format = "f", digits = 2))
+}
+
+### Derived demographic stats ###
+
+n_total <- nrow(summary_df)
+n_sa    <- sum(summary_df$group == "Superager",     na.rm = TRUE)
+n_nsa   <- sum(summary_df$group == "Non-superager", na.rm = TRUE)
+pct_sa  <- round(n_sa / n_total * 100, 1)
+
+is_female   <- function(x) tolower(as.character(x)) == "female"
+n_f_total   <- sum(is_female(summary_df$sex),                                              na.rm = TRUE)
+n_f_sa      <- sum(is_female(summary_df$sex[summary_df$group == "Superager"]),             na.rm = TRUE)
+n_f_nsa     <- sum(is_female(summary_df$sex[summary_df$group == "Non-superager"]),         na.rm = TRUE)
+pct_f_total <- round(n_f_total / n_total * 100, 1)
+pct_f_sa    <- round(n_f_sa    / n_sa    * 100, 1)
+pct_f_nsa   <- round(n_f_nsa   / n_nsa   * 100, 1)
+
+mean_age <- formatC(mean(summary_df$age_1, na.rm = TRUE), format = "f", digits = 2)
+sd_age   <- formatC(sd(summary_df$age_1,   na.rm = TRUE), format = "f", digits = 2)
+
+# Minimum p across RAVLT slope models (for the "ps >" summary statement)
+min_ravlt_slope_p <- min(
+  sapply(ravlt_slope_model_stats, function(x) as.numeric(x$p_value)[1]),
+  na.rm = TRUE
+)
+# Floor to 1 d.p. so the "ps >" statement is conservative
+min_ravlt_slope_p_floor <- formatC(floor(min_ravlt_slope_p * 10) / 10,
+                                   format = "f", digits = 1)
+```
+
+Our overall cohort included `r n_total` participants with `r pct_f_total`% female and a mean baseline age of `r mean_age` (SD `r sd_age`). `r pct_sa`% of the cohort met longitudinal superager criteria. Superagers and non-superagers did not vary on baseline age (p`r fmt_p(age_baseline_p)`), years of education (p`r fmt_p(yoe_p)`), MMSE scores (p`r fmt_p(mmse_p)`), or follow-up duration (p`r fmt_p(followup_duration_p)`); however, superagers were more likely to be female (p`r fmt_p(sex_p)`). These demographic statistics are summarized in Table 1.
+
+**Table 1** Demographic characteristics
+
+```{r table1}
+tbl1 <- tibble(
+  Variable = c(
+    "Number of participants",
+    "Number females (percentage)",
+    "Age baseline \u00b1 SD",
+    "Follow-up duration (years) \u00b1 SD",
+    "Education (years) \u00b1 SD",
+    "MMSE \u00b1 SD"
+  ),
+  `Whole cohort` = c(
+    as.character(n_total),
+    paste0(n_f_total, " (", pct_f_total, "%)"),
+    fmt_ms(summary_df$age_1),
+    fmt_ms(summary_df$followup_duration),
+    fmt_ms(summary_df$YoE),
+    fmt_ms(summary_df$mmse_1)
+  ),
+  `Non-superagers` = c(
+    as.character(n_nsa),
+    paste0(n_f_nsa, " (", pct_f_nsa, "%)"),
+    fmt_ms(summary_df$age_1[summary_df$group         == "Non-superager"]),
+    fmt_ms(summary_df$followup_duration[summary_df$group == "Non-superager"]),
+    fmt_ms(summary_df$YoE[summary_df$group           == "Non-superager"]),
+    fmt_ms(summary_df$mmse_1[summary_df$group        == "Non-superager"])
+  ),
+  `Superagers` = c(
+    as.character(n_sa),
+    paste0(n_f_sa, " (", pct_f_sa, "%)"),
+    fmt_ms(summary_df$age_1[summary_df$group         == "Superager"]),
+    fmt_ms(summary_df$followup_duration[summary_df$group == "Superager"]),
+    fmt_ms(summary_df$YoE[summary_df$group           == "Superager"]),
+    fmt_ms(summary_df$mmse_1[summary_df$group        == "Superager"])
+  ),
+  `p-value` = c(
+    "--",
+    fmt_p_star(sex_p),
+    fmt_p_star(age_baseline_p),
+    fmt_p_star(followup_duration_p),
+    fmt_p_star(yoe_p),
+    fmt_p_star(mmse_p)
+  )
+)
+
+flextable(tbl1) |>
+  bold(part = "header") |>
+  autofit()
+```
+
+*Abbreviations: SD standard deviation, MMSE Mini Mental State Examination*
+
+**Longitudinal memory and cognition:** We found evidence that superagers had a better cognitive level than non-superagers (β=`r fmt_b(pacc_no_em_superager)`, 95% CI `r fmt_ci_text(pacc_no_em_superager)`, p`r fmt_p(pacc_no_em_superager$p_value)`, pFDR`r get_fdr(cog_mem_fdr_results, "pacc5_no_em_superager")`, marginal r²=`r fmt_r2m(pacc_no_em_superager)`, conditional r²=`r fmt_r2c(pacc_no_em_superager)`); however, superager cognition changed at the same rate as non-superagers as they aged (p`r fmt_p(pacc_no_em_superager_age$p_value)`, pFDR`r get_fdr(cog_mem_fdr_results, "pacc5_no_em_superager_age")`). Similarly, with episodic memory, superagers had a better episodic memory level than non-superagers (β=`r fmt_b(ravlt_total_superager)`, 95% CI `r fmt_ci_text(ravlt_total_superager)`, p`r fmt_p(ravlt_total_superager$p_value)`, pFDR`r get_fdr(cog_mem_fdr_results, "ravlt_total_superager")`, marginal r²=`r fmt_r2m(ravlt_total_superager)`, conditional r²=`r fmt_r2c(ravlt_total_superager)`). They had a trend toward their episodic memory declining at a faster rate than non-superagers as they age; however, this did not survive correction for multiple comparisons (β=`r fmt_b(ravlt_total_superager_age)`, 95% CI `r fmt_ci_text(ravlt_total_superager_age)`, p`r fmt_p(ravlt_total_superager_age$p_value)`, pFDR`r get_fdr(cog_mem_fdr_results, "ravlt_total_superager_age")`, marginal r²=`r fmt_r2m(ravlt_total_superager_age)`, conditional r²=`r fmt_r2c(ravlt_total_superager_age)`). These results are summarized in Figure 2.
+
+**Figure 2** Longitudinal cognitive and memory trajectories by superager status
+
+Figure 2 depicts the association between the cognitive composite (A) or episodic memory (B) and age with the data divided by superager status. We include linear models with confidence intervals that control for all covariates using estimated marginal means.
+
+**SFC, Superager Status and Episodic Memory:** After running the elastic net models, we longitudinally examined whether SFC varied by superager status. We found that superagers, compared to non-superagers, consistently showed higher SFC globally (β=`r fmt_b(sfc_superager_weighted)`, 95% CI `r fmt_ci_text(sfc_superager_weighted)`, p`r fmt_p(sfc_superager_weighted$p_value)`, pFDR`r get_fdr(sfc_fdr_results, "sfc_weighted_mean")`, marginal r²=`r fmt_r2m(sfc_superager_weighted)`, conditional r²=`r fmt_r2c(sfc_superager_weighted)`), in heteromodal regions (β=`r fmt_b(sfc_superager_hmod)`, 95% CI `r fmt_ci_text(sfc_superager_hmod)`, p`r fmt_p(sfc_superager_hmod$p_value)`, pFDR`r get_fdr(sfc_fdr_results, "sfc_hmod")`, marginal r²=`r fmt_r2m(sfc_superager_hmod)`, conditional r²=`r fmt_r2c(sfc_superager_hmod)`), and for regions important for memory including the DMN (β=`r fmt_b(sfc_superager_dmn)`, 95% CI `r fmt_ci_text(sfc_superager_dmn)`, p`r fmt_p(sfc_superager_dmn$p_value)`, pFDR`r get_fdr(sfc_fdr_results, "sfc_dmn")`, marginal r²=`r fmt_r2m(sfc_superager_dmn)`, conditional r²=`r fmt_r2c(sfc_superager_dmn)`) and ECN (β=`r fmt_b(sfc_superager_control)`, 95% CI `r fmt_ci_text(sfc_superager_control)`, p`r fmt_p(sfc_superager_control$p_value)`, pFDR`r get_fdr(sfc_fdr_results, "sfc_control")`, marginal r²=`r fmt_r2m(sfc_superager_control)`, conditional r²=`r fmt_r2c(sfc_superager_control)`). We found a trend toward significance in the SN (β=`r fmt_b(sfc_superager_salience)`, 95% CI `r fmt_ci_text(sfc_superager_salience)`, p`r fmt_p(sfc_superager_salience$p_value)`, pFDR`r get_fdr(sfc_fdr_results, "sfc_salience")`, marginal r²=`r fmt_r2m(sfc_superager_salience)`, conditional r²=`r fmt_r2c(sfc_superager_salience)`), and found that no significant difference in sensory regions (p`r fmt_p(sfc_superager_sensory$p_value)`, pFDR`r get_fdr(sfc_fdr_results, "sfc_sensory")`); however, none of these results survived correction for multiple comparisons. Figure 4 presents the difference in SFC between superagers and non-superagers averaged across baseline and follow-up, with warmer colors showing regions with higher SFC in superagers.
+
+**Figure 4** Differences in structure-function coupling between superagers and non-superagers
+
+Figure 4 show the difference in structure-function coupling between superagers and non-superagers averaged across both timepoints, with warm colors depicting regions with higher structure-function coupling in superagers and cooler colors depicting regions lower in superagers.
+
+When we examined whether SFC was associated with episodic memory and found that higher SFC was associated with better episodic memory when measured globally (β=`r fmt_b(ravlt_sfc_weighted)`, 95% CI `r fmt_ci_text(ravlt_sfc_weighted)`, p`r fmt_p(ravlt_sfc_weighted$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_weighted_mean")`, marginal r²=`r fmt_r2m(ravlt_sfc_weighted)`, conditional r²=`r fmt_r2c(ravlt_sfc_weighted)`), in heteromodal regions (β=`r fmt_b(ravlt_sfc_hmod)`, 95% CI `r fmt_ci_text(ravlt_sfc_hmod)`, p`r fmt_p(ravlt_sfc_hmod$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_hmod")`, marginal r²=`r fmt_r2m(ravlt_sfc_hmod)`, conditional r²=`r fmt_r2c(ravlt_sfc_hmod)`), and in the DMN (β=`r fmt_b(ravlt_sfc_dmn)`, 95% CI `r fmt_ci_text(ravlt_sfc_dmn)`, p`r fmt_p(ravlt_sfc_dmn$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_dmn")`, marginal r²=`r fmt_r2m(ravlt_sfc_dmn)`, conditional r²=`r fmt_r2c(ravlt_sfc_dmn)`). Though there was a trend, we found no significant association between ECN (p`r fmt_p(ravlt_sfc_control$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_control")`) and SN (p`r fmt_p(ravlt_sfc_salience$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_salience")`) SFC and episodic memory. There was no evidence of an association between sensory region SFC and episodic memory (p`r fmt_p(ravlt_sfc_sensory$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_sensory")`).
+
+We then examined SFC annual change, superager status and episodic memory. We did not find any evidence of significant relationships between superager status and global SFC annual change (p`r fmt_p(sfc_superager_weighted_slope$p_value)`, pFDR`r get_fdr(sfc_slope_fdr_results, "sfc_weighted_mean_slope")`), heteromodal SFC annual change (p`r fmt_p(sfc_superager_hmod_slope$p_value)`, pFDR`r get_fdr(sfc_slope_fdr_results, "sfc_hmod_slope")`), DMN SFC annual change (p`r fmt_p(sfc_superager_dmn_slope$p_value)`, pFDR`r get_fdr(sfc_slope_fdr_results, "sfc_dmn_slope")`), ECN SFC annual change (p`r fmt_p(sfc_superager_control_slope$p_value)`, pFDR`r get_fdr(sfc_slope_fdr_results, "sfc_control_slope")`), or sensory SFC annual change (p`r fmt_p(sfc_superager_sensory_slope$p_value)`, pFDR`r get_fdr(sfc_slope_fdr_results, "sfc_sensory_slope")`). We found limited evidence of an association between SN SFC annual change and superager status, but this did not survive correction for multiple comparisons (p`r fmt_p(sfc_superager_salience_slope$p_value)`, pFDR`r get_fdr(sfc_slope_fdr_results, "sfc_salience_slope")`). With episodic memory, we found no evidence that SFC annual change in any of the investigated regions was associated with episodic memory (ps > `r min_ravlt_slope_p_floor`). These results are summarized in Table 3.
+
+**Table 3** Associations between structure-function coupling, superager status, and episodic memory
+
+```{r table3}
+# Helpers to build data rows for LME and LM models
+lme_row <- function(region, model, fdr_df, fdr_key) {
+  list(
+    Region                 = region,
+    `Coefficient (95% CI)` = fmt_coef_ci(model),
+    `p-value`              = fmt_p_star(as.numeric(model$p_value)[1]),
+    pFDR                   = fmt_p_star(get_fdr_raw(fdr_df, fdr_key)),
+    `Marginal R\u00b2`     = fmt_r2m(model),
+    `Conditional R\u00b2`  = fmt_r2c(model)
+  )
+}
+
+lm_row <- function(region, model, fdr_df, fdr_key) {
+  list(
+    Region                 = region,
+    `Coefficient (95% CI)` = fmt_coef_ci(model),
+    `p-value`              = fmt_p_star(as.numeric(model$p_value)[1]),
+    pFDR                   = fmt_p_star(get_fdr_raw(fdr_df, fdr_key)),
+    `Marginal R\u00b2`     = fmt_r2(model),
+    `Conditional R\u00b2`  = ""
+  )
+}
+
+# Section header row (spans all columns via merge_at below)
+hdr_row <- function(label) {
+  list(Region = label, `Coefficient (95% CI)` = "",
+       `p-value` = "", pFDR = "",
+       `Marginal R\u00b2` = "", `Conditional R\u00b2` = "")
+}
+
+tbl3 <- bind_rows(
+  # ── Superager status (LME) ──────────────────────────────────────────────
+  hdr_row("Superager status"),
+  lme_row("Global SFC",      sfc_superager_weighted, sfc_fdr_results, "sfc_weighted_mean"),
+  lme_row("Heteromodal SFC", sfc_superager_hmod,     sfc_fdr_results, "sfc_hmod"),
+  lme_row("DMN SFC",         sfc_superager_dmn,      sfc_fdr_results, "sfc_dmn"),
+  lme_row("ECN SFC",         sfc_superager_control,  sfc_fdr_results, "sfc_control"),
+  lme_row("SN SFC",          sfc_superager_salience, sfc_fdr_results, "sfc_salience"),
+  lme_row("Sensory SFC",     sfc_superager_sensory,  sfc_fdr_results, "sfc_sensory"),
+
+  # ── Superager status — annual change (LM) ───────────────────────────────
+  hdr_row("Superager status \u2014 annual change"),
+  lm_row("Global SFC annual change",      sfc_superager_weighted_slope, sfc_slope_fdr_results, "sfc_weighted_mean_slope"),
+  lm_row("Heteromodal SFC annual change", sfc_superager_hmod_slope,     sfc_slope_fdr_results, "sfc_hmod_slope"),
+  lm_row("DMN SFC annual change",         sfc_superager_dmn_slope,      sfc_slope_fdr_results, "sfc_dmn_slope"),
+  lm_row("ECN SFC annual change",         sfc_superager_control_slope,  sfc_slope_fdr_results, "sfc_control_slope"),
+  lm_row("SN SFC annual change",          sfc_superager_salience_slope, sfc_slope_fdr_results, "sfc_salience_slope"),
+  lm_row("Sensory SFC annual change",     sfc_superager_sensory_slope,  sfc_slope_fdr_results, "sfc_sensory_slope"),
+
+  # ── Episodic memory (LME) ───────────────────────────────────────────────
+  hdr_row("Episodic memory"),
+  lme_row("Global SFC",      ravlt_sfc_weighted, ravlt_fdr_results, "ravlt_sfc_weighted_mean"),
+  lme_row("Heteromodal SFC", ravlt_sfc_hmod,     ravlt_fdr_results, "ravlt_sfc_hmod"),
+  lme_row("DMN SFC",         ravlt_sfc_dmn,      ravlt_fdr_results, "ravlt_sfc_dmn"),
+  lme_row("ECN SFC",         ravlt_sfc_control,  ravlt_fdr_results, "ravlt_sfc_control"),
+  lme_row("SN SFC",          ravlt_sfc_salience, ravlt_fdr_results, "ravlt_sfc_salience"),
+  lme_row("Sensory SFC",     ravlt_sfc_sensory,  ravlt_fdr_results, "ravlt_sfc_sensory"),
+
+  # ── Episodic memory — annual change (LME) ───────────────────────────────
+  hdr_row("Episodic memory \u2014 annual change"),
+  lme_row("Global SFC annual change",      ravlt_sfc_weighted_slope, ravlt_slope_fdr_results, "ravlt_sfc_weighted_mean_slope"),
+  lme_row("Heteromodal SFC annual change", ravlt_sfc_hmod_slope,     ravlt_slope_fdr_results, "ravlt_sfc_hmod_slope"),
+  lme_row("DMN SFC annual change",         ravlt_sfc_dmn_slope,      ravlt_slope_fdr_results, "ravlt_sfc_dmn_slope"),
+  lme_row("ECN SFC annual change",         ravlt_sfc_control_slope,  ravlt_slope_fdr_results, "ravlt_sfc_control_slope"),
+  lme_row("SN SFC annual change",          ravlt_sfc_salience_slope, ravlt_slope_fdr_results, "ravlt_sfc_salience_slope"),
+  lme_row("Sensory SFC annual change",     ravlt_sfc_sensory_slope,  ravlt_slope_fdr_results, "ravlt_sfc_sensory_slope")
+)
+
+# Identify section header rows (empty Coefficient cell)
+hdr_idx <- which(tbl3$`Coefficient (95% CI)` == "")
+
+ft <- flextable(tbl3) |>
+  bold(part = "header") |>
+  bold(i = hdr_idx) |>
+  bg(i = hdr_idx, bg = "#F0F0F0") |>
+  autofit()
+
+# Merge each header row across all columns so the label spans the full width
+for (r in hdr_idx) {
+  ft <- merge_at(ft, i = r, j = 1:6)
+}
+
+ft
+```
+
+*Abbreviations: CI confidence interval, FDR False Discovery Rate, SFC structure-function coupling, DMN default mode network, ECN executive control network, SN salience network*
