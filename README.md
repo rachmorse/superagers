@@ -65,16 +65,16 @@ This repository contains the analysis scripts for our study on superagers, which
 ### elastic_net
 - **Purpose:** These scripts run prepare and run a logistic elastic net to classify participants as superagers or non-superagers
 - **Scripts:**
-    `prep_data_for_en.py`: Prepares data by generating voxel‑weighted, grouped ROI connectivity summaries for later elastic net analysis. 
-    `prep_weighted_global_roi_averages.py`: Computes voxel-weighted global, sensory, and heteromodal ROI averages for SFC, FC, and SC.
-    `log_en.py`: Runs a logistic elastic net classification to predict superager status using cross-validation and permutation testing. Provides model level metrics including p-value and feature level p-values. 
-    `en_fdr.py`: Reads the elastic net nohup log files, extracts the model-level p-values, and reports the Benjamini-Hochberg FDR-adjusted p-values with labels for each model.
-    `plot_feature_importance.py`: Plots the top 20 ROIs by permutation importance for the baseline and baseline + annual change SFC elastic net models as horizontal bar charts, coloured by network.
-    `make_supplementary_table.py`: Generates a supplementary table listing the top 20 features from each SFC elastic net model, including permutation importance, selection frequency, p-value, and FDR-adjusted p-value.
+    - `prep_data_for_en.py`: Prepares data by generating voxel‑weighted, grouped ROI connectivity summaries for later elastic net analysis. 
+    - `prep_weighted_global_roi_averages.py`: Computes voxel-weighted global, sensory, and heteromodal ROI averages for SFC, FC, and SC.
+    - `log_en.py`: Runs a logistic elastic net classification to predict superager status using cross-validation and permutation testing. Provides model level metrics including p-value and feature level p-values. 
+    - `en_fdr.py`: Reads the elastic net nohup log files, extracts the model-level p-values, and reports the Benjamini-Hochberg FDR-adjusted p-values with labels for each model.
+    - `plot_feature_importance.py`: Plots the top 20 ROIs by permutation importance for the baseline and baseline + annual change SFC elastic net models as horizontal bar charts, coloured by network.
+    - `make_supplementary_table.py`: Generates a supplementary table listing the top 20 features from each SFC elastic net model, including permutation importance, selection frequency, p-value, and FDR-adjusted p-value.
 
 ## analyses
 
 - **Purpose:** These script conduct all non-elastic net related analyses
 - **Scripts:**  
-    `analyses.R`: Runs the full results pipeline: data cleaning, cognitive composite construction, mixed-effects and linear models for cognition, episodic memory, and structure-function coupling, and FDR correction across model groups.
-    `results.Rmd`: R Markdown document that sources `analyses.R` and auto-fills the written results section and tables with model outputs.
+    - `analyses.R`: Runs the full results pipeline: data cleaning, cognitive composite construction, mixed-effects and linear models for cognition, episodic memory, and structure-function coupling, and FDR correction across model groups.
+    - `results.Rmd`: R Markdown document that sources `analyses.R` and auto-fills the written results section and tables with model outputs.
