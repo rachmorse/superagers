@@ -620,7 +620,8 @@ p_cog <- ggplot(plot_df_cog_composite, aes(x = age, y = cog_composite)) +
   geom_smooth(aes(color = superager_group), method = "lm", se = TRUE, linewidth = 1.2) +
   scale_color_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
   labs(x = "Age", y = "Cognitive Composite", color = NULL) +
-  theme_classic(base_size = 12)
+  theme_classic(base_size = 12) +
+  theme(legend.position = "none")
 
 ###################
 # Analyzing RAVLT #
@@ -675,7 +676,7 @@ fig2 <- (p_cog + p_ravlt) +
   theme(plot.tag = element_text(size = 14, face = "bold"))
 
 ggsave(
-  filename = "~/Desktop/superagers/figures/figure2_cognition_memory.png",
+  filename = "~/superagers/figure2_cognition_memory.png",
   plot = fig2,
   width = 10, height = 4.5, dpi = 300
 )
