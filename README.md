@@ -70,6 +70,8 @@ This repository contains the analysis scripts for our study on superagers, which
     `prep_weighted_global_roi_averages.py`: Computes voxel-weighted global, sensory, and heteromodal ROI averages for SFC, FC, and SC.
     `log_en.py`: Runs a logistic elastic net classification to predict superager status using cross-validation and permutation testing. Provides model level metrics including p-value and feature level p-values. 
     `en_fdr.py`: Reads the elastic net nohup log files, extracts the model-level p-values, and reports the Benjamini-Hochberg FDR-adjusted p-values with labels for each model.
+    `plot_feature_importance.py`: Plots the top 20 ROIs by permutation importance for the baseline and baseline + annual change SFC elastic net models as horizontal bar charts, coloured by network.
+    `make_supplementary_table.py`: Generates a supplementary table listing the top 20 features from each SFC elastic net model, including permutation importance, selection frequency, p-value, and FDR-adjusted p-value.
 
 ## Analysis Scripts
 
