@@ -661,7 +661,7 @@ def run_elastic_net(
     # Model-level permutation test - now build the null distribution training the models on shuffled labels
     # Start by adding a check point for if the server crashes while this is running, not all progress is lost
     checkpoint_file = (
-        f"{connectivity_type}_{group_level}_{which_features}_"
+        f"results/{connectivity_type}_{group_level}_{which_features}_"
         f"{label_type}_{covariate_mode}_perm_results.pkl"
     )
     start_p = 0

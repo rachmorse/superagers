@@ -10,8 +10,7 @@ This repository contains the analysis scripts for our study on superagers, which
   - [fmri_analysis](#fmri-analysis)
   - [structural_analysis](#structural_analysis)
   - [structural_functional_coupling](#structural_functional_coupling)
-- [Analysis Scripts](#analysis-scripts)
-- [Misc Scripts](#misc-scripts)
+  - [analyses](#analyses)
 
 ## Folders
 
@@ -73,13 +72,9 @@ This repository contains the analysis scripts for our study on superagers, which
     `plot_feature_importance.py`: Plots the top 20 ROIs by permutation importance for the baseline and baseline + annual change SFC elastic net models as horizontal bar charts, coloured by network.
     `make_supplementary_table.py`: Generates a supplementary table listing the top 20 features from each SFC elastic net model, including permutation importance, selection frequency, p-value, and FDR-adjusted p-value.
 
-## analysis Scripts
+## analyses
 
-1. **`sample_results.R`**
-    - **Purpose:** Runs the full results pipeline: data cleaning, cognitive composite construction, mixed-effects and linear models for cognition, episodic memory, and structure-function coupling, and FDR correction across model groups.
-2. **`results.Rmd`**
-    - **Purpose:** R Markdown document that sources `sample_results.R` and auto-fills the written results section and tables with model outputs.
-
-## Misc Scripts
-1. **`missing_subs.py`**
-    - **Purpose:** Calculates which subs have functional data but to not have structural data and viceversa to make sure no subjects are missing data unecessarily.
+- **Purpose:** These script conduct all non-elastic net related analyses
+- **Scripts:**  
+    `analyses.R`: Runs the full results pipeline: data cleaning, cognitive composite construction, mixed-effects and linear models for cognition, episodic memory, and structure-function coupling, and FDR correction across model groups.
+    `results.Rmd`: R Markdown document that sources `analyses.R` and auto-fills the written results section and tables with model outputs.

@@ -76,7 +76,7 @@ def collect_p_values(log_dir: Path):
 
 def main() -> None:
     """Parse nohup logs and print raw and FDR-adjusted model p-values."""
-    log_dir = Path(__file__).resolve().parent
+    log_dir = Path(__file__).resolve().parent / "results"
     rows = collect_p_values(log_dir)
     if not rows:
         raise SystemExit("No matching nohup logs with model-level p-values were found.")

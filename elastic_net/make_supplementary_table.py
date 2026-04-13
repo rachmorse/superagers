@@ -15,7 +15,7 @@ from plot_feature_importance import (
     FEATURE_IMPORTANCE_SLOPE_CSV
 )
 
-OUTPUT_DOCX = Path("/home/rachel/Desktop/superagers/elastic_net/supplementary_table.docx")
+OUTPUT_DOCX = Path("/home/rachel/Desktop/superagers/elastic_net/figures_tables/supplementary_table.docx")
 
 def format_pval(val):
     """Format p-value to 4 decimal places and add significance asterisks.

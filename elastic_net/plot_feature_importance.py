@@ -11,7 +11,7 @@ FEATURE_IMPORTANCE_SLOPE_CSV = Path(
     "/home/rachel/Desktop/superagers/elastic_net/SFC_ROI_t1_slope_long_include_feature_importance.csv"
 )
 OUTPUT_PATH = Path(
-    "/home/rachel/Desktop/superagers/elastic_net/feature_importance_by_network.png"
+    "/home/rachel/Desktop/superagers/elastic_net/figures_tables/feature_importance_by_network.png"
 )
 
 # Sub-region abbreviation to full name from Schaefer 200 atlas)
