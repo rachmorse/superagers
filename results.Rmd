@@ -1,7 +1,10 @@
 ---
 title: "Results"
 output:
+  html_document:
+    df_print: paged
   word_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -190,8 +193,8 @@ lme_row <- function(region, model, fdr_df, fdr_key) {
     `Coefficient (95% CI)` = fmt_coef_ci(model),
     `p-value`              = fmt_p_star(as.numeric(model$p_value)[1]),
     pFDR                   = fmt_p_star(get_fdr_raw(fdr_df, fdr_key)),
-    `Marginal R\u00b2`     = fmt_r2m(model),
-    `Conditional R\u00b2`  = fmt_r2c(model)
+    `Marginal r²`     = fmt_r2m(model),
+    `Conditional r²`  = fmt_r2c(model)
   )
 }
 
@@ -201,8 +204,8 @@ lm_row <- function(region, model, fdr_df, fdr_key) {
     `Coefficient (95% CI)` = fmt_coef_ci(model),
     `p-value`              = fmt_p_star(as.numeric(model$p_value)[1]),
     pFDR                   = fmt_p_star(get_fdr_raw(fdr_df, fdr_key)),
-    `Marginal R\u00b2`     = fmt_r2(model),
-    `Conditional R\u00b2`  = ""
+    `Marginal r²`     = fmt_r2(model),
+    `Conditional r²`  = ""
   )
 }
 
@@ -210,7 +213,7 @@ lm_row <- function(region, model, fdr_df, fdr_key) {
 hdr_row <- function(label) {
   list(Region = label, `Coefficient (95% CI)` = "",
        `p-value` = "", pFDR = "",
-       `Marginal R\u00b2` = "", `Conditional R\u00b2` = "")
+       `Marginal r²` = "", `Conditional r²` = "")
 }
 
 tbl3 <- bind_rows(

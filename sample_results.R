@@ -593,39 +593,6 @@ data_wide <- data_wide %>%
 data_long <- data_long %>%
   left_join(pacc5_long, by = c("id", "timepoint"))
 
-# PACC model
-m_pacc <- lmer(pacc5 ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE)
-summary(m_pacc)
-summary(lmer(scale(pacc5) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
-
-vars <- c(
-  "scale(superager_long):scale(age)"
-)
-pacc_superager_age <- get_mixed_effects_stats(scale(pacc5) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
-pacc_superager_age
-
-vars <- c(
-  "scale(superager_long)"
-)
-pacc_superager <- get_mixed_effects_stats(scale(pacc5) ~ scale(superager_long) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
-pacc_superager
-
-plot_df <- data_long %>%
-  dplyr::select(id, age, superager_long, pacc5) %>%
-  tidyr::drop_na() %>%
-  dplyr::mutate(
-    superager_group = factor(superager_long, levels = c(0, 1),
-                             labels = c("non-superager", "superager"))
-  )
-
-ggplot(plot_df, aes(x = age, y = pacc5)) +
-  geom_line(aes(group = id), alpha = 0.18, linewidth = 0.3, color = "grey55") +
-  geom_point(aes(color = superager_group), alpha = 0.55, size = 1.8) +
-  geom_smooth(aes(color = superager_group), method = "lm", se = TRUE, linewidth = 1.2) +
-  scale_color_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
-  labs(x = "Age", y = "PACC", color = NULL) +
-  theme_classic(base_size = 12)
-
 # PACC model no EM
 m_pacc_no_em <- lmer(pacc5_no_em ~ superager_long + time + age + sex + YoE + (1 | id), data = data_long, REML = FALSE)
 summary(m_pacc_no_em)
