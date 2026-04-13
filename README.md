@@ -75,10 +75,10 @@ This repository contains the analysis scripts for our study on superagers, which
 
 ## Analysis Scripts
 
-1. **`draft_analysis_2.R`**
-    - **Purpose:** The first exploritory analysis.  
-2. **`elastic_net.py`**
-    - **Purpose:** Run an elastic net analysis to extract ROIs that are most important in memory. 
+1. **`sample_results.R`**
+    - **Purpose:** Runs the full results pipeline: data cleaning, cognitive composite construction, mixed-effects and linear models for cognition, episodic memory, and structure-function coupling, and FDR correction across model groups.
+2. **`results.Rmd`**
+    - **Purpose:** R Markdown document that sources `sample_results.R` and auto-fills the written results section and tables with model outputs.
 
 ## Misc Scripts
 1. **`missing_subs.py`**
