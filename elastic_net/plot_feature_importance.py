@@ -14,7 +14,7 @@ OUTPUT_PATH = Path(
     "/home/rachel/Desktop/superagers/elastic_net/feature_importance_by_network.png"
 )
 
-# Sub-region abbreviation → full name (Schaefer atlas)
+# Sub-region abbreviation to full name from Schaefer 200 atlas)
 ROI_ABBREV = {
     "AntTemp":    "Anterior temporal",
     "Aud":        "Auditory",
@@ -75,7 +75,7 @@ ROI_ABBREV = {
 # Hatch style and legend label per feature type
 FEATURE_TYPE_STYLE = {
     "baseline": {"hatch": "",    "label": "Baseline"},
-    "slope":    {"hatch": "///", "label": "Slope"},
+    "slope":    {"hatch": "///", "label": "Annual change"},
 }
 
 # Network display names and colours
@@ -112,7 +112,7 @@ def extract_network(feature: str) -> str:
         Network key matching.
     """
     if feature.startswith("7Networks_"):
-        # e.g. 7Networks_LH_DorsAttn_FEF_1  ->  DorsAttn
+        # e.g. 7Networks_LH_DorsAttn_FEF_1 to DorsAttn
         parts = feature.split("_")
         return parts[2] if len(parts) > 2 else "Other"
     if feature.startswith("Subcortical"):
@@ -127,22 +127,23 @@ def extract_feature_type(feature: str) -> str:
         feature: Raw feature name from the CSV.
 
     Returns:
-        ``"slope"`` if the feature ends with ``_slope``, otherwise ``"baseline"``.
+        "slope" if the feature ends with _slope, otherwise "baseline".
     """
     return "slope" if feature.endswith("_slope") else "baseline"
 
 
-def make_short_label(feature: str, drop_trailing_index: bool = False,
-                     is_slope_model: bool = False) -> str:
+def make_short_label(feature: str, is_slope_model: bool = False) -> str:
     """Shorten a ROI feature name for use as an axis tick label.
 
+    Includes the trailing parcel index (e.g. ``_7``) in parentheses
+    so every label is unambiguous.
+
     Args:
-        feature: Raw feature name from the CSV 
-        drop_trailing_index: If True, strip the trailing _N parcel index
-            from cortical ROI names (e.g. "LH FEF_1" to "LH FEF").
+        feature: Raw feature name from the CSV.
+        is_slope_model: If True, strip _slope / _1 suffixes first.
 
     Returns:
-        A shortened more readable label string.
+        A shortened, readable label string with parcel index in parentheses.
     """
     if is_slope_model:
         # Strip the _1 (baseline) or _slope suffix before shortening
@@ -157,20 +158,30 @@ def make_short_label(feature: str, drop_trailing_index: bool = False,
         hemi = parts[1]  # LH / RH
         network = parts[2]
         rest = parts[3] if len(parts) > 3 else parts[2]
-        if drop_trailing_index:
-            # Strip trailing "_<digits>" parcel index
-            rest_parts = rest.rsplit("_", 1)
-            if len(rest_parts) == 2 and rest_parts[1].isdigit():
-                rest = rest_parts[0]
+
+        # Extract parcel index before abbreviation lookup
+        parcel_idx = None
+        rest_parts = rest.rsplit("_", 1)
+        if len(rest_parts) == 2 and rest_parts[1].isdigit():
+            parcel_idx = rest_parts[1]
+            rest = rest_parts[0]
+        elif rest.isdigit():
+            # e.g. 7Networks_LH_SomMot_1 
+            parcel_idx = rest
+
         raw = ROI_ABBREV.get(rest, rest) if not rest.isdigit() else NETWORK_LABELS.get(network, network)
         full = raw[0].lower() + raw[1:]  # lowercase first letter only, preserve acronyms
         # For vague sub-region names, prepend the network for context
         if rest in {"Med", "Post"}:
             net_label = NETWORK_LABELS.get(network, network).lower()
-            return f"{hemi} {net_label} {full}"
-        return f"{hemi} {full}"
+            label = f"{hemi} {net_label} {full}"
+        else:
+            label = f"{hemi} {full}"
+        if parcel_idx is not None:
+            label = f"{label} ({parcel_idx})"
+        return label
     if feature.startswith("Subcortical"):
-        # "Subcortical 214: Right Thalamus"  ->  "R Thalamus"
+        # "Subcortical 214: Right Thalamus" to "R Thalamus"
         colon = feature.find(":")
         label = feature[colon + 2:] if colon != -1 else feature
         label = label.replace("Right ", "R ").replace("Left ", "L ")
@@ -183,35 +194,20 @@ def load_and_prepare(csv_path: Path, is_slope_model: bool = False) -> pd.DataFra
 
     Args:
         csv_path: Path to the feature importance CSV.
-        is_slope_model: If True, parse ``_1`` / ``_slope`` suffixes to populate
-            ``feature_type`` and strip them from tick labels.
+        is_slope_model: If True, parse _1 / _slope suffixes to populate
+            feature_type and strip them from tick labels.
 
     Returns:
-        DataFrame with added columns: ``network``, ``feature_type``, ``label``.
+        DataFrame with added columns: network, feature_type, label.
     """
     df = pd.read_csv(csv_path)
     df = df[~df["feature"].str.startswith("cov_")].copy()
     df["network"] = df["feature"].apply(extract_network)
     df["feature_type"] = df["feature"].apply(extract_feature_type) if is_slope_model else "baseline"
     df["label"] = df["feature"].apply(
-        lambda f: make_short_label(f, drop_trailing_index=True, is_slope_model=is_slope_model)
+        lambda f: make_short_label(f, is_slope_model=is_slope_model)
     )
     return df
-
-
-def _style_ax(ax: plt.Axes, panel_label: str, x_offset: float = -0.15) -> None:
-    """Remove top/right spines and stamp a bold panel label.
-
-    Args:
-        ax: Target axes.
-        panel_label: Single letter (e.g. ``"A"``).
-        x_offset: Horizontal position of the label in axes coordinates.
-    """
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.tick_params(axis="y", labelsize=7)
-    ax.text(x_offset, 1.05, panel_label, transform=ax.transAxes,
-            fontsize=12, fontweight="bold", va="top")
 
 
 def _network_legend_handles(present_networks):
@@ -221,7 +217,7 @@ def _network_legend_handles(present_networks):
         present_networks: Iterable of network keys present in the data.
 
     Returns:
-        List of ``mpatches.Patch`` objects.
+        List of mpatches.Patch objects.
     """
     return [
         mpatches.Patch(color=NETWORK_COLORS[n], label=NETWORK_LABELS.get(n, n))
@@ -229,108 +225,17 @@ def _network_legend_handles(present_networks):
     ]
 
 
-def plot_network_panel(ax: plt.Axes, df: pd.DataFrame, panel_label: str) -> None:
-    """Plot mean permutation importance per network (single bar per network).
-
-    Args:
-        ax: Target axes.
-        df: Prepared DataFrame from ``load_and_prepare``.
-        panel_label: Panel label string (e.g. ``"A"``).
-    """
-    net_agg = (
-        df.groupby("network")["perm_importance_mean"]
-        .mean()
-        .sort_values(ascending=False)
-        .reset_index()
-    )
-    net_agg["color"] = net_agg["network"].map(NETWORK_COLORS)
-    net_agg["display"] = net_agg["network"].map(NETWORK_LABELS)
-
-    ax.bar(range(len(net_agg)), net_agg["perm_importance_mean"],
-           color=net_agg["color"], width=0.7, edgecolor="none")
-    ax.axhline(0, color="black", linewidth=0.6)
-    ax.set_xlim(-0.5, len(net_agg) - 0.5)
-    ax.set_xticks(range(len(net_agg)))
-    ax.set_xticklabels(net_agg["display"], rotation=45, ha="right", fontsize=7)
-    ax.set_ylabel("Mean permutation importance", fontsize=8)
-    ax.set_xlabel("Network", fontsize=8)
-    _style_ax(ax, panel_label)
-
-
-def plot_network_panel_grouped(ax: plt.Axes, df: pd.DataFrame, panel_label: str) -> None:
-    """Plot mean permutation importance per network, grouped by feature type.
-
-    Each network shows two bars side by side: baseline (solid) and slope
-    (hatched). Networks are ordered by their combined mean importance.
-
-    Args:
-        ax: Target axes.
-        df: Prepared DataFrame from `load_and_prepare` with `is_slope_model=True`.
-        panel_label: Panel label string (e.g. "C").
-    """
-    network_order = (
-        df.groupby("network")["perm_importance_mean"]
-        .mean()
-        .sort_values(ascending=False)
-        .index.tolist()
-    )
-    net_type_agg = (
-        df.groupby(["network", "feature_type"])["perm_importance_mean"]
-        .mean()
-        .reset_index()
-    )
-
-    bar_width = 0.38
-    offsets = {"baseline": -bar_width / 2, "slope": bar_width / 2}
-
-    for i, net in enumerate(network_order):
-        for ftype, style in FEATURE_TYPE_STYLE.items():
-            row = net_type_agg[
-                (net_type_agg["network"] == net) & (net_type_agg["feature_type"] == ftype)
-            ]
-            if row.empty:
-                continue
-            ax.bar(
-                i + offsets[ftype], row["perm_importance_mean"].values[0],
-                width=bar_width,
-                color=NETWORK_COLORS.get(net, "#AAAAAA"),
-                hatch=style["hatch"],
-                edgecolor="#444444" if style["hatch"] else "none",
-                linewidth=0.5,
-            )
-
-    ax.axhline(0, color="black", linewidth=0.6)
-    ax.set_xlim(-0.5, len(network_order) - 0.5)
-    ax.set_xticks(range(len(network_order)))
-    ax.set_xticklabels(
-        [NETWORK_LABELS.get(n, n) for n in network_order],
-        rotation=45, ha="right", fontsize=7,
-    )
-    ax.set_ylabel("Mean permutation importance", fontsize=8)
-    ax.set_xlabel("Network", fontsize=8)
-
-    type_handles = [
-        mpatches.Patch(facecolor="#AAAAAA", hatch=style["hatch"],
-                       edgecolor="#444444" if style["hatch"] else "none",
-                       label=style["label"])
-        for style in FEATURE_TYPE_STYLE.values()
-    ]
-    ax.legend(handles=type_handles, fontsize=6.5, loc="upper right",
-              framealpha=0.9, title="Feature type", title_fontsize=7)
-    _style_ax(ax, panel_label)
-
-
 def plot_roi_panel(ax: plt.Axes, df: pd.DataFrame, panel_label: str,
                    is_slope_model: bool = False) -> None:
     """Plot the top 20 ROIs by permutation importance.
 
-    Only positive-importance ROIs are shown. Bars are coloured by network.
-    For the slope model, slope features are additionally hatched.
+    Bars are coloured by network. For the slope model, 
+    slope features are additionally hatched.
 
     Args:
         ax: Target axes.
-        df: Prepared DataFrame from ``load_and_prepare``.
-        panel_label: Panel label string (e.g. ``"B"`` or ``"D"``).
+        df: Prepared DataFrame from `load_and_prepare`.
+        panel_label: Panel label string (e.g. "B" or "D").
         is_slope_model: If True, apply hatching to slope features.
     """
     # Sort ascending so most important ROI sits at the top of the horizontal chart
@@ -340,22 +245,6 @@ def plot_roi_panel(ax: plt.Axes, df: pd.DataFrame, panel_label: str,
         .tail(20)
         .reset_index(drop=True)
     )
-
-    # Where two parcels share the same label, append the parcel index to distinguish them
-    duplicated = top20["label"].duplicated(keep=False)
-    if duplicated.any():
-        def _parcel_index(feature: str, slope_model: bool) -> str:
-            """Extract trailing parcel index from a feature name."""
-            if slope_model:
-                for suffix in ("_slope", "_1"):
-                    if feature.endswith(suffix):
-                        feature = feature[: -len(suffix)]
-                        break
-            return feature.rsplit("_", 1)[-1]
-
-        top20.loc[duplicated, "label"] = top20.loc[duplicated].apply(
-            lambda r: f"{r['label']} ({_parcel_index(r['feature'], is_slope_model)})", axis=1
-        )
 
     spacing = 0.65  # <1 compresses vertical gap between bars
     bar_h = 0.45
@@ -399,10 +288,9 @@ def plot_roi_panel(ax: plt.Axes, df: pd.DataFrame, panel_label: str,
 def main():
     """Generate and save the two-panel feature importance figure.
 
-    Panel A shows mean permutation importance aggregated by functional network.
+    Panel A shows mean permutation importance aggregated by network.
     Panel B shows the top 20 individual ROIs by permutation importance, coloured
-    by their network membership. The figure is saved as a 300 dpi PNG to
-    ``OUTPUT_PATH``.
+    by their network. 
     """
     df_t1 = load_and_prepare(FEATURE_IMPORTANCE_T1_CSV, is_slope_model=False)
     df_slope = load_and_prepare(FEATURE_IMPORTANCE_SLOPE_CSV, is_slope_model=True)

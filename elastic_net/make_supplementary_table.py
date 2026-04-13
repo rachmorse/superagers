@@ -7,9 +7,8 @@ from both the baseline and slope elastic-net models.
 import pandas as pd
 from pathlib import Path
 import docx
-from docx.shared import Pt
 
-# Import the exact logic and paths used in 'plot_feature_importance.py'
+# Import the logic and paths used in 'plot_feature_importance.py'
 from plot_feature_importance import (
     load_and_prepare,
     FEATURE_IMPORTANCE_T1_CSV,
@@ -38,38 +37,25 @@ def format_pval(val):
         return base + "*"
     return base
 
+
 def process_top_20(df, is_slope_model):
-    """Extract top 20 features by importance mean, handle duplicates, and label slopes.
-    
+    """Extract top 20 features by importance mean and tag annual change features.
+
     Args:
         df (pd.DataFrame): The feature importance DataFrame.
         is_slope_model (bool): Whether this is the slope model (for tagging).
-    
+
     Returns:
-        pd.DataFrame: Processed top 20 features with formatted labels.
+        pd.DataFrame: Top 20 features sorted by descending importance.
     """
     top20 = df.sort_values("perm_importance_mean", ascending=False).head(20).copy()
-    
-    # Handle duplicated short labels 
-    duplicated = top20["label"].duplicated(keep=False)
-    if duplicated.any():
-        def _parcel_index(feature: str, slope_model: bool) -> str:
-            if slope_model:
-                for suffix in ("_slope", "_1"):
-                    if feature.endswith(suffix):
-                        feature = feature[: -len(suffix)]
-                        break
-            return feature.rsplit("_", 1)[-1]
-            
-        top20.loc[duplicated, "label"] = top20.loc[duplicated].apply(
-            lambda r: f"{r['label']} ({_parcel_index(r['feature'], is_slope_model)})", axis=1
-        )
 
     # Append (slope) label for longitudinal features
     if is_slope_model:
-        top20.loc[top20["feature_type"] == "slope", "label"] = top20["label"] + " (slope)"
+        top20.loc[top20["feature_type"] == "slope", "label"] = top20["label"] + " (annual change)"
         
     return top20
+
 
 def main():
     # Load and prep data using the imported function
@@ -103,7 +89,7 @@ def main():
             data_row.cells[3].text = format_pval(r['p_value'])
             data_row.cells[4].text = format_pval(r['p_fdr'])
 
-    # Populate the document
+    # Fill the document
     add_model_section("Baseline structure-function coupling model", top20_baseline)
     add_model_section("Baseline + annual change structure-function coupling model", top20_slope)
 
