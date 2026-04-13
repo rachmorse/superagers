@@ -379,9 +379,8 @@ get_mixed_effects_stats <- function(formula, data, vars_priority) {
   
   # Extract p-value from ANOVA table
   p_value <- anova_results[which(rownames(anova_results) == rownames(coefficients)[variable_index]), "Pr(>F)"]
-  r2 <- as.data.frame(VarCorr(model))$vcov[1]
-  
-  # Compute marginal and conditional R² 
+
+  # Compute marginal and conditional R²
   r2_vals <- r.squaredGLMM(model)
   marginal_r2 <- r2_vals[1]       # Variance explained by fixed effects only
   conditional_r2 <- r2_vals[2]    # Variance explained by fixed + random effects
@@ -489,9 +488,6 @@ pacc_tp1 <- full_join(
     # Harmonize SDMT to per-minute rate (BBHI: 2.0 min; BBHI-senior: 1.5 min)
     sdmt_total = sdmt_total / 2,
     sdmt_total_senior = sdmt_total_senior / 1.5,
-    # Harmonize SDMT to per-minute rate (BBHI: 2.0 min; BBHI-senior: 1.5 min)
-    sdmt_total = sdmt_total / 2,
-    sdmt_total_senior = sdmt_total_senior / 1.5,
     mmse = coalesce(mmse_senior, mmse),
     ravlt_total = coalesce(ravlt_total_senior, ravlt_total),
     sdmt_total = coalesce(sdmt_total_senior, sdmt_total),
@@ -519,9 +515,6 @@ pacc_tp2 <- full_join(
   by = "id"
 ) %>%
   mutate(
-    # Harmonize SDMT to per-minute rate (BBHI: 2.0 min; BBHI-senior: 1.5 min)
-    sdmt_total = sdmt_total / 2,
-    sdmt_total_senior = sdmt_total_senior / 1.5,
     # Harmonize SDMT to per-minute rate (BBHI: 2.0 min; BBHI-senior: 1.5 min)
     sdmt_total = sdmt_total / 2,
     sdmt_total_senior = sdmt_total_senior / 1.5,
@@ -605,13 +598,13 @@ m_pacc <- lmer(pacc5 ~ superager_long + time + age + sex + YoE + (1 | id), data 
 summary(m_pacc)
 summary(lmer(scale(pacc5) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
 
-vars <- (
+vars <- c(
   "scale(superager_long):scale(age)"
 )
 pacc_superager_age <- get_mixed_effects_stats(scale(pacc5) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 pacc_superager_age
 
-vars <- (
+vars <- c(
   "scale(superager_long)"
 )
 pacc_superager <- get_mixed_effects_stats(scale(pacc5) ~ scale(superager_long) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
@@ -638,14 +631,14 @@ m_pacc_no_em <- lmer(pacc5_no_em ~ superager_long + time + age + sex + YoE + (1 
 summary(m_pacc_no_em)
 summary(lmer(scale(pacc5_no_em) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data = data_long, REML = FALSE))
 
-vars <- (
+vars <- c(
   "scale(superager_long):scale(age)"
 )
 pacc_no_em_superager_age <- get_mixed_effects_stats(scale(pacc5_no_em) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 pacc_no_em_superager_age
 summary(lmer(scale(pacc5_no_em) ~ scale(superager_long) * scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long))
 
-vars <- (
+vars <- c(
   "scale(superager_long)"
 )
 pacc_no_em_superager <- get_mixed_effects_stats(scale(pacc5_no_em) ~ scale(superager_long) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
@@ -800,42 +793,6 @@ ggplot(plot_df, aes(x = superager_group, y = sfc_hmod, fill = superager_group)) 
   theme_classic(base_size = 12) +
   theme(legend.position = "none")
 
-# SFC-only significance label from the adjusted mixed model
-m_sfc <- lmer(sfc_hmod ~ superager_long + time + age + sex + YoE + (1 | id),
-              data = data_long, REML = FALSE)
-p_sfc <- as.data.frame(summary(m_sfc)$coefficients)["superager_long", "Pr(>|t|)"]
-p_star <- dplyr::case_when(
-  p_sfc < 0.001 ~ "***",
-  p_sfc < 0.01 ~ "**",
-  p_sfc < 0.05 ~ "*",
-  TRUE ~ "ns"
-)
-
-plot_df <- data_long %>%
-  dplyr::select(superager_long, sfc_hmod) %>%
-  drop_na() %>%
-  mutate(
-    superager_group = factor(superager_long, levels = c(0, 1),
-                             labels = c("non-superager", "superager"))
-  )
-
-y_min <- min(plot_df$sfc_hmod, na.rm = TRUE)
-y_max <- max(plot_df$sfc_hmod, na.rm = TRUE)
-y_bar <- y_max + 0.06 * (y_max - y_min)
-y_star <- y_max + 0.10 * (y_max - y_min)
-
-ggplot(plot_df, aes(x = superager_group, y = sfc_hmod, fill = superager_group)) +
-  geom_violin(trim = FALSE, alpha = 0.30, color = NA) +
-  geom_boxplot(width = 0.18, outlier.shape = NA, alpha = 0.65, color = "black") +
-  geom_jitter(width = 0.08, alpha = 0.22, size = 0.9, color = "black") +
-  stat_summary(fun = mean, geom = "point", shape = 23, size = 2.5, fill = "white", color = "black") +
-  annotate("segment", x = 1, xend = 2, y = y_bar, yend = y_bar, linewidth = 0.45) +
-  annotate("text", x = 1.5, y = y_star, label = p_star, size = 5) +
-  scale_fill_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
-  labs(x = NULL, y = "SFC heteromodal mean") +
-  theme_classic(base_size = 12) +
-  theme(legend.position = "none")
-
 ##################
 # SFC and memory #
 ##################
@@ -879,7 +836,7 @@ ravlt_sfc_weighted_slope
 ravlt_sfc_hmod_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_hmod_slope) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_hmod_slope 
 ravlt_sfc_sensory_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_sensory_slope) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
-ravlt_sfc_sensory
+ravlt_sfc_sensory_slope
 ravlt_sfc_dmn_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_dmn_slope) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_dmn_slope 
 ravlt_sfc_salience_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_salience_slope) + scale(age) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
