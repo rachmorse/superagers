@@ -60,7 +60,8 @@ This repository contains the analysis scripts for our study on superagers, which
 - **Scripts:**
     - `01_convert_to_individual_matrix.py`: Converts the functional and structural connectivity data from a shared CSV with all participants into individual 214x214 matrices. 
     - `02_structural_functional_coupling.py`: Computes and visualizes SFC using the normalized structural connectivity data and untransformed functional connectivity data. 
-    - `plot_sfc_difference.py`: Averages the per-session superager vs. non-superager SFC difference maps across timepoints and saves a  cortical surface figure.
+    - `plot_sfc_difference.py`: Averages the per-session superager vs. non-superager SFC difference maps across timepoints and saves a cortical surface figure.
+    - `plot_sfc_difference_vector.py`: Plots the averaged superager vs. non-superager SFC difference as a 1x214 heatmap with network and hemisphere labels.
 
 ### elastic_net
 - **Purpose:** These scripts run prepare and run a logistic elastic net to classify participants as superagers or non-superagers
