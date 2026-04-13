@@ -4,6 +4,7 @@ suppressPackageStartupMessages({
   library(lme4)
   library(lmerTest)
   library(ggplot2)
+  library(patchwork)
   library(readxl)
   library(MuMIn)
   library(emmeans)
@@ -613,7 +614,7 @@ plot_df_cog_composite <- data_long %>%
                              labels = c("non-superager", "superager"))
   )
 
-ggplot(plot_df_cog_composite, aes(x = age, y = cog_composite)) +
+p_cog <- ggplot(plot_df_cog_composite, aes(x = age, y = cog_composite)) +
   geom_line(aes(group = id), alpha = 0.18, linewidth = 0.3, color = "grey55") +
   geom_point(aes(color = superager_group), alpha = 0.55, size = 1.8) +
   geom_smooth(aes(color = superager_group), method = "lm", se = TRUE, linewidth = 1.2) +
@@ -661,13 +662,23 @@ plot_df_ravlt_total <- data_long %>%
     )
   )
 
-ggplot(plot_df_ravlt_total, aes(x = age, y = ravlt_total)) +
+p_ravlt <- ggplot(plot_df_ravlt_total, aes(x = age, y = ravlt_total)) +
   geom_line(aes(group = id), alpha = 0.18, linewidth = 0.3, color = "grey55") +
   geom_point(aes(color = superager_group), alpha = 0.55, size = 1.8) +
   geom_smooth(aes(color = superager_group), method = "lm", se = TRUE, linewidth = 1.2) +
   scale_color_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
   labs(x = "Age", y = "Episodic Memory", color = NULL) +
   theme_classic(base_size = 12)
+
+fig2 <- (p_cog + p_ravlt) +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(size = 14, face = "bold"))
+
+ggsave(
+  filename = "~/Desktop/superagers/figures/figure2_cognition_memory.png",
+  plot = fig2,
+  width = 10, height = 4.5, dpi = 300
+)
 
 ###########################
 # SFC by superager status #
