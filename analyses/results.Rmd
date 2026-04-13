@@ -13,7 +13,7 @@ library(flextable)
 library(dplyr)
 
 # Source all data prep and model results
-source("sample_results.R")
+source("analyses.R")
 
 ### Formatting helpers ###
 
