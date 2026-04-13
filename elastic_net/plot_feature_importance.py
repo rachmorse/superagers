@@ -263,11 +263,11 @@ def plot_roi_panel(ax: plt.Axes, df: pd.DataFrame, panel_label: str,
 
     ax.set_ylim(-spacing / 2, (len(top20) - 1) * spacing + spacing / 2)
     ax.set_yticks([i * spacing for i in range(len(top20))])
-    ax.set_yticklabels(top20["label"], fontsize=7)
-    ax.set_xlabel("Permutation importance", fontsize=8)
+    ax.set_yticklabels(top20["label"], fontsize=9)
+    ax.set_xlabel("Permutation importance", fontsize=10)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.tick_params(axis="x", labelsize=7)
+    ax.tick_params(axis="x", labelsize=9)
 
     handles = _network_legend_handles(top20["network"].unique())
     if is_slope_model:
@@ -279,10 +279,10 @@ def plot_roi_panel(ax: plt.Axes, df: pd.DataFrame, panel_label: str,
         ]
         handles += [mpatches.Patch(visible=False, label="")] + type_handles
 
-    ax.legend(handles=handles, loc="lower right", fontsize=6.5, framealpha=0.9,
-              title="Network", title_fontsize=7, handlelength=1, handleheight=0.8)
-    ax.text(-0.35, 1.05, panel_label, transform=ax.transAxes,
-            fontsize=12, fontweight="bold", va="top")
+    ax.legend(handles=handles, loc="lower right", fontsize=8, framealpha=0.9,
+              title="Network", title_fontsize=9, handlelength=1, handleheight=0.8)
+    ax.text(-0.55, 1.05, panel_label, transform=ax.transAxes,
+            fontsize=14, fontweight="bold", va="top")
 
 
 def main():
@@ -302,10 +302,11 @@ def main():
 
     plot_roi_panel(axes[0], df_t1, "A", is_slope_model=False)
     plot_roi_panel(axes[1], df_slope, "B", is_slope_model=True)
-    axes[0].set_title("Baseline model", fontsize=9, fontweight="bold", pad=8)
-    axes[1].set_title("Baseline + annual change model", fontsize=9, fontweight="bold", pad=8)
+    axes[0].set_title("Baseline model", fontsize=11, fontweight="bold", pad=8)
+    axes[1].set_title("Baseline + annual change model", fontsize=11, fontweight="bold", pad=8)
 
     plt.tight_layout(pad=1.5)
+    plt.subplots_adjust(left=0.22)
     plt.savefig(OUTPUT_PATH, dpi=300, bbox_inches="tight")
     print(f"Saved to {OUTPUT_PATH}")
     plt.show()
