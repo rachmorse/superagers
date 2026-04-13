@@ -378,8 +378,12 @@ get_mixed_effects_stats <- function(formula, data, vars_priority) {
   ci <- confint(model, parm = rownames(coefficients)[variable_index])
   
   # Extract p-value from ANOVA table
-  p_value <- anova_results[which(rownames(anova_results) == rownames(coefficients)[variable_index]), "Pr(>F)"]
-
+  # Factor terms appear as e.g. "factor(x)1" in the coefficient table but
+  # "factor(x)" in the ANOVA table — strip the level suffix after each ")"
+  coef_name  <- rownames(coefficients)[variable_index]
+  anova_name <- gsub("\\)([^:]*)", ")", coef_name)
+  p_value <- anova_results[which(rownames(anova_results) == anova_name), "Pr(>F)"]
+  
   # Compute marginal and conditional R²
   r2_vals <- r.squaredGLMM(model)
   marginal_r2 <- r2_vals[1]       # Variance explained by fixed effects only
