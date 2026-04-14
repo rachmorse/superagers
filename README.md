@@ -5,16 +5,17 @@ This repository contains the analysis scripts for our study on superagers, which
 ## Table of Contents
 
 - [Folders](#folders)
-  - [classification](#classification)
+  - [superager_classification](#superager_classification)
   - [fsaverage_masks](#fsaverage)
   - [fmri_analysis](#fmri-analysis)
   - [structural_analysis](#structural_analysis)
   - [structural_functional_coupling](#structural_functional_coupling)
+  - [elastic_net](#elastic_net)
   - [analyses](#analyses)
 
 ## Folders
 
-### classification
+### superager_classification
 - **Purpose:** These scripts clean the data from the BBHI and BBHI senior cohorts to be able to merge the relevant data, then classify participants as superagers or non-superagers. 
 - **Scripts:**
     - `check_invalid_nps`: Prepares BBHI and BBHI senior raw data, filtering for those with comments about their neuropsychological data. It saves the comments, so they can be read manually to exclude subjects with invalid data. 
