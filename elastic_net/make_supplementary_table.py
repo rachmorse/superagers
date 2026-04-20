@@ -67,27 +67,26 @@ def main():
 
     doc = docx.Document()
     
-    table = doc.add_table(rows=1, cols=5)
+    table = doc.add_table(rows=1, cols=4)
     table.style = 'Table Grid'
     
-    headers = ["Feature", "Importance Mean ΔAUC", "Selection Frequency", "p-value", "pFDR"]
+    headers = ["Feature", "Importance Mean ΔAUC", "p-value", "pFDR"]
     for i, header in enumerate(headers):
         table.rows[0].cells[i].text = header
         table.rows[0].cells[i].paragraphs[0].runs[0].bold = True
-        
+
     def add_model_section(sub_header_text, df):
         row = table.add_row()
-        merged_cell = row.cells[0].merge(row.cells[4])
+        merged_cell = row.cells[0].merge(row.cells[3])
         merged_cell.text = sub_header_text
         merged_cell.paragraphs[0].runs[0].bold = True
-        
+
         for _, r in df.iterrows():
             data_row = table.add_row()
             data_row.cells[0].text = f"    {r['label']}" # Small indent for readability
             data_row.cells[1].text = f"{r['perm_importance_mean']:.4f}"
-            data_row.cells[2].text = f"{r['selected_freq']:.1f}"
-            data_row.cells[3].text = format_pval(r['p_value'])
-            data_row.cells[4].text = format_pval(r['p_fdr'])
+            data_row.cells[2].text = format_pval(r['p_value'])
+            data_row.cells[3].text = format_pval(r['p_fdr'])
 
     # Fill the document
     add_model_section("Baseline structure-function coupling model", top20_baseline)
