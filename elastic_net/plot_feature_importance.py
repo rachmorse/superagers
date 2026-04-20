@@ -5,10 +5,10 @@ import matplotlib.patches as mpatches
 import pandas as pd
 
 FEATURE_IMPORTANCE_T1_CSV = Path(
-    "/home/rachel/Desktop/superagers/elastic_net/SFC_ROI_t1_long_include_feature_importance.csv"
+    "/home/rachel/Desktop/superagers/elastic_net/results/SFC_ROI_t1_long_include_feature_importance.csv"
 )
 FEATURE_IMPORTANCE_SLOPE_CSV = Path(
-    "/home/rachel/Desktop/superagers/elastic_net/SFC_ROI_t1_slope_long_include_feature_importance.csv"
+    "/home/rachel/Desktop/superagers/elastic_net/results/SFC_ROI_t1_slope_long_include_feature_importance.csv"
 )
 OUTPUT_PATH = Path(
     "/home/rachel/Desktop/superagers/elastic_net/figures_tables/feature_importance_by_network.png"
