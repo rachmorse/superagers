@@ -72,7 +72,7 @@ This repository contains the analysis scripts from our study on superagers, whic
     - `plot_feature_importance.py`: Plots the top 20 ROIs from SFC elastic net models as horizontal bar charts.
     - `make_supplementary_table.py`: Generates supplementary table listing top 20 features from each SFC elastic net model.
 
-## analyses
+### analyses
 
 - **Purpose:** Conduct all non-elastic net related analyses.
 - **Scripts:**  
