@@ -1,0 +1,281 @@
+#!/usr/bin/env python3
+import re
+import sys
+from pathlib import Path
+
+from bs4 import BeautifulSoup
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import matplotlib.transforms as transforms
+from matplotlib.image import imread
+from matplotlib.lines import Line2D
+import numpy as np
+
+# Import functions from plot_sfc_difference.py 
+sys.path.insert(0, str(Path(__file__).parent.parent / "structure_function_coupling"))
+from plot_sfc_difference import average_session_differences, visualize_coupling  
+
+# Paths 
+SESSION_DIRS = {
+    "01": Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-01/group_connectivity_matrices"),
+    "02": Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-02/group_connectivity_matrices"),
+}
+AVERAGE_OUTPUT_DIR = Path(
+    "/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/average_across_sessions"
+)
+OUTPUT_PATH = Path(
+    "/home/rachel/Desktop/superagers/analyses/figures/em_sfc_cortex_plot.png"
+)
+
+# Brain panel options 
+LABEL_TYPE      = "long" # for superager status
+VMIN            = -0.03
+VMAX            =  0.03
+COLORBAR_LABEL  = " "
+
+RESULTS_HTML = Path(__file__).parent.parent / "analyses" / "results.html"
+
+# Network display order (bottom → top in forest plot)
+NETWORKS = ["Sensory", "SN", "ECN", "DMN", "Heteromodal", "Global"]
+
+# Maps Table 3 region labels (from results.html) to plot keys
+_REGION_MAP = {
+    "Global SFC":      "Global",
+    "Heteromodal SFC": "Heteromodal",
+    "DMN SFC":         "DMN",
+    "ECN SFC":         "ECN",
+    "SN SFC":          "SN",
+    "Sensory SFC":     "Sensory",
+}
+
+
+def load_forest_stats(html_path: Path):
+    """Read SA_STATS and EM_STATS from the LME rows of Table 3 in results.html.
+
+    Returns two dicts mapping network name (beta, ci_lo, ci_hi, p, p_fdr).
+    Parses the flextable HTML directly so the figure stays in sync with the
+    results document without manual copy-paste.
+    """
+    soup = BeautifulSoup(html_path.read_text(), "html.parser")
+    sa_stats, em_stats = {}, {}
+    section  = None   # "sa" | "em"
+    in_slope = False
+
+    for row in soup.find_all("tr"):
+        cells = row.find_all("td")
+        if not cells:
+            continue
+
+        text = cells[0].get_text(strip=True)
+
+        # Merged header/type rows have colspan="6" on the single cell
+        if cells[0].get("colspan"):
+            if "annual change" in text.lower():
+                in_slope = True
+            elif text == "Repeated measures linear mixed effects analyses":
+                in_slope = False
+            elif text == "Superager status":
+                section = "sa"
+            elif text == "Episodic memory":
+                section = "em"
+            continue
+
+        # Data rows: skip if wrong section or in a slope sub-section
+        if len(cells) < 4 or text not in _REGION_MAP or in_slope or section is None:
+            continue
+
+        coef_ci  = cells[1].get_text(strip=True)   # "0.2224 (0.0053-0.4395)"
+        p_raw    = cells[2].get_text(strip=True)    # "0.0449*"
+        pfdr_raw = cells[3].get_text(strip=True)    # "0.0606"
+
+        m = re.match(r"(-?[\d.]+)\s*\((-?[\d.]+)-(-?[\d.]+)\)", coef_ci)
+        beta, ci_lo, ci_hi = float(m.group(1)), float(m.group(2)), float(m.group(3))
+        p    = float(re.sub(r"\*+", "", p_raw))
+        pfdr = float(re.sub(r"\*+", "", pfdr_raw))
+
+        net = _REGION_MAP[text]
+        if section == "sa":
+            sa_stats[net] = (beta, ci_lo, ci_hi, p, pfdr)
+        else:
+            em_stats[net] = (beta, ci_lo, ci_hi, p, pfdr)
+
+    return sa_stats, em_stats
+
+
+SA_STATS, EM_STATS = load_forest_stats(RESULTS_HTML)
+
+
+# Forest plot for panel B and C 
+def plot_forest(
+    ax: plt.Axes,
+    stats: dict,
+    title: str,
+    xlabel: str,
+    xlim: tuple,
+    color: str,
+) -> None:
+    """Draw a horizontal forest plot of network-level LME coefficients.
+
+    Dots are filled for uncorrected significant results (p < .05) and open 
+    (white fill) for non-significant results. FDR-surviving results are 
+    annotated in bold. Networks are drawn in the order defined by the 
+    module-level NETWORKS list (bottom → top).
+
+    Args:
+        ax: Axes to draw on.
+        stats: Dict mapping network name to (beta, ci_lo, ci_hi, p, p_fdr).
+        title: Axes title string.
+        xlabel: x-axis label.
+        xlim: (xmin, xmax) axis limits; should leave room for pFDR annotations.
+        color: Hex color string for the markers and error bars.
+    """
+    ys    = np.arange(len(NETWORKS))
+    trans = transforms.blended_transform_factory(ax.transAxes, ax.transData)
+
+    for i, net in enumerate(NETWORKS):
+        b, lo, hi, p, pfdr = stats[net]
+        fdr_sig = pfdr < 0.05
+        nom_sig = p    < 0.05
+        face    = color if nom_sig else "white"
+
+        ax.errorbar(
+            b, i,
+            xerr=[[b - lo], [hi - b]],
+            fmt="o", color=color,
+            markerfacecolor=face, markeredgecolor=color,
+            markeredgewidth=1.4, markersize=8,
+            capsize=3, elinewidth=1.2, linewidth=1.2,
+        )
+        pfdr_txt = "<.001*" if pfdr < 0.001 else (f"{pfdr:.3f}*" if fdr_sig else f"{pfdr:.3f}")
+        ax.text(
+            1.03, i, pfdr_txt,
+            transform=trans,
+            va="center", ha="left", fontsize=9,
+            color="#444444",
+            clip_on=False,
+        )
+
+    ax.text(
+        1.03, len(NETWORKS) - 0.5, "pFDR",
+        transform=trans,
+        va="bottom", ha="left", fontsize=10.5,
+        color="#444444", 
+        clip_on=False,
+    )
+
+    ax.axvline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.7)
+    ax.set_yticks(ys)
+    ax.set_yticklabels(NETWORKS, fontsize=10.5)
+    ax.set_xlabel(xlabel, fontsize=10.5)
+    ax.set_title(title, fontsize=12, pad=8)
+    ax.set_xlim(xlim)
+    ax.set_ylim(-0.6, len(NETWORKS) - 0.4)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+
+def main():
+    """Generate and save the figure.
+
+    Calls the other script to make the averaged brain surface 
+    map (Panel A), loads the resulting PNG, then assembles it 
+    with two forest plots (Panels B and C) into a single figure.
+    """
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    # Panel A: generate brain surface map 
+    print("Generating brain surface map…")
+    average_session_differences(
+        session_dirs=SESSION_DIRS,
+        label_type=LABEL_TYPE,
+        vmin=VMIN,
+        vmax=VMAX,
+        colorbar_label=COLORBAR_LABEL,
+    )
+    plt.close("all")
+
+    brain_png = AVERAGE_OUTPUT_DIR / "visualizations" / "diff_superagers_average.png"
+    brain_img = imread(str(brain_png))
+
+    # Assemble combined figure 
+    # Scale brain panel to a fixed width, derive height from aspect ratio.
+    fig_w      = 12.5
+    brain_ar   = brain_img.shape[0] / brain_img.shape[1]   # H / W
+    brain_h    = fig_w * brain_ar
+    forest_h   = 2.4
+    v_gap      = 1 # vertical gap between brain and forest panels
+    fig_h      = brain_h + v_gap + forest_h
+
+    fig = plt.figure(figsize=(fig_w, fig_h))
+    gs  = gridspec.GridSpec(
+        2, 2,
+        figure=fig,
+        height_ratios=[brain_h, forest_h],
+        hspace=v_gap / fig_h,
+        wspace=0.4,
+    )
+
+    # Panel A
+    ax_a = fig.add_subplot(gs[0, :])
+    ax_a.imshow(brain_img, aspect="equal")
+    ax_a.axis("off")
+    ax_a.set_title(
+        "A)  Structure-function coupling difference between superagers and non-superagers",
+        fontsize=12, pad=8, loc="left",
+    )
+
+    # Panels B and C
+    ax_b = fig.add_subplot(gs[1, 0])
+    ax_c = fig.add_subplot(gs[1, 1])
+
+    plot_forest(
+        ax_b, SA_STATS,
+        title="B)  Superager status",
+        xlabel="Standardised β (95% CI)",
+        xlim=(-0.15, 0.53),
+        color="#2E6FA3",
+    )
+    plot_forest(
+        ax_c, EM_STATS,
+        title="C)  Episodic memory",
+        xlabel="Standardised β (95% CI)",
+        xlim=(-0.05, 0.18),
+        color="#C1440E",
+    )
+
+    # Add a single shared legend at the bottom
+    legend_elements = [
+        Line2D([0], [0], marker="o", color="w",
+               markerfacecolor="#555555", markeredgecolor="#555555",
+               markersize=8, label="p < .05"),
+        Line2D([0], [0], marker="o", color="w",
+               markerfacecolor="white", markeredgecolor="#555555",
+               markeredgewidth=1.4, markersize=8, label="n.s."),
+    ]
+    fig.legend(
+        handles=legend_elements, 
+        fontsize=10.5, 
+        loc="lower center", 
+        ncol=2, 
+        frameon=False, 
+        bbox_to_anchor=(0.5, 0.02)
+    )
+
+    plt.subplots_adjust(bottom=0.15)  # Make room for the shared legend
+
+    # Horizontal separator between panel a and panels b/c
+    fig.canvas.draw()
+    y_sep = ax_a.get_position().y0 * 0.94 + ax_b.get_position().y1 * 0.08
+    fig.add_artist(Line2D(
+        [0.125, 0.9], [y_sep, y_sep],
+        transform=fig.transFigure,
+        color="#CCCCCC", linewidth=1.0, solid_capstyle="butt",
+    ))
+
+    plt.savefig(OUTPUT_PATH, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    print(f"Saved: {OUTPUT_PATH}")
+    plt.close()
+
+
+if __name__ == "__main__":
+    main()

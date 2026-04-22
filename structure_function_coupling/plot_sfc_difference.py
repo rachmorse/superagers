@@ -196,7 +196,7 @@ def visualize_coupling(
         cbar = fig.colorbar(sm, cax=cbar_ax, format="%.2f")
         cbar.set_ticks([vmin, 0, vmax])
         cbar.set_label(colorbar_label, fontsize=25, labelpad=16)
-        cbar.ax.tick_params(labelsize=23)
+        cbar.ax.tick_params(labelsize=18)
 
     parts = [group_name] + ([f"ses-{ses}"] if ses else []) + ([file_suffix] if file_suffix else [])
     combined_path = output_path / f"{'_'.join(parts)}.png"
