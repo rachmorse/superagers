@@ -216,8 +216,16 @@ hdr_row <- function(label) {
        `Marginal r²` = "", `Conditional r²` = "")
 }
 
+# Section type row (model description label, styled differently from hdr_row)
+type_row <- function(label) {
+  list(Region = label, `Coefficient (95% CI)` = "",
+       `p-value` = "", pFDR = "",
+       `Marginal r²` = "", `Conditional r²` = "")
+}
+
 tbl3 <- bind_rows(
   # ── Superager status (LME) ──────────────────────────────────────────────
+  type_row("Repeated measures linear mixed effects analyses"),
   hdr_row("Superager status"),
   lme_row("Global SFC",      sfc_superager_weighted, sfc_fdr_results, "sfc_weighted_mean"),
   lme_row("Heteromodal SFC", sfc_superager_hmod,     sfc_fdr_results, "sfc_hmod"),
@@ -227,7 +235,8 @@ tbl3 <- bind_rows(
   lme_row("Sensory SFC",     sfc_superager_sensory,  sfc_fdr_results, "sfc_sensory"),
 
   # ── Superager status — annual change (LM) ───────────────────────────────
-  hdr_row("Superager status \u2014 annual change"),
+  type_row("Linear regression analyses — annual change"),
+  hdr_row("Superager status"),
   lm_row("Global SFC annual change",      sfc_superager_weighted_slope, sfc_slope_fdr_results, "sfc_weighted_mean_slope"),
   lm_row("Heteromodal SFC annual change", sfc_superager_hmod_slope,     sfc_slope_fdr_results, "sfc_hmod_slope"),
   lm_row("DMN SFC annual change",         sfc_superager_dmn_slope,      sfc_slope_fdr_results, "sfc_dmn_slope"),
@@ -236,6 +245,7 @@ tbl3 <- bind_rows(
   lm_row("Sensory SFC annual change",     sfc_superager_sensory_slope,  sfc_slope_fdr_results, "sfc_sensory_slope"),
 
   # ── Episodic memory (LME) ───────────────────────────────────────────────
+  type_row("Repeated measures linear mixed effects analyses"),
   hdr_row("Episodic memory"),
   lme_row("Global SFC",      ravlt_sfc_weighted, ravlt_fdr_results, "ravlt_sfc_weighted_mean"),
   lme_row("Heteromodal SFC", ravlt_sfc_hmod,     ravlt_fdr_results, "ravlt_sfc_hmod"),
@@ -245,7 +255,8 @@ tbl3 <- bind_rows(
   lme_row("Sensory SFC",     ravlt_sfc_sensory,  ravlt_fdr_results, "ravlt_sfc_sensory"),
 
   # ── Episodic memory — annual change (LME) ───────────────────────────────
-  hdr_row("Episodic memory \u2014 annual change"),
+  type_row("Repeated measures linear mixed effects analyses — annual change"),
+  hdr_row("Episodic memory"),
   lme_row("Global SFC annual change",      ravlt_sfc_weighted_slope, ravlt_slope_fdr_results, "ravlt_sfc_weighted_mean_slope"),
   lme_row("Heteromodal SFC annual change", ravlt_sfc_hmod_slope,     ravlt_slope_fdr_results, "ravlt_sfc_hmod_slope"),
   lme_row("DMN SFC annual change",         ravlt_sfc_dmn_slope,      ravlt_slope_fdr_results, "ravlt_sfc_dmn_slope"),
@@ -254,17 +265,25 @@ tbl3 <- bind_rows(
   lme_row("Sensory SFC annual change",     ravlt_sfc_sensory_slope,  ravlt_slope_fdr_results, "ravlt_sfc_sensory_slope")
 )
 
-# Identify section header rows (empty Coefficient cell)
-hdr_idx <- which(tbl3$`Coefficient (95% CI)` == "")
+# Identify type rows (model description) and section header rows
+type_labels <- c(
+  "Repeated measures linear mixed effects analyses",
+  "Linear regression analyses — annual change",
+  "Repeated measures linear mixed effects analyses — annual change"
+)
+type_idx <- which(tbl3$Region %in% type_labels)
+hdr_idx  <- setdiff(which(tbl3$`Coefficient (95% CI)` == ""), type_idx)
 
 ft <- flextable(tbl3) |>
   bold(part = "header") |>
   bold(i = hdr_idx) |>
   bg(i = hdr_idx, bg = "#F0F0F0") |>
+  italic(i = type_idx) |>
+  bg(i = type_idx, bg = "#E8EEF4") |>
   autofit()
 
-# Merge each header row across all columns so the label spans the full width
-for (r in hdr_idx) {
+# Merge both type and header rows across all columns so labels span the full width
+for (r in c(type_idx, hdr_idx)) {
   ft <- merge_at(ft, i = r, j = 1:6)
 }
 
