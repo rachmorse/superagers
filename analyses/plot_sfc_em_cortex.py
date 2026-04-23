@@ -176,6 +176,12 @@ def plot_forest(
     ax.axvline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.7)
     ax.set_yticks(ys)
     ax.set_yticklabels(NETWORKS, fontsize=14)
+    ax.text(
+        -0.02, 1.02, "SFC",
+        transform=ax.transAxes,
+        va="bottom", ha="right", fontsize=14,
+        clip_on=False,
+    )
     ax.set_xlabel(xlabel, fontsize=14)
     ax.tick_params(axis='x', labelsize=14) 
     ax.set_title(title, fontsize=16, pad=8)
