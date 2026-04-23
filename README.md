@@ -58,7 +58,6 @@ This repository contains the analysis scripts from our study on superagers, whic
 - **Scripts:**
     - `01_convert_to_individual_matrix.py`: Converts functional and structural connectivity data into individual 214x214 matrices. 
     - `02_structural_functional_coupling.py`: Computes and visualizes SFC. 
-    - `plot_sfc_difference.py`: Averages superager vs. non-superager SFC difference maps and saves a cortical surface figure.
     - `plot_group_connectivity_figure.py`: Plots a single subject's structural connectivity matrix, functional connectivity matrix, and SFC vector.
 
 ### elastic_net
@@ -77,4 +76,5 @@ This repository contains the analysis scripts from our study on superagers, whic
 - **Scripts:**  
     - `analyses.R`: Runs full results pipeline: cognitive composite construction, mixed-effects and linear models for cognition, episodic memory, and SFC, and FDR correction.
     - `results.Rmd`: R Markdown document that sources `analyses.R` and auto-fills the results section with model outputs.
-    - `plot_sfc_em_cortex.py`: Generates a figure with the cortical surface map from `plot_sfc_difference.py` and forest plots of stats from `results.html`.
+    - `plot_sfc_difference.py`: Averages superager vs. non-superager SFC difference maps and saves a cortical/subcortical figure.
+    - `plot_sfc_em_cortex.py`: Combines the figure from `plot_sfc_difference.py` with forest plots of stats from `results.html`.
