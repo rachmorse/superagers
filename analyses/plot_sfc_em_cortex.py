@@ -12,8 +12,7 @@ from matplotlib.lines import Line2D
 import numpy as np
 
 # Import functions from plot_sfc_difference.py 
-sys.path.insert(0, str(Path(__file__).parent.parent / "structure_function_coupling"))
-from plot_sfc_difference import average_session_differences, visualize_coupling  
+from plot_sfc_difference import average_session_differences
 
 # Paths 
 SESSION_DIRS = {
@@ -27,15 +26,26 @@ OUTPUT_PATH = Path(
     "/home/rachel/Desktop/superagers/analyses/figures/em_sfc_cortex_plot.png"
 )
 
-# Brain panel options 
+# Brain panel options
 LABEL_TYPE      = "long" # for superager status
 VMIN            = -0.03
 VMAX            =  0.03
-COLORBAR_LABEL  = " "
+ASEG_PATH = Path(
+    "/home/rachel/freesurfer/freesurfer/subjects/cvs_avg35_inMNI152/mri/aseg.mgz"
+)
+ASEG_LABEL_MAP = {
+    "left thalamus":     10, "left caudate":     11, "left putamen":    12,
+    "left pallidum":     13, "left hippocampus": 17, "left amygdala":   18,
+    "left accumbens":    26,
+    "right thalamus":    49, "right caudate":    50, "right putamen":   51,
+    "right pallidum":    52, "right hippocampus":53, "right amygdala":  54,
+    "right accumbens":   58,
+}
 
+# For pulling the stats in
 RESULTS_HTML = Path(__file__).parent.parent / "analyses" / "results.html"
 
-# Network display order (bottom → top in forest plot)
+# Network display order (bottom -> top in forest plot)
 NETWORKS = ["Sensory", "SN", "ECN", "DMN", "Heteromodal", "Global"]
 
 # Maps Table 3 region labels (from results.html) to plot keys
@@ -177,9 +187,9 @@ def plot_forest(
 def main():
     """Generate and save the figure.
 
-    Calls the other script to make the averaged brain surface 
-    map (Panel A), loads the resulting PNG, then assembles it 
-    with two forest plots (Panels B and C) into a single figure.
+    Calls average_session_differences to produce the averaged brain 
+    map (Panel A), loads the resulting PNG, then assembles it with two
+    forest plots (Panels B and C) into a single figure.
     """
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
@@ -190,21 +200,25 @@ def main():
         label_type=LABEL_TYPE,
         vmin=VMIN,
         vmax=VMAX,
-        colorbar_label=COLORBAR_LABEL,
+        colorbar_label=None,
+        include_subcortical=True,
+        aseg_path=ASEG_PATH,
+        aseg_label_map=ASEG_LABEL_MAP,
     )
     plt.close("all")
 
     brain_png = AVERAGE_OUTPUT_DIR / "visualizations" / "diff_superagers_average.png"
     brain_img = imread(str(brain_png))
 
-    # Assemble combined figure 
+    # Assemble combined figure.
     # Scale brain panel to a fixed width, derive height from aspect ratio.
-    fig_w      = 12.5
-    brain_ar   = brain_img.shape[0] / brain_img.shape[1]   # H / W
-    brain_h    = fig_w * brain_ar
-    forest_h   = 2.4
-    v_gap      = 1 # vertical gap between brain and forest panels
-    fig_h      = brain_h + v_gap + forest_h
+    fig_w       = 12.5
+    brain_scale = 0.75  # fraction of natural height; reduce to shrink panel A
+    brain_ar    = brain_img.shape[0] / brain_img.shape[1]   # H / W
+    brain_h     = fig_w * brain_ar * brain_scale
+    forest_h    = 2.4
+    v_gap       = 1.0  # vertical gap between brain and forest panels
+    fig_h       = brain_h + v_gap + forest_h
 
     fig = plt.figure(figsize=(fig_w, fig_h))
     gs  = gridspec.GridSpec(
@@ -261,16 +275,7 @@ def main():
         bbox_to_anchor=(0.5, 0.02)
     )
 
-    plt.subplots_adjust(bottom=0.15)  # Make room for the shared legend
-
-    # Horizontal separator between panel a and panels b/c
-    fig.canvas.draw()
-    y_sep = ax_a.get_position().y0 * 0.94 + ax_b.get_position().y1 * 0.08
-    fig.add_artist(Line2D(
-        [0.125, 0.9], [y_sep, y_sep],
-        transform=fig.transFigure,
-        color="#CCCCCC", linewidth=1.0, solid_capstyle="butt",
-    ))
+    plt.subplots_adjust(bottom=0.1)  # Make room for the shared legend
 
     plt.savefig(OUTPUT_PATH, dpi=300, bbox_inches="tight", pad_inches=0.1)
     print(f"Saved: {OUTPUT_PATH}")
