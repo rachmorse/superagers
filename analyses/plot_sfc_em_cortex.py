@@ -160,7 +160,7 @@ def plot_forest(
         ax.text(
             1.03, i, pfdr_txt,
             transform=trans,
-            va="center", ha="left", fontsize=9,
+            va="center", ha="left", fontsize=14,
             color="#444444",
             clip_on=False,
         )
@@ -168,16 +168,17 @@ def plot_forest(
     ax.text(
         1.03, len(NETWORKS) - 0.5, "pFDR",
         transform=trans,
-        va="bottom", ha="left", fontsize=10.5,
+        va="bottom", ha="left", fontsize=14,
         color="#444444", 
         clip_on=False,
     )
 
     ax.axvline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.7)
     ax.set_yticks(ys)
-    ax.set_yticklabels(NETWORKS, fontsize=10.5)
-    ax.set_xlabel(xlabel, fontsize=10.5)
-    ax.set_title(title, fontsize=12, pad=8)
+    ax.set_yticklabels(NETWORKS, fontsize=14)
+    ax.set_xlabel(xlabel, fontsize=14)
+    ax.tick_params(axis='x', labelsize=14) 
+    ax.set_title(title, fontsize=16, pad=8)
     ax.set_xlim(xlim)
     ax.set_ylim(-0.6, len(NETWORKS) - 0.4)
     ax.spines["top"].set_visible(False)
@@ -193,7 +194,7 @@ def main():
     """
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    # Panel A: generate brain surface map 
+    # Panel A: generate brain surface map (colorbar added separately below)
     print("Generating brain surface map…")
     average_session_differences(
         session_dirs=SESSION_DIRS,
@@ -211,36 +212,59 @@ def main():
     brain_img = imread(str(brain_png))
 
     # Assemble combined figure.
-    # Scale brain panel to a fixed width, derive height from aspect ratio.
-    fig_w       = 12.5
-    brain_scale = 0.75  # fraction of natural height; reduce to shrink panel A
-    brain_ar    = brain_img.shape[0] / brain_img.shape[1]   # H / W
-    brain_h     = fig_w * brain_ar * brain_scale
-    forest_h    = 2.4
-    v_gap       = 1.0  # vertical gap between brain and forest panels
-    fig_h       = brain_h + v_gap + forest_h
+    # Left column: brain image + horizontal colorbar below.
+    # Right column: forest plots B and C stacked.
+    brain_ar     = brain_img.shape[0] / brain_img.shape[1]  # H / W
+    brain_scale  = 0.85 # factor to scale down the brain image column width
+    forest_h     = 2.5   # height of each forest panel 
+    forest_vgap  = 1.4   # vertical gap between panels B and C
+    fig_h        = 2 * forest_h + forest_vgap
+    brain_col_w  = (fig_h / brain_ar) * brain_scale
+    forest_col_w = 6.0
+    fig_w        = brain_col_w + forest_col_w + 5.5
 
     fig = plt.figure(figsize=(fig_w, fig_h))
-    gs  = gridspec.GridSpec(
-        2, 2,
+
+    gs_outer = gridspec.GridSpec(
+        1, 2,
         figure=fig,
-        height_ratios=[brain_h, forest_h],
-        hspace=v_gap / fig_h,
-        wspace=0.4,
+        width_ratios=[brain_col_w, forest_col_w],
+        wspace=0.08,
+    )
+    gs_left = gridspec.GridSpecFromSubplotSpec(
+        1, 1,
+        subplot_spec=gs_outer[0],
+    )
+    gs_right = gridspec.GridSpecFromSubplotSpec(
+        2, 1,
+        subplot_spec=gs_outer[1],
+        height_ratios=[1, 1],
+        hspace=forest_vgap / forest_h,
     )
 
     # Panel A
-    ax_a = fig.add_subplot(gs[0, :])
+    ax_a = fig.add_subplot(gs_left[0])
     ax_a.imshow(brain_img, aspect="equal")
+    ax_a.set_aspect("equal", anchor="W")
     ax_a.axis("off")
     ax_a.set_title(
         "A)  Structure-function coupling difference between superagers and non-superagers",
-        fontsize=12, pad=8, loc="left",
+        fontsize=16, pad=8, loc="left",
     )
 
+    # Narrow horizontal colorbar inset just below the brain axes
+    ax_cbar = ax_a.inset_axes([0.4, -0.07, 0.3, 0.04])
+    norm = plt.Normalize(vmin=VMIN, vmax=VMAX)
+    sm = plt.cm.ScalarMappable(cmap=plt.get_cmap("RdBu_r"), norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, cax=ax_cbar, orientation="horizontal", format="%.2f")
+    cbar.set_ticks([VMIN, 0, VMAX])
+    cbar.set_label("Structure-function coupling difference", fontsize=14, labelpad=6)
+    cbar.ax.tick_params(labelsize=14)
+
     # Panels B and C
-    ax_b = fig.add_subplot(gs[1, 0])
-    ax_c = fig.add_subplot(gs[1, 1])
+    ax_b = fig.add_subplot(gs_right[0])
+    ax_c = fig.add_subplot(gs_right[1])
 
     plot_forest(
         ax_b, SA_STATS,
@@ -257,7 +281,7 @@ def main():
         color="#C1440E",
     )
 
-    # Add a single shared legend at the bottom
+    # Legend below panel C
     legend_elements = [
         Line2D([0], [0], marker="o", color="w",
                markerfacecolor="#555555", markeredgecolor="#555555",
@@ -266,16 +290,14 @@ def main():
                markerfacecolor="white", markeredgecolor="#555555",
                markeredgewidth=1.4, markersize=8, label="n.s."),
     ]
-    fig.legend(
-        handles=legend_elements, 
-        fontsize=10.5, 
-        loc="lower center", 
-        ncol=2, 
-        frameon=False, 
-        bbox_to_anchor=(0.5, 0.02)
+    ax_c.legend(
+        handles=legend_elements,
+        fontsize=14,
+        loc="upper center",
+        ncol=2,
+        frameon=False,
+        bbox_to_anchor=(0.5, -0.28),
     )
-
-    plt.subplots_adjust(bottom=0.1)  # Make room for the shared legend
 
     plt.savefig(OUTPUT_PATH, dpi=300, bbox_inches="tight", pad_inches=0.1)
     print(f"Saved: {OUTPUT_PATH}")
