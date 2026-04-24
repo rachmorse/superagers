@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 import re
-import sys
 from pathlib import Path
-
 from bs4 import BeautifulSoup
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -14,53 +12,9 @@ import numpy as np
 # Import functions from plot_sfc_difference.py 
 from plot_sfc_difference import average_session_differences
 
-# Paths 
-SESSION_DIRS = {
-    "01": Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-01/group_connectivity_matrices"),
-    "02": Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-02/group_connectivity_matrices"),
-}
-AVERAGE_OUTPUT_DIR = Path(
-    "/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/average_across_sessions"
-)
-OUTPUT_PATH = Path(
-    "/home/rachel/Desktop/superagers/analyses/figures/em_sfc_cortex_plot.png"
-)
 
-# Brain panel options
-LABEL_TYPE      = "long" # for superager status
-VMIN            = -0.03
-VMAX            =  0.03
-ASEG_PATH = Path(
-    "/home/rachel/freesurfer/freesurfer/subjects/cvs_avg35_inMNI152/mri/aseg.mgz"
-)
-ASEG_LABEL_MAP = {
-    "left thalamus":     10, "left caudate":     11, "left putamen":    12,
-    "left pallidum":     13, "left hippocampus": 17, "left amygdala":   18,
-    "left accumbens":    26,
-    "right thalamus":    49, "right caudate":    50, "right putamen":   51,
-    "right pallidum":    52, "right hippocampus":53, "right amygdala":  54,
-    "right accumbens":   58,
-}
-
-# For pulling the stats in
-RESULTS_HTML = Path(__file__).parent.parent / "analyses" / "results.html"
-
-# Network display order (bottom -> top in forest plot)
-NETWORKS = ["Sensory", "SN", "ECN", "DMN", "Heteromodal", "Global"]
-
-# Maps Table 3 region labels (from results.html) to plot keys
-_REGION_MAP = {
-    "Global SFC":      "Global",
-    "Heteromodal SFC": "Heteromodal",
-    "DMN SFC":         "DMN",
-    "ECN SFC":         "ECN",
-    "SN SFC":          "SN",
-    "Sensory SFC":     "Sensory",
-}
-
-
-def load_forest_stats(html_path: Path):
-    """Read SA_STATS and EM_STATS from the LME rows of Table 3 in results.html.
+def load_forest_stats(html_path: Path, region_map: dict):
+    """Read sa_stats and em_stats from the LME rows of Table 3 in results.html.
 
     Returns two dicts mapping network name (beta, ci_lo, ci_hi, p, p_fdr).
     Parses the flextable HTML directly so the figure stays in sync with the
@@ -68,7 +22,7 @@ def load_forest_stats(html_path: Path):
     """
     soup = BeautifulSoup(html_path.read_text(), "html.parser")
     sa_stats, em_stats = {}, {}
-    section  = None   # "sa" | "em"
+    section  = None   # "sa" superager | "em" episodic memory
     in_slope = False
 
     for row in soup.find_all("tr"):
@@ -90,20 +44,20 @@ def load_forest_stats(html_path: Path):
                 section = "em"
             continue
 
-        # Data rows: skip if wrong section or in a slope sub-section
-        if len(cells) < 4 or text not in _REGION_MAP or in_slope or section is None:
+        # Data rows: skip if wrong section or in a slope / annual change results sub-section
+        if len(cells) < 4 or text not in region_map or in_slope or section is None:
             continue
 
-        coef_ci  = cells[1].get_text(strip=True)   # "0.2224 (0.0053-0.4395)"
-        p_raw    = cells[2].get_text(strip=True)    # "0.0449*"
-        pfdr_raw = cells[3].get_text(strip=True)    # "0.0606"
+        coef_ci  = cells[1].get_text(strip=True)   # 0.2224 (0.0053-0.4395)
+        p_raw    = cells[2].get_text(strip=True)    # 0.0449*
+        pfdr_raw = cells[3].get_text(strip=True)    # 0.0606
 
         m = re.match(r"(-?[\d.]+)\s*\((-?[\d.]+)-(-?[\d.]+)\)", coef_ci)
         beta, ci_lo, ci_hi = float(m.group(1)), float(m.group(2)), float(m.group(3))
         p    = float(re.sub(r"\*+", "", p_raw))
         pfdr = float(re.sub(r"\*+", "", pfdr_raw))
 
-        net = _REGION_MAP[text]
+        net = region_map[text]
         if section == "sa":
             sa_stats[net] = (beta, ci_lo, ci_hi, p, pfdr)
         else:
@@ -112,10 +66,7 @@ def load_forest_stats(html_path: Path):
     return sa_stats, em_stats
 
 
-SA_STATS, EM_STATS = load_forest_stats(RESULTS_HTML)
-
-
-# Forest plot for panel B and C 
+# Forest plot for panel B and C
 def plot_forest(
     ax: plt.Axes,
     stats: dict,
@@ -123,13 +74,9 @@ def plot_forest(
     xlabel: str,
     xlim: tuple,
     color: str,
+    networks: list,
 ) -> None:
     """Draw a horizontal forest plot of network-level LME coefficients.
-
-    Dots are filled for uncorrected significant results (p < .05) and open 
-    (white fill) for non-significant results. FDR-surviving results are 
-    annotated in bold. Networks are drawn in the order defined by the 
-    module-level NETWORKS list (bottom → top).
 
     Args:
         ax: Axes to draw on.
@@ -138,16 +85,19 @@ def plot_forest(
         xlabel: x-axis label.
         xlim: (xmin, xmax) axis limits; should leave room for pFDR annotations.
         color: Hex color string for the markers and error bars.
+        networks: Ordered list of network names.
     """
-    ys    = np.arange(len(NETWORKS))
+    ys    = np.arange(len(networks))
+    # pFDR annotations at a fixed distance right of the plot 
     trans = transforms.blended_transform_factory(ax.transAxes, ax.transData)
 
-    for i, net in enumerate(NETWORKS):
+    for i, net in enumerate(networks):
         b, lo, hi, p, pfdr = stats[net]
         fdr_sig = pfdr < 0.05
         nom_sig = p    < 0.05
-        face    = color if nom_sig else "white"
+        face    = color if nom_sig else "white"  # filled = p < .05, open = n.s.
 
+        # Horizontal error bar with centre dot at beta, lines to CI bounds
         ax.errorbar(
             b, i,
             xerr=[[b - lo], [hi - b]],
@@ -156,6 +106,7 @@ def plot_forest(
             markeredgewidth=1.4, markersize=8,
             capsize=3, elinewidth=1.2, linewidth=1.2,
         )
+        # Format pFDR with asterisk if significant, <.001 if very small
         pfdr_txt = "<.001*" if pfdr < 0.001 else (f"{pfdr:.3f}*" if fdr_sig else f"{pfdr:.3f}")
         ax.text(
             1.03, i, pfdr_txt,
@@ -165,17 +116,19 @@ def plot_forest(
             clip_on=False,
         )
 
+    # Column header for the pFDR annotation column
     ax.text(
-        1.03, len(NETWORKS) - 0.5, "pFDR",
+        1.03, len(networks) - 0.5, "pFDR",
         transform=trans,
         va="bottom", ha="left", fontsize=14,
-        color="#444444", 
+        color="#444444",
         clip_on=False,
     )
 
-    ax.axvline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.7)
+    ax.axvline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.7)  # null effect line
     ax.set_yticks(ys)
-    ax.set_yticklabels(NETWORKS, fontsize=14)
+    ax.set_yticklabels(networks, fontsize=14)
+    # SFC label to sit just above the y-axis tick labels
     ax.text(
         -0.02, 1.02, "SFC",
         transform=ax.transAxes,
@@ -183,10 +136,10 @@ def plot_forest(
         clip_on=False,
     )
     ax.set_xlabel(xlabel, fontsize=14)
-    ax.tick_params(axis='x', labelsize=14) 
+    ax.tick_params(axis='x', labelsize=14)
     ax.set_title(title, fontsize=16, pad=8)
     ax.set_xlim(xlim)
-    ax.set_ylim(-0.6, len(NETWORKS) - 0.4)
+    ax.set_ylim(-0.6, len(networks) - 0.4)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
@@ -194,35 +147,72 @@ def plot_forest(
 def main():
     """Generate and save the figure.
 
-    Calls average_session_differences to produce the averaged brain 
+    Calls average_session_differences to produce the averaged brain
     map (Panel A), loads the resulting PNG, then assembles it with two
     forest plots (Panels B and C) into a single figure.
     """
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    session_dirs = {
+        "01": Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-01/group_connectivity_matrices"),
+        "02": Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-02/group_connectivity_matrices"),
+    }
+    average_output_dir = Path(
+        "/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/average_across_sessions"
+    )
+    output_path = Path(
+        "/home/rachel/Desktop/superagers/analyses/figures/em_sfc_cortex_plot.png"
+    )
+    label_type = "long"
+    vmin       = -0.03
+    vmax       =  0.03
+    aseg_path  = Path(
+        "/home/rachel/freesurfer/freesurfer/subjects/cvs_avg35_inMNI152/mri/aseg.mgz"
+    )
+    aseg_label_map = {
+        "left thalamus":     10, "left caudate":     11, "left putamen":    12,
+        "left pallidum":     13, "left hippocampus": 17, "left amygdala":   18,
+        "left accumbens":    26,
+        "right thalamus":    49, "right caudate":    50, "right putamen":   51,
+        "right pallidum":    52, "right hippocampus":53, "right amygdala":  54,
+        "right accumbens":   58,
+    }
+    results_html = Path(__file__).parent.parent / "analyses" / "results.html"
+    networks = ["Sensory", "SN", "ECN", "DMN", "Heteromodal", "Global"]
+    region_map = {
+        "Global SFC":      "Global",
+        "Heteromodal SFC": "Heteromodal",
+        "DMN SFC":         "DMN",
+        "ECN SFC":         "ECN",
+        "SN SFC":          "SN",
+        "Sensory SFC":     "Sensory",
+    }
+
+    sa_stats, em_stats = load_forest_stats(results_html, region_map)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Panel A: generate brain surface map (colorbar added separately below)
     print("Generating brain surface map…")
     average_session_differences(
-        session_dirs=SESSION_DIRS,
-        label_type=LABEL_TYPE,
-        vmin=VMIN,
-        vmax=VMAX,
+        session_dirs=session_dirs,
+        label_type=label_type,
+        vmin=vmin,
+        vmax=vmax,
         colorbar_label=None,
         include_subcortical=True,
-        aseg_path=ASEG_PATH,
-        aseg_label_map=ASEG_LABEL_MAP,
+        aseg_path=aseg_path,
+        aseg_label_map=aseg_label_map,
     )
     plt.close("all")
 
-    brain_png = AVERAGE_OUTPUT_DIR / "visualizations" / "diff_superagers_average.png"
+    brain_png = average_output_dir / "visualizations" / "diff_superagers_average.png"
     brain_img = imread(str(brain_png))
 
-    # Assemble combined figure.
+    # Assemble combined figure
     # Left column: brain image + horizontal colorbar below.
     # Right column: forest plots B and C stacked.
     brain_ar     = brain_img.shape[0] / brain_img.shape[1]  # H / W
-    brain_scale  = 0.85 # factor to scale down the brain image column width
-    forest_h     = 2.5   # height of each forest panel 
+    brain_scale  = 0.85  # factor to scale down the brain image column width
+    forest_h     = 2.5   # height of each forest panel
     forest_vgap  = 1.4   # vertical gap between panels B and C
     fig_h        = 2 * forest_h + forest_vgap
     brain_col_w  = (fig_h / brain_ar) * brain_scale
@@ -231,6 +221,8 @@ def main():
 
     fig = plt.figure(figsize=(fig_w, fig_h))
 
+    # Set up figure layout with two columns (brain, forest)
+    # with the forest column split into two rows (B and C)
     gs_outer = gridspec.GridSpec(
         1, 2,
         figure=fig,
@@ -258,13 +250,13 @@ def main():
         fontsize=16, pad=8, loc="left",
     )
 
-    # Narrow horizontal colorbar inset just below the brain axes
+    # Horizontal colorbar just below the brain panel
     ax_cbar = ax_a.inset_axes([0.4, -0.07, 0.3, 0.04])
-    norm = plt.Normalize(vmin=VMIN, vmax=VMAX)
+    norm = plt.Normalize(vmin=vmin, vmax=vmax)
     sm = plt.cm.ScalarMappable(cmap=plt.get_cmap("RdBu_r"), norm=norm)
     sm.set_array([])
     cbar = fig.colorbar(sm, cax=ax_cbar, orientation="horizontal", format="%.2f")
-    cbar.set_ticks([VMIN, 0, VMAX])
+    cbar.set_ticks([vmin, 0, vmax])
     cbar.set_label("Structure-function coupling difference", fontsize=14, labelpad=6)
     cbar.ax.tick_params(labelsize=14)
 
@@ -273,18 +265,20 @@ def main():
     ax_c = fig.add_subplot(gs_right[1])
 
     plot_forest(
-        ax_b, SA_STATS,
+        ax_b, sa_stats,
         title="B)  Superager status",
         xlabel="Standardised β (95% CI)",
         xlim=(-0.15, 0.53),
         color="#2E6FA3",
+        networks=networks,
     )
     plot_forest(
-        ax_c, EM_STATS,
+        ax_c, em_stats,
         title="C)  Episodic memory",
         xlabel="Standardised β (95% CI)",
         xlim=(-0.05, 0.18),
         color="#C1440E",
+        networks=networks,
     )
 
     # Legend below panel C
@@ -305,8 +299,8 @@ def main():
         bbox_to_anchor=(0.5, -0.28),
     )
 
-    plt.savefig(OUTPUT_PATH, dpi=300, bbox_inches="tight", pad_inches=0.1)
-    print(f"Saved: {OUTPUT_PATH}")
+    plt.savefig(output_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    print(f"Saved: {output_path}")
     plt.close()
 
 
