@@ -72,11 +72,11 @@ def visualize_coupling(
             range around zero.
         colorbar_label: Label for the colorbar. Pass None to omit the colorbar.
         network_filter: Optional list of network name strings. When provided,
-            only ROIs whose names contain one of these strings are coloured.
-        include_subcortical: If True, render subcortical ROIs from the ASEG
+            only ROIs whose names contain one of these strings are colored.
+        include_subcortical: If True, render subcortical ROIs from the aseg
             atlas as coronal and axial slices alongside the cortical views.
-        aseg_path: Path to the ASEG atlas NIfTI file.
-        aseg_label_map: Dictionary mapping lowercase region names to ASEG integer labels.
+        aseg_path: Path to the aseg atlas NIfTI file.
+        aseg_label_map: Dictionary mapping lowercase region names to aseg integer labels.
 
     Returns:
         matplotlib.figure.Figure: The assembled figure.
@@ -188,12 +188,12 @@ def visualize_coupling(
             region = roi_name.split(": ", 1)[-1].lower()
             aseg_val = aseg_label_map.get(region)
             if aseg_val is None:
-                print(f"  Warning: no ASEG label for '{roi_name}'")
+                print(f"  Warning: no aseg label for '{roi_name}'")
                 continue
             values_vol[aseg_data == aseg_val] = value
 
         subcort_nii = nli_image.smooth_img(
-            nib.Nifti1Image(values_vol, aseg_img.affine), fwhm=0.3
+            nib.Nifti1Image(values_vol, aseg_img.affine), fwhm=0.3 # smoothing
         )
         for mode, cut, label in [("y", [0], "coronal"), ("z", [0], "axial")]:
             p = temp_output_path / f"{group_name}_subcortical_{label}.png"
@@ -297,11 +297,11 @@ def visualize_coupling(
             ax_s.imshow(arr)
             ax_s.axis("off")
 
+    # Add colorbar
     if colorbar_label is not None:
         norm = plt.Normalize(vmin=vmin, vmax=vmax)
         sm = plt.cm.ScalarMappable(cmap=cold_hot_cmap, norm=norm)
         sm.set_array([])
-        # Place a narrow colorbar strip, leaving room for the label to the right
         cbar_left = (left_col_w + (horiz_gap_in + right_col_w if has_subcort else 0)) / fig_w_in + 0.01
         cbar_ax = fig.add_axes([cbar_left, 0.2, 0.025, 0.6])
         cbar = fig.colorbar(sm, cax=cbar_ax, format="%.2f")
@@ -340,8 +340,8 @@ def average_session_differences(
     Args:
         session_dirs: Dictionary mapping session identifiers (e.g. "01",
             "02") to the Path of that session's group connectivity directory.
-        label_type: Superager labelling scheme. One of "long" (longitudinal),
-            "tp1" (timepoint 1 only), or "tp2" (timepoint 2 only).
+        label_type: Superager labeling scheme where "long" is the longitudinally
+            defined superagers.
         vmin: Minimum value for colormap scaling. If None, inferred
             symmetrically from the data.
         vmax: Maximum value for colormap scaling. If None, inferred
@@ -353,8 +353,8 @@ def average_session_differences(
             the network subset (e.g. "dmn"). Defaults to no suffix.
         include_subcortical: If True, subcortical ROIs are rendered alongside
             the cortical surface maps.
-        aseg_path: Path to the ASEG atlas NIfTI file.
-        aseg_label_map: Dictionary mapping lowercase region names to ASEG integer labels.
+        aseg_path: Path to the aseg atlas NIfTI file.
+        aseg_label_map: Dictionary mapping lowercase region names to aseg integer labels.
     """
     diff_series = []
     for ses, session_dir in session_dirs.items():
@@ -405,10 +405,25 @@ if __name__ == "__main__":
         "02": Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-02/group_connectivity_matrices"),
     }
 
+    aseg_path = Path(
+        "/home/rachel/freesurfer/freesurfer/subjects/cvs_avg35_inMNI152/mri/aseg.mgz"
+    )
+    aseg_label_map = {
+        "left thalamus":     10, "left caudate":     11, "left putamen":    12,
+        "left pallidum":     13, "left hippocampus": 17, "left amygdala":   18,
+        "left accumbens":    26,
+        "right thalamus":    49, "right caudate":    50, "right putamen":   51,
+        "right pallidum":    52, "right hippocampus":53, "right amygdala":  54,
+        "right accumbens":   58,
+    }
+
     average_session_differences(
         session_dirs=session_dirs,
         label_type="long",
         vmin=-0.03,
         vmax=0.03,
         colorbar_label="Structure-function\ncoupling difference",
+        include_subcortical=True,
+        aseg_path=aseg_path,
+        aseg_label_map=aseg_label_map,
     )
