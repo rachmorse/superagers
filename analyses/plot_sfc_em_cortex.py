@@ -9,7 +9,7 @@ from matplotlib.image import imread
 from matplotlib.lines import Line2D
 import numpy as np
 
-# Import functions from plot_sfc_difference.py 
+# Import function from plot_sfc_difference.py 
 from plot_sfc_difference import average_session_differences
 
 
@@ -164,16 +164,21 @@ def main():
     label_type = "long"
     vmin       = -0.03
     vmax       =  0.03
-    aseg_path  = Path(
-        "/home/rachel/freesurfer/freesurfer/subjects/cvs_avg35_inMNI152/mri/aseg.mgz"
-    )
-    aseg_label_map = {
-        "left thalamus":     10, "left caudate":     11, "left putamen":    12,
-        "left pallidum":     13, "left hippocampus": 17, "left amygdala":   18,
-        "left accumbens":    26,
-        "right thalamus":    49, "right caudate":    50, "right putamen":   51,
-        "right pallidum":    52, "right hippocampus":53, "right amygdala":  54,
-        "right accumbens":   58,
+    subcortical_name_map = {
+        "left hippocampus":  "Left-Hippocampus",
+        "left amygdala":     "Left-Amygdala",
+        "left pallidum":     "Left-Pallidum",
+        "left putamen":      "Left-Putamen",
+        "left caudate":      "Left-Caudate",
+        "left accumbens":    "Left-Accumbens-area",
+        "left thalamus":     "Left-Thalamus",
+        "right hippocampus": "Right-Hippocampus",
+        "right amygdala":    "Right-Amygdala",
+        "right pallidum":    "Right-Pallidum",
+        "right putamen":     "Right-Putamen",
+        "right caudate":     "Right-Caudate",
+        "right accumbens":   "Right-Accumbens-area",
+        "right thalamus":    "Right-Thalamus",
     }
     results_html = Path(__file__).parent.parent / "analyses" / "results.html"
     networks = ["Sensory", "SN", "ECN", "DMN", "Heteromodal", "Global"]
@@ -199,8 +204,7 @@ def main():
         vmax=vmax,
         colorbar_label=None,
         include_subcortical=True,
-        aseg_path=aseg_path,
-        aseg_label_map=aseg_label_map,
+        subcortical_name_map=subcortical_name_map,
     )
     plt.close("all")
 

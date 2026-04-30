@@ -6,8 +6,9 @@ import matplotlib.pyplot as plt
 import nibabel as nib
 from pathlib import Path
 from matplotlib.image import imread
-from nilearn import datasets, image as nli_image, surface, plotting
+from nilearn import datasets, surface, plotting
 from nilearn.datasets import fetch_surf_fsaverage
+import yabplot as yab
 
 
 def trim_whitespace(img: np.ndarray) -> np.ndarray:
@@ -20,7 +21,7 @@ def trim_whitespace(img: np.ndarray) -> np.ndarray:
         np.ndarray: Cropped image with white borders removed.
     """
     threshold = 250 if img.dtype == np.uint8 else 0.98
-    if img.ndim == 3 and img.shape[2] == 4:
+    if img.ndim == 3 and img.shape[2] == 4:        
         # Exclude transparent pixels and opaque-white pixels (nilearn renders white bg as fully opaque)
         alpha_mask = img[:, :, 3] > 0
         color_mask = ~np.all(img[:, :, :3] >= threshold, axis=2)
@@ -37,6 +38,67 @@ def trim_whitespace(img: np.ndarray) -> np.ndarray:
     return img[rmin:rmax + 1, cmin:cmax + 1]
 
 
+def crop_colorbar(img: np.ndarray) -> np.ndarray:
+    """Remove the colorbar strip from the bottom of a yabplot image.
+
+    Args:
+        img: yabplot image array of shape (H, W, 3) or (H, W, 4).
+
+    Returns:
+        np.ndarray: Cropped image with colorbar removed.
+    """
+    threshold = 250 if img.dtype == np.uint8 else 0.98
+    row_is_white = np.mean(np.all(img[:, :, :3] >= threshold, axis=2), axis=1) > 0.9
+
+    # tail -> colorbar -> gap -> brain
+    state = "tail"
+    for r in range(img.shape[0] - 1, img.shape[0] // 2, -1):
+        if state == "tail" and not row_is_white[r]:
+            state = "colorbar"
+        elif state == "colorbar" and row_is_white[r]:
+            state = "gap"
+        elif state == "gap" and not row_is_white[r]:
+            return img[:r + 1]
+    return img
+
+
+def build_subcortical_data(diff: pd.Series, name_map: dict) -> dict:
+    """Map subcortical index entries to yabplot aseg names.
+
+    Args:
+        diff: ROI-indexed series of SFC difference values.
+        name_map: Dict mapping the lowercased region suffix (e.g.
+            'left hippocampus') to the yabplot aseg name (e.g.
+            'Left-Hippocampus').
+
+    Returns:
+        dict: Mapping of yabplot aseg region name to SFC difference value.
+    """
+    subcortical = diff[diff.index.str.contains("Subcortical")]
+    valid_yab_names = set(yab.get_atlas_regions(atlas="aseg", category="subcortical"))
+    data, unmatched, invalid = {}, [], []
+
+    for roi_name, value in subcortical.items():
+        region   = roi_name.split(": ", 1)[-1].lower()
+        yab_name = name_map.get(region)
+        if yab_name is None:
+            unmatched.append(roi_name)
+            continue
+        if yab_name not in valid_yab_names:
+            invalid.append((roi_name, yab_name))
+            continue
+        data[yab_name] = value
+
+    if unmatched:
+        print(f"  Subcortical unmatched in name_map: {unmatched}")
+    if invalid:
+        print(f"  Subcortical mapped to invalid yabplot names: {invalid}")
+        print(f"  Valid aseg names: {sorted(valid_yab_names)}")
+    if not unmatched and not invalid:
+        print(f"  {len(data)} subcortical ROIs mapped and validated.")
+    return data
+
+
 def visualize_coupling(
     coupling_file,
     group_name,
@@ -49,15 +111,15 @@ def visualize_coupling(
     colorbar_label=None,
     network_filter=None,
     include_subcortical=False,
-    aseg_path=None,
-    aseg_label_map=None,
+    subcortical_name_map=None,
 ):
     """Create a brain surface visualisation from ROI-level SFC values.
 
     Plots left lateral, left medial, right medial, and right lateral cortical
     views by projecting parcellated ROI values onto the fsaverage surface using
-    the Schaefer 200-ROI atlas. When include_subcortical is True, coronal and
-    axial subcortical slices are added in a right-hand column.
+    the Schaefer 200-ROI atlas. When include_subcortical is True, anterior and
+    superior subcortical views are rendered with yabplot and added in a
+    right-hand column.
 
     Args:
         coupling_file: Directory containing {group_name}.csv.
@@ -73,18 +135,17 @@ def visualize_coupling(
         colorbar_label: Label for the colorbar. Pass None to omit the colorbar.
         network_filter: Optional list of network name strings. When provided,
             only ROIs whose names contain one of these strings are colored.
-        include_subcortical: If True, render subcortical ROIs from the aseg
-            atlas as coronal and axial slices alongside the cortical views.
-        aseg_path: Path to the aseg atlas NIfTI file.
-        aseg_label_map: Dictionary mapping lowercase region names to aseg integer labels.
+        include_subcortical: If True, render subcortical ROIs with yabplot
+            alongside the cortical views.
+        subcortical_name_map: Dict mapping lowercase region name (e.g.
+            'left hippocampus') to yabplot aseg name (e.g. 'Left-Hippocampus').
 
     Returns:
         matplotlib.figure.Figure: The assembled figure.
     """
     coupling_csv = Path(coupling_file) / f"{group_name}.csv"
-    coupling_df = pd.read_csv(coupling_csv, index_col=0)
-    subcortical_df = coupling_df[coupling_df.index.str.contains("Subcortical")]
-    coupling_df = coupling_df[~coupling_df.index.str.contains("Subcortical")]
+    full_series  = pd.read_csv(coupling_csv, index_col=0).iloc[:, 0]
+    coupling_df  = full_series[~full_series.index.str.contains("Subcortical")].to_frame()
 
     rho_values = coupling_df.iloc[:, 0].values
 
@@ -104,10 +165,10 @@ def visualize_coupling(
     output_path.mkdir(parents=True, exist_ok=True)
 
     fsaverage = fetch_surf_fsaverage("fsaverage5")
-    schaefer = datasets.fetch_atlas_schaefer_2018(n_rois=200, yeo_networks=7, resolution_mm=2)
+    schaefer  = datasets.fetch_atlas_schaefer_2018(n_rois=200, yeo_networks=7, resolution_mm=2)
 
-    atlas_img = nib.load(schaefer["maps"])
-    atlas_data = atlas_img.get_fdata()
+    atlas_img      = nib.load(schaefer["maps"])
+    atlas_data     = atlas_img.get_fdata()
     atlas_roi_names = schaefer["labels"]
     if isinstance(atlas_roi_names[0], bytes):
         atlas_roi_names = [label.decode("utf-8") for label in atlas_roi_names]
@@ -126,10 +187,10 @@ def visualize_coupling(
 
     coupling_img = nib.Nifti1Image(coupling_vol, atlas_img.affine, atlas_img.header)
 
-    surf_data_left = surface.vol_to_surf(coupling_img, fsaverage["pial_left"], radius=3, n_samples=5)
+    surf_data_left  = surface.vol_to_surf(coupling_img, fsaverage["pial_left"],  radius=3, n_samples=5)
     surf_data_right = surface.vol_to_surf(coupling_img, fsaverage["pial_right"], radius=3, n_samples=5)
 
-    surf_data_left[np.isclose(surf_data_left, 0)] = np.nan
+    surf_data_left[np.isclose(surf_data_left,   0)] = np.nan
     surf_data_right[np.isclose(surf_data_right, 0)] = np.nan
 
     temp_output_path = output_path / "temp"
@@ -169,83 +230,66 @@ def visualize_coupling(
 
     # Scale uniformly so the tallest brain = 3 inches tall
     max_h_px = max(images[k].shape[0] for k in row_keys)
-    scale = 3.0 / max_h_px
+    scale    = 3.0 / max_h_px
 
     brain_widths_in  = [images[k].shape[1] * scale for k in row_keys]
     brain_heights_in = [images[k].shape[0] * scale for k in row_keys]
     row_h_in = max(brain_heights_in)
-    gap_in = 0.25  # whitespace between cortical brain panels
+    gap_in   = 0.25  # whitespace between cortical brain panels
 
     # Subcortical slices 
     subcort_coronal_arr = None
-    subcort_axial_arr = None
-    if include_subcortical and not subcortical_df.empty:
-        aseg_img = nib.load(aseg_path)
-        aseg_data = aseg_img.get_fdata().astype(int)
+    subcort_axial_arr   = None
+    if include_subcortical and subcortical_name_map is not None:
+        subcortical_data = build_subcortical_data(full_series, subcortical_name_map)
 
-        values_vol = np.zeros_like(aseg_data, dtype=float)
-        for roi_name, value in zip(subcortical_df.index, subcortical_df.iloc[:, 0].values):
-            region = roi_name.split(": ", 1)[-1].lower()
-            aseg_val = aseg_label_map.get(region)
-            if aseg_val is None:
-                print(f"  Warning: no aseg label for '{roi_name}'")
-                continue
-            values_vol[aseg_data == aseg_val] = value
-
-        subcort_nii = nli_image.smooth_img(
-            nib.Nifti1Image(values_vol, aseg_img.affine), fwhm=0.3 # smoothing
+        shared_sub_kw = dict(
+            data=subcortical_data, atlas="aseg",
+            vminmax=[vmin, vmax], cmap="RdBu_r",
+            figsize=(500, 500), style="matte",
+            bmesh_color="lightgray",
+            bmesh_alpha=0.15, display_type="object",
         )
-        for mode, cut, label in [("y", [0], "coronal"), ("z", [0], "axial")]:
-            p = temp_output_path / f"{group_name}_subcortical_{label}.png"
-            display = plotting.plot_stat_map(
-                subcort_nii,
-                display_mode=mode,
-                cut_coords=cut,
-                colorbar=False,
-                vmin=vmin,
-                vmax=vmax,
-                cmap=cold_hot_cmap,
-                threshold=1e-10,
-                bg_img=datasets.load_mni152_template(),
-                black_bg=False,
-                annotate=False,
-                draw_cross=False,
-            )
-            display.savefig(str(p), dpi=300)
-            display.close()
-            if label == "coronal":
-                subcort_coronal_arr = trim_whitespace(imread(p))
-            else:
-                subcort_axial_arr = trim_whitespace(imread(p))
 
-    top_keys = ["left_lateral",  "left_medial"]
-    bot_keys = ["right_medial",  "right_lateral"]
+        subcort_cor_png = temp_output_path / f"{group_name}_subcortical_anterior.png"
+        subcort_ax_png  = temp_output_path / f"{group_name}_subcortical_superior.png"
+
+        print("  Rendering subcortical (anterior view)…")
+        yab.plot_subcortical(views=["anterior"], export_path=str(subcort_cor_png), **shared_sub_kw)
+        print("  Rendering subcortical (superior view)…")
+        yab.plot_subcortical(views=["superior"], export_path=str(subcort_ax_png),  **shared_sub_kw)
+
+        subcort_coronal_arr = trim_whitespace(crop_colorbar(imread(str(subcort_cor_png))))
+        subcort_axial_arr   = trim_whitespace(crop_colorbar(imread(str(subcort_ax_png))))
+
+    top_keys = ["left_lateral", "left_medial"]
+    bot_keys = ["right_medial", "right_lateral"]
     top_idxs = [0, 1]
     bot_idxs = [2, 3]
 
-    top_row_w = brain_widths_in[0] + gap_in + brain_widths_in[1]
-    bot_row_w = brain_widths_in[2] + gap_in + brain_widths_in[3]
+    top_row_w  = brain_widths_in[0] + gap_in + brain_widths_in[1]
+    bot_row_w  = brain_widths_in[2] + gap_in + brain_widths_in[3]
     left_col_w = max(top_row_w, bot_row_w)
 
     vert_gap_in = 0.1
-    total_h_in = 2 * row_h_in + vert_gap_in
+    total_h_in  = 2 * row_h_in + vert_gap_in
 
     def _subcort_width(arr):
         if arr is None:
             return 0.0
         return arr.shape[1] * (row_h_in / arr.shape[0])
 
-    right_col_w = max(_subcort_width(subcort_coronal_arr), _subcort_width(subcort_axial_arr))
+    right_col_w  = max(_subcort_width(subcort_coronal_arr), _subcort_width(subcort_axial_arr))
     horiz_gap_in = 0.15
-    has_subcort = right_col_w > 0
-    cbar_w_in = 3.0  # wide enough to fit a rotated label without clipping
-    fig_w_in = left_col_w + (horiz_gap_in + right_col_w if has_subcort else 0) + cbar_w_in
+    has_subcort  = right_col_w > 0
+    cbar_w_in    = 3.0
+    fig_w_in     = left_col_w + (horiz_gap_in + right_col_w if has_subcort else 0) + cbar_w_in
 
     fig = plt.figure(figsize=(fig_w_in, total_h_in))
 
     # Top cortical row
     top_y_base = (vert_gap_in + row_h_in) / total_h_in
-    x_cursor = 0.0
+    x_cursor   = 0.0
     for idx, key in zip(top_idxs, top_keys):
         bw_in, bh_in = brain_widths_in[idx], brain_heights_in[idx]
         y_off = (row_h_in - bh_in) / 2
@@ -275,19 +319,19 @@ def visualize_coupling(
         x_cursor += bw_in + gap_in
 
     # Subcortical panels in right column
-    coronal_scale = 0.75  # render coronal slightly smaller than axial
+    coronal_scale = 0.75 # render coronal slightly smaller than axial
     if has_subcort:
         subcort_x0 = (left_col_w + horiz_gap_in) / fig_w_in
         for arr, y_base_in, scale_f in [
             (subcort_coronal_arr, vert_gap_in + row_h_in, coronal_scale),
-            (subcort_axial_arr,   0.0,                    1.0),
+            (subcort_axial_arr,   0.0,                    1.1),
         ]:
             if arr is None:
                 continue
             sh_in = row_h_in * scale_f
             sw_in = arr.shape[1] * (sh_in / arr.shape[0])
-            x_off = (right_col_w - sw_in) / 2   # centre horizontally in slot
-            y_off = (row_h_in - sh_in) / 2       # centre vertically in slot
+            x_off = (right_col_w - sw_in) / 2 # centre horizontally in slot
+            y_off = (row_h_in   - sh_in) / 2 # centre vertically in slot
             ax_s = fig.add_axes([
                 subcort_x0 + x_off / fig_w_in,
                 (y_base_in + y_off) / total_h_in,
@@ -300,10 +344,10 @@ def visualize_coupling(
     # Add colorbar
     if colorbar_label is not None:
         norm = plt.Normalize(vmin=vmin, vmax=vmax)
-        sm = plt.cm.ScalarMappable(cmap=cold_hot_cmap, norm=norm)
+        sm   = plt.cm.ScalarMappable(cmap=cold_hot_cmap, norm=norm)
         sm.set_array([])
         cbar_left = (left_col_w + (horiz_gap_in + right_col_w if has_subcort else 0)) / fig_w_in + 0.01
-        cbar_ax = fig.add_axes([cbar_left, 0.2, 0.025, 0.6])
+        cbar_ax   = fig.add_axes([cbar_left, 0.2, 0.025, 0.6])
         cbar = fig.colorbar(sm, cax=cbar_ax, format="%.2f")
         cbar.set_ticks([vmin, 0, vmax])
         cbar.set_label(colorbar_label, fontsize=25, labelpad=16)
@@ -328,8 +372,7 @@ def average_session_differences(
     network_filter=None,
     network_label=None,
     include_subcortical=False,
-    aseg_path=None,
-    aseg_label_map=None,
+    subcortical_name_map=None,
 ):
     """Average difference maps across sessions and plot the result.
 
@@ -344,17 +387,16 @@ def average_session_differences(
             defined superagers.
         vmin: Minimum value for colormap scaling. If None, inferred
             symmetrically from the data.
-        vmax: Maximum value for colormap scaling. If None, inferred
-            symmetrically from the data.
+        vmax: Maximum value for colormap scaling. If None, inferred from data.
         colorbar_label: Label for the colorbar. Pass None to omit the colorbar.
         network_filter: Optional list of network name strings passed through
             to visualize_coupling.
         network_label: Short string appended to the output filename to identify
             the network subset (e.g. "dmn"). Defaults to no suffix.
-        include_subcortical: If True, subcortical ROIs are rendered alongside
-            the cortical surface maps.
-        aseg_path: Path to the aseg atlas NIfTI file.
-        aseg_label_map: Dictionary mapping lowercase region names to aseg integer labels.
+        include_subcortical: If True, subcortical ROIs are rendered with
+            yabplot alongside the cortical surface maps.
+        subcortical_name_map: Dict mapping lowercase region name to yabplot
+            aseg name, passed through to visualize_coupling.
     """
     diff_series = []
     for ses, session_dir in session_dirs.items():
@@ -379,7 +421,7 @@ def average_session_differences(
     average_output_dir.mkdir(parents=True, exist_ok=True)
 
     average_name = "diff_superagers_average"
-    average_df = pd.concat(diff_series, axis=1).mean(axis=1).to_frame(name=average_name)
+    average_df   = pd.concat(diff_series, axis=1).mean(axis=1).to_frame(name=average_name)
     average_df.to_csv(average_output_dir / f"{average_name}.csv")
 
     visualize_coupling(
@@ -394,8 +436,7 @@ def average_session_differences(
         colorbar_label=colorbar_label,
         network_filter=network_filter,
         include_subcortical=include_subcortical,
-        aseg_path=aseg_path, 
-        aseg_label_map=aseg_label_map,
+        subcortical_name_map=subcortical_name_map,
     )
 
 
@@ -405,16 +446,21 @@ if __name__ == "__main__":
         "02": Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-02/group_connectivity_matrices"),
     }
 
-    aseg_path = Path(
-        "/home/rachel/freesurfer/freesurfer/subjects/cvs_avg35_inMNI152/mri/aseg.mgz"
-    )
-    aseg_label_map = {
-        "left thalamus":     10, "left caudate":     11, "left putamen":    12,
-        "left pallidum":     13, "left hippocampus": 17, "left amygdala":   18,
-        "left accumbens":    26,
-        "right thalamus":    49, "right caudate":    50, "right putamen":   51,
-        "right pallidum":    52, "right hippocampus":53, "right amygdala":  54,
-        "right accumbens":   58,
+    subcortical_name_map = {
+        "left hippocampus":  "Left-Hippocampus",
+        "left amygdala":     "Left-Amygdala",
+        "left pallidum":     "Left-Pallidum",
+        "left putamen":      "Left-Putamen",
+        "left caudate":      "Left-Caudate",
+        "left accumbens":    "Left-Accumbens-area",
+        "left thalamus":     "Left-Thalamus",
+        "right hippocampus": "Right-Hippocampus",
+        "right amygdala":    "Right-Amygdala",
+        "right pallidum":    "Right-Pallidum",
+        "right putamen":     "Right-Putamen",
+        "right caudate":     "Right-Caudate",
+        "right accumbens":   "Right-Accumbens-area",
+        "right thalamus":    "Right-Thalamus",
     }
 
     average_session_differences(
@@ -424,6 +470,5 @@ if __name__ == "__main__":
         vmax=0.03,
         colorbar_label="Structure-function\ncoupling difference",
         include_subcortical=True,
-        aseg_path=aseg_path,
-        aseg_label_map=aseg_label_map,
+        subcortical_name_map=subcortical_name_map,
     )
