@@ -67,7 +67,7 @@ This repository contains the analysis scripts from our study on superagers, whic
     - `prep_weighted_global_roi_averages.py`: Computes voxel-weighted global, sensory, heteromodal, and memory-relevant network averages for SFC, FC, and SC.
     - `log_en.py`: Runs logistic elastic net classification predicting superager status using cross-validation and permutation testing. 
     - `en_fdr.py`: Reads elastic net nohup log files, extracts model-level p-values, and reports FDR-adjusted p-values for each model.
-    - `plot_feature_importance.py`: Plots the top 20 ROIs from SFC elastic net models as horizontal bar charts.
+    - `plot_feature_importance.py`: Plots the top 20 ROIs from SFC elastic net models as bar charts. Includes a brain plot panel with cortical and subcortical regions. 
     - `make_supplementary_table.py`: Generates supplementary table listing top 20 features from each SFC elastic net model.
 
 ### analyses
