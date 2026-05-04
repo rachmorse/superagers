@@ -1,8 +1,16 @@
+import shutil
+import sys
 from pathlib import Path
-
-import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 import pandas as pd
+from matplotlib.colors import ListedColormap
+from matplotlib.image import imread
+import yabplot as yab
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "analyses"))
+from plot_sfc_difference import crop_colorbar, trim_whitespace
 
 FEATURE_IMPORTANCE_T1_CSV = Path(
     "/home/rachel/Desktop/superagers/elastic_net/results/SFC_ROI_t1_long_include_feature_importance.csv"
@@ -11,7 +19,10 @@ FEATURE_IMPORTANCE_SLOPE_CSV = Path(
     "/home/rachel/Desktop/superagers/elastic_net/results/SFC_ROI_t1_slope_long_include_feature_importance.csv"
 )
 OUTPUT_PATH = Path(
-    "/home/rachel/Desktop/superagers/elastic_net/figures_tables/feature_importance_by_network.png"
+    "/home/rachel/Desktop/superagers/elastic_net/figures_tables/feature_importance_brain.png"
+)
+TEMP_PATH = Path(
+    "/home/rachel/Desktop/superagers/elastic_net/figures_tables/_brain_temp"
 )
 
 # Sub-region abbreviation to full name from Schaefer 200 atlas)
@@ -101,15 +112,38 @@ NETWORK_LABELS = {
     "Subcortical": "Subcortical",
 }
 
+NETWORK_ORDER  = list(NETWORK_COLORS.keys())
+VMIN           = 0.5
+VMAX           = len(NETWORK_ORDER) + 0.5
+CORTICAL_ATLAS = "schaefer200"
+STYLE          = "glossy"
+
+SUBCORTICAL_NAME_MAP = {
+    "left hippocampus":  "Left-Hippocampus",
+    "left amygdala":     "Left-Amygdala",
+    "left pallidum":     "Left-Pallidum",
+    "left putamen":      "Left-Putamen",
+    "left caudate":      "Left-Caudate",
+    "left accumbens":    "Left-Accumbens-area",
+    "left thalamus":     "Left-Thalamus",
+    "right hippocampus": "Right-Hippocampus",
+    "right amygdala":    "Right-Amygdala",
+    "right pallidum":    "Right-Pallidum",
+    "right putamen":     "Right-Putamen",
+    "right caudate":     "Right-Caudate",
+    "right accumbens":   "Right-Accumbens-area",
+    "right thalamus":    "Right-Thalamus",
+}
+
 
 def extract_network(feature: str) -> str:
     """Extract the network name from a feature string.
 
     Args:
-        feature: Raw feature name from the CSV. 
+        feature: Raw feature name from the CSV.
 
     Returns:
-        Network key matching.
+        Network key matching NETWORK_COLORS, or "Other".
     """
     if feature.startswith("7Networks_"):
         # e.g. 7Networks_LH_DorsAttn_FEF_1 to DorsAttn
@@ -166,7 +200,7 @@ def make_short_label(feature: str, is_slope_model: bool = False) -> str:
             parcel_idx = rest_parts[1]
             rest = rest_parts[0]
         elif rest.isdigit():
-            # e.g. 7Networks_LH_SomMot_1 
+            # e.g. 7Networks_LH_SomMot_1
             parcel_idx = rest
 
         raw = ROI_ABBREV.get(rest, rest) if not rest.isdigit() else NETWORK_LABELS.get(network, network)
@@ -229,16 +263,15 @@ def plot_roi_panel(ax: plt.Axes, df: pd.DataFrame, panel_label: str,
                    is_slope_model: bool = False) -> None:
     """Plot the top 20 ROIs by permutation importance.
 
-    Bars are coloured by network. For the slope model, 
-    slope features are additionally hatched.
+    Bars are coloured by network. For the slope model, slope features are
+    additionally hatched.
 
     Args:
         ax: Target axes.
         df: Prepared DataFrame from `load_and_prepare`.
-        panel_label: Panel label string (e.g. "B" or "D").
+        panel_label: Panel label string (e.g. "A" or "B").
         is_slope_model: If True, apply hatching to slope features.
     """
-    # Sort ascending so most important ROI sits at the top of the horizontal chart
     top20 = (
         df[df["perm_importance_mean"] > 0]
         .sort_values("perm_importance_mean", ascending=True)
@@ -285,30 +318,127 @@ def plot_roi_panel(ax: plt.Axes, df: pd.DataFrame, panel_label: str,
             fontsize=14, fontweight="bold", va="top")
 
 
-def main():
-    """Generate and save the two-panel feature importance figure.
+def render_brain_images(temp_path: Path) -> list:
+    """Render cortical and subcortical network surface images via yabplot.
 
-    Panel A shows mean permutation importance aggregated by network.
-    Panel B shows the top 20 individual ROIs by permutation importance, coloured
-    by their network. 
+    Renders three cortical views (left lateral, superior, right lateral) and
+    one superior subcortical view. Each region is coloured by its Yeo network
+    using NETWORK_COLORS and NETWORK_ORDER. Intermediate PNGs are written to
+    temp_path and returned as trimmed numpy arrays.
+
+    Args:
+        temp_path: Directory for intermediate PNG files (created if absent).
+
+    Returns:
+        List of four numpy image arrays in order: left lateral cortical,
+        superior cortical, right lateral cortical, superior subcortical.
     """
-    df_t1 = load_and_prepare(FEATURE_IMPORTANCE_T1_CSV, is_slope_model=False)
-    df_slope = load_and_prepare(FEATURE_IMPORTANCE_SLOPE_CSV, is_slope_model=True)
+    temp_path.mkdir(parents=True, exist_ok=True)
+    cmap = ListedColormap([NETWORK_COLORS[n] for n in NETWORK_ORDER])
 
-    fig, axes = plt.subplots(
-        1, 2,
-        figsize=(14, 4),
+    yab_regions   = yab.get_atlas_regions(atlas=CORTICAL_ATLAS, category="cortical")
+    cortical_data = {}
+    for region in yab_regions:
+        for part in region.split("_"):
+            if part in NETWORK_COLORS:
+                cortical_data[region] = float(NETWORK_ORDER.index(part) + 1)
+                break
+
+    cort_kw = dict(
+        data=cortical_data, atlas=CORTICAL_ATLAS,
+        vminmax=[VMIN, VMAX], cmap=cmap,
+        bmesh="midthickness", figsize=(600, 600),
+        style=STYLE, display_type="object",
     )
 
-    plot_roi_panel(axes[0], df_t1, "A", is_slope_model=False)
-    plot_roi_panel(axes[1], df_slope, "B", is_slope_model=True)
-    axes[0].set_title("Baseline model", fontsize=11, fontweight="bold", pad=8)
-    axes[1].set_title("Baseline + annual change model", fontsize=11, fontweight="bold", pad=8)
+    arrs = []
+    for view in ["left_lateral", "superior", "right_lateral"]:
+        png = temp_path / f"cort_{view}.png"
+        print(f"  Rendering cortical ({view})…")
+        yab.plot_cortical(views=[view], export_path=str(png), **cort_kw)
+        arrs.append(trim_whitespace(crop_colorbar(imread(str(png)))))
 
-    plt.tight_layout(pad=1.5)
-    plt.subplots_adjust(left=0.22)
-    plt.savefig(OUTPUT_PATH, dpi=300, bbox_inches="tight")
+    subcort_val      = float(NETWORK_ORDER.index("Subcortical") + 1)
+    valid_yab_names  = set(yab.get_atlas_regions(atlas="aseg", category="subcortical"))
+    subcortical_data = {
+        n: subcort_val for n in SUBCORTICAL_NAME_MAP.values()
+        if n in valid_yab_names
+    }
+    png = temp_path / "subcort_superior.png"
+    print("  Rendering subcortical (superior)…")
+    yab.plot_subcortical(
+        views=["superior"], export_path=str(png),
+        data=subcortical_data, atlas="aseg",
+        vminmax=[VMIN, VMAX], cmap=cmap,
+        figsize=(600, 600), style=STYLE,
+        bmesh_color="lightgray", bmesh_alpha=0.15,
+        display_type="object",
+    )
+    arrs.append(trim_whitespace(crop_colorbar(imread(str(png)))))
+
+    return arrs
+
+
+def main():
+    """Generate and save the combined feature importance and brain surface figure.
+
+    Panel A (baseline model) and B (baseline + annual change model) are stacked
+    vertically. Panel C shows cortical and anterior subcortical brain views
+    arranged horizontally below, centred under A and B.
+    """
+    df_t1    = load_and_prepare(FEATURE_IMPORTANCE_T1_CSV,    is_slope_model=False)
+    df_slope = load_and_prepare(FEATURE_IMPORTANCE_SLOPE_CSV, is_slope_model=True)
+
+    brain_arrs = render_brain_images(TEMP_PATH)
+
+    fig_w     = 7.0
+    brain_h   = 2
+    row_gap   = 0
+    brain_gap = 0.2
+    fig_h     = 9.0 
+
+    # Scale all brain images to brain_h; shrink proportionally if too wide
+    max_arr_h     = max(a.shape[0] for a in brain_arrs)
+    h_scale       = 0.6 * (brain_h / max_arr_h)
+    b_widths      = [a.shape[1] * h_scale for a in brain_arrs]
+    b_heights     = [a.shape[0] * h_scale for a in brain_arrs]
+    total_brain_w = sum(b_widths) + brain_gap * (len(brain_arrs) - 1)
+    if total_brain_w > fig_w:
+        s             = fig_w / total_brain_w
+        b_widths      = [w * s for w in b_widths]
+        b_heights     = [h * s for h in b_heights]
+        total_brain_w = fig_w
+
+    # Panels A (top) and B (middle)
+    brain_frac = (brain_h + row_gap) / fig_h + 0.02
+    fig, (ax_a, ax_b) = plt.subplots(2, 1, figsize=(fig_w, fig_h))
+    plot_roi_panel(ax_a, df_t1,    "A", is_slope_model=False)
+    plot_roi_panel(ax_b, df_slope, "B", is_slope_model=True)
+    ax_a.set_title("Baseline model",                 fontsize=11, fontweight="bold", pad=8)
+    ax_b.set_title("Baseline + annual change model", fontsize=11, fontweight="bold", pad=8)
+    plt.tight_layout(pad=0.5, rect=[0, brain_frac, 1, 1])
+    plt.subplots_adjust(left=0.42, bottom=brain_frac)
+
+    # Panel C — brain views centred horizontally at the bottom
+    fig.text(0.11, brain_frac - 0.04, "C", fontsize=14, fontweight="bold", va="top")
+
+    start_x  = (fig_w - total_brain_w) / 2 + 0.3
+    x_cursor = start_x
+    for arr, w_in, h_in in zip(brain_arrs, b_widths, b_heights):
+        y_off = (brain_h - h_in) / 2
+        ax = fig.add_axes([
+            x_cursor / fig_w,
+            y_off / fig_h,
+            w_in / fig_w,
+            h_in / fig_h,
+        ])
+        ax.imshow(arr)
+        ax.axis("off")
+        x_cursor += w_in + brain_gap
+
+    plt.savefig(OUTPUT_PATH, dpi=300, bbox_inches="tight", pad_inches=0.1)
     print(f"Saved to {OUTPUT_PATH}")
+    shutil.rmtree(TEMP_PATH)
     plt.show()
 
 
