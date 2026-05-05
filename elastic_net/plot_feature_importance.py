@@ -302,7 +302,6 @@ def plot_roi_panel(ax: plt.Axes, df: pd.DataFrame, panel_label: str,
     ax.spines["right"].set_visible(False)
     ax.tick_params(axis="x", labelsize=9)
 
-    handles = _network_legend_handles(top20["network"].unique())
     if is_slope_model:
         type_handles = [
             mpatches.Patch(facecolor="#AAAAAA", hatch=style["hatch"],
@@ -310,10 +309,8 @@ def plot_roi_panel(ax: plt.Axes, df: pd.DataFrame, panel_label: str,
                            label=style["label"])
             for style in FEATURE_TYPE_STYLE.values()
         ]
-        handles += [mpatches.Patch(visible=False, label="")] + type_handles
-
-    ax.legend(handles=handles, loc="lower right", fontsize=8, framealpha=0.9,
-              title="Network", title_fontsize=9, handlelength=1, handleheight=0.8)
+        ax.legend(handles=type_handles, loc="lower right", fontsize=8, framealpha=0.9,
+                  title="Feature Type", title_fontsize=9, handlelength=1, handleheight=0.8)
     ax.text(-0.55, 1.05, panel_label, transform=ax.transAxes,
             fontsize=14, fontweight="bold", va="top")
 
@@ -391,11 +388,11 @@ def main():
 
     brain_arrs = render_brain_images(TEMP_PATH)
 
-    fig_w     = 7.0
+    fig_w     = 7
     brain_h   = 2
     row_gap   = 0
     brain_gap = 0.2
-    fig_h     = 9.0 
+    fig_h     = 9.0
 
     # Scale all brain images to brain_h; shrink proportionally if too wide
     max_arr_h     = max(a.shape[0] for a in brain_arrs)
@@ -409,20 +406,32 @@ def main():
         b_heights     = [h * s for h in b_heights]
         total_brain_w = fig_w
 
-    # Panels A (top) and B (middle)
+    # Panels A (top) and B (middle) — reserve space at top for shared legend
     brain_frac = (brain_h + row_gap) / fig_h + 0.02
+    top_frac   = 0.95
     fig, (ax_a, ax_b) = plt.subplots(2, 1, figsize=(fig_w, fig_h))
     plot_roi_panel(ax_a, df_t1,    "A", is_slope_model=False)
     plot_roi_panel(ax_b, df_slope, "B", is_slope_model=True)
     ax_a.set_title("Baseline model",                 fontsize=11, fontweight="bold", pad=8)
     ax_b.set_title("Baseline + annual change model", fontsize=11, fontweight="bold", pad=8)
-    plt.tight_layout(pad=0.5, rect=[0, brain_frac, 1, 1])
-    plt.subplots_adjust(left=0.42, bottom=brain_frac)
+    plt.tight_layout(pad=0.5, rect=[0, brain_frac, 1, top_frac])
+    plt.subplots_adjust(left=0.42, bottom=brain_frac, top=top_frac)
+
+    # Shared network legend — two-row strip above the figure
+    net_handles = _network_legend_handles(list(NETWORK_COLORS.keys()))
+    leg = fig.legend(
+        handles=net_handles, loc="upper center", ncol=4,
+        fontsize=9, framealpha=0.9, title=None,
+        handlelength=1, handleheight=0.8, columnspacing=0.8,
+        bbox_to_anchor=(0.55, 1.06), bbox_transform=fig.transFigure,
+    )
+    leg.set_title("Networks", prop={"size": 10, "weight": "bold"})
+    leg.get_title().set_horizontalalignment("left")
 
     # Panel C — brain views centred horizontally at the bottom
     fig.text(0.11, brain_frac - 0.04, "C", fontsize=14, fontweight="bold", va="top")
 
-    start_x  = (fig_w - total_brain_w) / 2 + 0.3
+    start_x  = (fig_w - total_brain_w) / 2 + 0.35
     x_cursor = start_x
     for arr, w_in, h_in in zip(brain_arrs, b_widths, b_heights):
         y_off = (brain_h - h_in) / 2
