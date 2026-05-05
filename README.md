@@ -1,6 +1,6 @@
 ## Superagers Research Study
 
-This repository contains the analysis scripts from our study on superagers, which explores their longitudinal memory and structure-function coupling. 
+This repository contains the analysis scripts from our study on superagers, which explores their longitudinal cognition and memory as well as their structural connectivity, functional connectivity, and structure-function coupling. 
 
 ## Table of Contents
 
@@ -9,7 +9,7 @@ This repository contains the analysis scripts from our study on superagers, whic
   - [fsaverage_masks](#fsaverage)
   - [fmri_analysis](#fmri-analysis)
   - [structural_analysis](#structural_analysis)
-  - [structural_functional_coupling](#structural_functional_coupling)
+  - [structure_function_coupling](#structure_function_coupling)
   - [elastic_net](#elastic_net)
   - [analyses](#analyses)
 
@@ -54,7 +54,7 @@ This repository contains the analysis scripts from our study on superagers, whic
     - The scripts used in DWI preprocessing are available in another [repository](https://github.com/rachmorse/dwi_preprocessing). 
 
 ### structure_function_coupling
-- **Purpose:** Prepare and calculate structural functional coupling (SFC) metrics. 
+- **Purpose:** Prepare and calculate structure-function coupling (SFC) metrics. 
 - **Scripts:**
     - `01_convert_to_individual_matrix.py`: Converts functional and structural connectivity data into individual 214x214 matrices. 
     - `02_structural_functional_coupling.py`: Computes and visualizes SFC. 
@@ -63,7 +63,7 @@ This repository contains the analysis scripts from our study on superagers, whic
 ### elastic_net
 - **Purpose:** Prepare and run logistic elastic net to classify participants as superagers or non-superagers.
 - **Scripts:**
-    - `prep_data_for_en.py`: Prepares data by generating voxel‑weighted, grouped ROI connectivity summaries. 
+    - `prep_data_for_en.py`: Prepares data as both per ROI summaries and voxel-weighted grouped averages at ROI and network level. 
     - `prep_weighted_global_roi_averages.py`: Computes voxel-weighted global, sensory, heteromodal, and memory-relevant network averages for SFC, FC, and SC.
     - `log_en.py`: Runs logistic elastic net classification predicting superager status using cross-validation and permutation testing. 
     - `en_fdr.py`: Reads elastic net nohup log files, extracts model-level p-values, and reports FDR-adjusted p-values for each model.
