@@ -1,7 +1,6 @@
 import shutil
 import sys
 from pathlib import Path
-import matplotlib.gridspec as gridspec
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -25,7 +24,7 @@ TEMP_PATH = Path(
     "/home/rachel/Desktop/superagers/elastic_net/figures_tables/_brain_temp"
 )
 
-# Sub-region abbreviation to full name from Schaefer 200 atlas)
+# Sub-region abbreviation to full name from Schaefer 200 atlas
 ROI_ABBREV = {
     "AntTemp":    "Anterior temporal",
     "Aud":        "Auditory",
@@ -187,7 +186,6 @@ def make_short_label(feature: str, is_slope_model: bool = False) -> str:
             feature = feature[: -len("_1")]
 
     if feature.startswith("7Networks_"):
-        # Drop the "7Networks" prefix
         parts = feature.split("_", 3)  # ['7Networks', 'LH', 'Network', 'rest']
         hemi = parts[1]  # LH / RH
         network = parts[2]
@@ -200,7 +198,6 @@ def make_short_label(feature: str, is_slope_model: bool = False) -> str:
             parcel_idx = rest_parts[1]
             rest = rest_parts[0]
         elif rest.isdigit():
-            # e.g. 7Networks_LH_SomMot_1
             parcel_idx = rest
 
         raw = ROI_ABBREV.get(rest, rest) if not rest.isdigit() else NETWORK_LABELS.get(network, network)
@@ -324,7 +321,7 @@ def render_brain_images(temp_path: Path) -> list:
     temp_path and returned as trimmed numpy arrays.
 
     Args:
-        temp_path: Directory for intermediate PNG files (created if absent).
+        temp_path: Directory for intermediate PNG files (created if needed).
 
     Returns:
         List of four numpy image arrays in order: left lateral cortical,
@@ -388,15 +385,14 @@ def main():
 
     brain_arrs = render_brain_images(TEMP_PATH)
 
-    fig_w     = 7
-    brain_h   = 2
-    row_gap   = 0
-    brain_gap = 0.2
-    fig_h     = 9.0
+    fig_w     = 7   # figure width 
+    brain_h   = 2   # height between panels A/B and panel C
+    brain_gap = 0.2 # horizontal gap between brain images in panel C
+    fig_h     = 9.0 # figure height
 
     # Scale all brain images to brain_h; shrink proportionally if too wide
     max_arr_h     = max(a.shape[0] for a in brain_arrs)
-    h_scale       = 0.6 * (brain_h / max_arr_h)
+    h_scale       = 0.6 * (brain_h / max_arr_h) # adjust here to scale the brains
     b_widths      = [a.shape[1] * h_scale for a in brain_arrs]
     b_heights     = [a.shape[0] * h_scale for a in brain_arrs]
     total_brain_w = sum(b_widths) + brain_gap * (len(brain_arrs) - 1)
@@ -407,8 +403,8 @@ def main():
         total_brain_w = fig_w
 
     # Panels A (top) and B (middle) — reserve space at top for shared legend
-    brain_frac = (brain_h + row_gap) / fig_h + 0.02
-    top_frac   = 0.95
+    brain_frac = brain_h / fig_h + 0.02
+    top_frac   = 0.95 # adjust to move the network legend up/down
     fig, (ax_a, ax_b) = plt.subplots(2, 1, figsize=(fig_w, fig_h))
     plot_roi_panel(ax_a, df_t1,    "A", is_slope_model=False)
     plot_roi_panel(ax_b, df_slope, "B", is_slope_model=True)
@@ -429,9 +425,9 @@ def main():
     leg.get_title().set_horizontalalignment("left")
 
     # Panel C — brain views centred horizontally at the bottom
-    fig.text(0.11, brain_frac - 0.04, "C", fontsize=14, fontweight="bold", va="top")
+    fig.text(0.11, brain_frac - 0.04, "C", fontsize=14, fontweight="bold", va="top") # change 0.04 to move the "C" label up/down, change 0.11 to move it left/right
 
-    start_x  = (fig_w - total_brain_w) / 2 + 0.35
+    start_x  = (fig_w - total_brain_w) / 2 + 0.35 # adjust move the brains in panel C left/right
     x_cursor = start_x
     for arr, w_in, h_in in zip(brain_arrs, b_widths, b_heights):
         y_off = (brain_h - h_in) / 2
@@ -448,7 +444,7 @@ def main():
     plt.savefig(OUTPUT_PATH, dpi=300, bbox_inches="tight", pad_inches=0.1)
     print(f"Saved to {OUTPUT_PATH}")
     shutil.rmtree(TEMP_PATH)
-    plt.show()
+    plt.close(fig)
 
 
 if __name__ == "__main__":
