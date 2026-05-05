@@ -48,11 +48,13 @@ def load_forest_stats(html_path: Path, region_map: dict):
         if len(cells) < 4 or text not in region_map or in_slope or section is None:
             continue
 
-        coef_ci  = cells[1].get_text(strip=True)   # 0.2224 (0.0053-0.4395)
+        coef_ci  = cells[1].get_text(strip=True)    # 0.2224 (0.0053-0.4395)
         p_raw    = cells[2].get_text(strip=True)    # 0.0449*
         pfdr_raw = cells[3].get_text(strip=True)    # 0.0606
 
         m = re.match(r"(-?[\d.]+)\s*\((-?[\d.]+)-(-?[\d.]+)\)", coef_ci)
+        if m is None:
+            raise ValueError(f"Could not parse coefficient cell: {coef_ci!r}")
         beta, ci_lo, ci_hi = float(m.group(1)), float(m.group(2)), float(m.group(3))
         p    = float(re.sub(r"\*+", "", p_raw))
         pfdr = float(re.sub(r"\*+", "", pfdr_raw))
@@ -180,7 +182,7 @@ def main():
         "right accumbens":   "Right-Accumbens-area",
         "right thalamus":    "Right-Thalamus",
     }
-    results_html = Path(__file__).parent.parent / "analyses" / "results.html"
+    results_html = Path(__file__).parent / "results.html"
     networks = ["Sensory", "SN", "ECN", "DMN", "Heteromodal", "Global"]
     region_map = {
         "Global SFC":      "Global",
@@ -221,7 +223,7 @@ def main():
     fig_h        = 2 * forest_h + forest_vgap
     brain_col_w  = (fig_h / brain_ar) * brain_scale
     forest_col_w = 6.0
-    fig_w        = brain_col_w + forest_col_w + 5.5
+    fig_w        = brain_col_w + forest_col_w + 5.5  # extra width for clip_on=False pFDR annotations
 
     fig = plt.figure(figsize=(fig_w, fig_h))
 
@@ -257,7 +259,7 @@ def main():
     # Horizontal colorbar just below the brain panel
     ax_cbar = ax_a.inset_axes([0.4, -0.07, 0.3, 0.04])
     norm = plt.Normalize(vmin=vmin, vmax=vmax)
-    sm = plt.cm.ScalarMappable(cmap=plt.get_cmap("RdBu_r"), norm=norm)
+    sm = plt.cm.ScalarMappable(cmap=plt.colormaps["RdBu_r"], norm=norm)
     sm.set_array([])
     cbar = fig.colorbar(sm, cax=ax_cbar, orientation="horizontal", format="%.2f")
     cbar.set_ticks([vmin, 0, vmax])

@@ -145,9 +145,8 @@ def visualize_coupling(
     """
     coupling_csv = Path(coupling_file) / f"{group_name}.csv"
     full_series  = pd.read_csv(coupling_csv, index_col=0).iloc[:, 0]
-    coupling_df  = full_series[~full_series.index.str.contains("Subcortical")].to_frame()
-
-    rho_values = coupling_df.iloc[:, 0].values
+    cortical   = full_series[~full_series.index.str.contains("Subcortical")]
+    rho_values = cortical.values
 
     if vmin is None or vmax is None:
         if symmetric_scale:
@@ -176,7 +175,7 @@ def visualize_coupling(
     roi_name_to_atlas_idx = {name: i for i, name in enumerate(atlas_roi_names)}
 
     coupling_vol = np.zeros_like(atlas_data)
-    for roi_name, value in zip(coupling_df.index, rho_values):
+    for roi_name, value in cortical.items():
         if network_filter and not any(f in roi_name for f in network_filter):
             continue
         if roi_name in roi_name_to_atlas_idx:
@@ -187,8 +186,8 @@ def visualize_coupling(
 
     coupling_img = nib.Nifti1Image(coupling_vol, atlas_img.affine, atlas_img.header)
 
-    surf_data_left  = surface.vol_to_surf(coupling_img, fsaverage["pial_left"],  radius=3, n_samples=5)
-    surf_data_right = surface.vol_to_surf(coupling_img, fsaverage["pial_right"], radius=3, n_samples=5)
+    surf_data_left  = surface.vol_to_surf(coupling_img, fsaverage["pial_left"],  radius=1, n_samples=5)
+    surf_data_right = surface.vol_to_surf(coupling_img, fsaverage["pial_right"], radius=1, n_samples=5)
 
     surf_data_left[np.isclose(surf_data_left,   0)] = np.nan
     surf_data_right[np.isclose(surf_data_right, 0)] = np.nan
@@ -196,7 +195,7 @@ def visualize_coupling(
     temp_output_path = output_path / "temp"
     temp_output_path.mkdir(parents=True, exist_ok=True)
 
-    cold_hot_cmap = plt.get_cmap("RdBu_r")
+    cold_hot_cmap = plt.colormaps["RdBu_r"]
 
     views = [
         ("left",  "lateral", surf_data_left,  fsaverage["sulc_left"]),
@@ -234,7 +233,7 @@ def visualize_coupling(
 
     brain_widths_in  = [images[k].shape[1] * scale for k in row_keys]
     brain_heights_in = [images[k].shape[0] * scale for k in row_keys]
-    row_h_in = max(brain_heights_in)
+    row_h_in = 3.0  # by construction: max_h_px * scale
     gap_in   = 0.25  # whitespace between cortical brain panels
 
     # Subcortical slices 
@@ -262,11 +261,6 @@ def visualize_coupling(
         subcort_coronal_arr = trim_whitespace(crop_colorbar(imread(str(subcort_cor_png))))
         subcort_axial_arr   = trim_whitespace(crop_colorbar(imread(str(subcort_ax_png))))
 
-    top_keys = ["left_lateral", "left_medial"]
-    bot_keys = ["right_medial", "right_lateral"]
-    top_idxs = [0, 1]
-    bot_idxs = [2, 3]
-
     top_row_w  = brain_widths_in[0] + gap_in + brain_widths_in[1]
     bot_row_w  = brain_widths_in[2] + gap_in + brain_widths_in[3]
     left_col_w = max(top_row_w, bot_row_w)
@@ -282,7 +276,7 @@ def visualize_coupling(
     right_col_w  = max(_subcort_width(subcort_coronal_arr), _subcort_width(subcort_axial_arr))
     horiz_gap_in = 0.15
     has_subcort  = right_col_w > 0
-    cbar_w_in    = 3.0
+    cbar_w_in    = 3.0 if colorbar_label is not None else 0.0
     fig_w_in     = left_col_w + (horiz_gap_in + right_col_w if has_subcort else 0) + cbar_w_in
 
     fig = plt.figure(figsize=(fig_w_in, total_h_in))
@@ -290,8 +284,8 @@ def visualize_coupling(
     # Top cortical row
     top_y_base = (vert_gap_in + row_h_in) / total_h_in
     x_cursor   = 0.0
-    for idx, key in zip(top_idxs, top_keys):
-        bw_in, bh_in = brain_widths_in[idx], brain_heights_in[idx]
+    for i, key in enumerate(["left_lateral", "left_medial"]):
+        bw_in, bh_in = brain_widths_in[i], brain_heights_in[i]
         y_off = (row_h_in - bh_in) / 2
         ax = fig.add_axes([
             x_cursor / fig_w_in,
@@ -305,8 +299,8 @@ def visualize_coupling(
 
     # Bottom cortical row
     x_cursor = 0.0
-    for idx, key in zip(bot_idxs, bot_keys):
-        bw_in, bh_in = brain_widths_in[idx], brain_heights_in[idx]
+    for i, key in enumerate(["right_medial", "right_lateral"], start=2):
+        bw_in, bh_in = brain_widths_in[i], brain_heights_in[i]
         y_off = (row_h_in - bh_in) / 2
         ax = fig.add_axes([
             x_cursor / fig_w_in,
