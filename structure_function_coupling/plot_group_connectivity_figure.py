@@ -9,7 +9,10 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 def main():
-    """Load single-subject connectivity data and save the three-panel figure."""
+    """Load single-subject connectivity data and save the three-panel figure.
+    
+    For the SFC explanatory figure finished in Lucidchart.
+    """
     base_dir = Path("/home/rachel/Desktop/schaefer_analysis")
     subject = "sub-4019"
     ses = "ses-02"
@@ -17,7 +20,7 @@ def main():
     sc_path = base_dir / f"structural_connectivity/{ses}/individual_connectivity_matrices/{subject}_{ses}_structural_connectivity_matrix.csv"
     fc_path = base_dir / f"functional_connectivity/native_space/{ses}/individual_connectivity_matrices/{subject}_{ses}_functional_connectivity_matrix_fisher_z.csv"
     sfc_path = base_dir / f"structure_function_coupling/{ses}/individual_coupling_matrices/{subject}_{ses}_structure_function_coupling.csv"
-    output_png = Path(__file__).parent / "group_connectivity_figure.png"
+    output_png = Path(__file__).parent / f"{subject}_{ses}_connectivity_figure.png"
 
     cmap = "RdBu_r"
     tick_positions = [0, 25, 50, 75, 100, 125, 150, 175, 200]
@@ -42,13 +45,13 @@ def main():
     ax_fc  = fig.add_subplot(gs[0, 1])
     ax_sfc = fig.add_subplot(gs[1, :])
 
-    # SC matrix panel — make_axes_locatable keeps the colorbar flush with the image 
+    # SC matrix panel
     im_sc = ax_sc.imshow(
         sc_mat,
         aspect="equal",
         cmap=cmap,
         vmin=0,
-        vmax=sc_mat.max(),
+        vmax=np.nanmax(sc_mat),
         interpolation="nearest",
     )
     ax_sc.set_title(
@@ -109,7 +112,9 @@ def main():
     ax_sfc.set_yticks([])
     ax_sfc.set_xticks(tick_positions)
     ax_sfc.tick_params(labelsize=18)
-    cbar_sfc = fig.colorbar(im_sfc, ax=ax_sfc, orientation="vertical", fraction=0.015, pad=0.02)
+    divider_sfc = make_axes_locatable(ax_sfc)
+    cax_sfc = divider_sfc.append_axes("right", size="2%", pad=0.12)
+    cbar_sfc = fig.colorbar(im_sfc, cax=cax_sfc)
     cbar_sfc.set_label("Correlation\ncoefficient", fontsize=22)
     cbar_sfc.ax.tick_params(labelsize=18)
 
