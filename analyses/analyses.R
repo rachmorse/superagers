@@ -177,7 +177,7 @@ plot_bar_distributions <- function(df, vars, bins = 20) {
 
 # Variables used in the models/plots in this script (for quick distribution checks)
 distribution_vars <- unique(c(
-  "YoE", "age", "delayed_recall_raw", "ravlt_total", "cog_composite",
+  "YoE", "age", "delayed_recall_raw", "ravlt_total",
   "sfc_weighted_mean", "fc_weighted_mean", "sc_weighted_mean",
   "sfc_hmod", "sfc_sensory", "sfc_dmn", "sfc_salience"
 ))
@@ -459,227 +459,9 @@ run_group_fdr <- function(model_groups, method = "fdr") {
     arrange(group, p_fdr)
 }
 
-############################################
-# Creating & analyzing cognitive composite #
-############################################
-
-# Cognitive composite: z-score each component relative to baseline, then unweighted average
-bbhi_tp2 <- read.csv("~/Documents/2023:2024/Data/BBHI/BBHI Data Timept2 NPS.csv")
-bbhi_senior_tp2 <- read.csv("~/Documents/2023:2024/Data/BBHI-Senior/Ministerio2024Wave2_DATA_2026-01-20_1245.csv")
-
-bbhi_tp2$id <- clean_id(bbhi_tp2$id)
-bbhi_senior_tp2$record_id_np_w2 <- clean_id(bbhi_senior_tp2$record_id_np_w2)
-
-pacc_tp1 <- full_join(
-  bbhi %>%
-    transmute(
-      id = clean_id(id),
-      mmse = suppressWarnings(as.numeric(w1_mmse)),
-      ravlt_total = suppressWarnings(as.numeric(w1_inm_recall_total_raw)),
-      sdmt_total = suppressWarnings(as.numeric(w1_number_keys_raw)),
-      animals_total = suppressWarnings(as.numeric(w1_sem_fluency_raw))
-    ),
-  bbhi_senior %>%
-    transmute(
-      id = clean_id(ID),
-      mmse_senior = suppressWarnings(as.numeric(MMSE)),
-      ravlt_total_senior = suppressWarnings(as.numeric(RAVLT_total_learn)),
-      sdmt_total_senior = suppressWarnings(as.numeric(SDMT_correct)),
-      animals_total_senior = suppressWarnings(as.numeric(Sem_fluency))
-    ),
-  by = "id"
-) %>%
-  mutate(
-    # Harmonize SDMT to per-minute rate (BBHI: 2.0 min; BBHI-senior: 1.5 min)
-    sdmt_total = sdmt_total / 2,
-    sdmt_total_senior = sdmt_total_senior / 1.5,
-    mmse = coalesce(mmse_senior, mmse),
-    ravlt_total = coalesce(ravlt_total_senior, ravlt_total),
-    sdmt_total = coalesce(sdmt_total_senior, sdmt_total),
-    animals_total = coalesce(animals_total_senior, animals_total)
-  ) %>%
-  dplyr::select(id, mmse, ravlt_total, sdmt_total, animals_total)
-
-pacc_tp2 <- full_join(
-  bbhi_tp2 %>%
-    transmute(
-      id = clean_id(id),
-      mmse = suppressWarnings(as.numeric(mmse)),
-      ravlt_total = suppressWarnings(as.numeric(inm_recall_total_raw)),
-      sdmt_total = suppressWarnings(as.numeric(number_keys_raw)),
-      animals_total = suppressWarnings(as.numeric(sem_fluency_raw))
-    ),
-  bbhi_senior_tp2 %>%
-    transmute(
-      id = clean_id(record_id_np_w2),
-      mmse_senior = suppressWarnings(as.numeric(mmse_w2)),
-      ravlt_total_senior = suppressWarnings(as.numeric(ravlt_total_w2)),
-      sdmt_total_senior = suppressWarnings(as.numeric(sdmt_w2)),
-      animals_total_senior = suppressWarnings(as.numeric(animals_w2))
-    ),
-  by = "id"
-) %>%
-  mutate(
-    # Harmonize SDMT to per-minute rate (BBHI: 2.0 min; BBHI-senior: 1.5 min)
-    sdmt_total = sdmt_total / 2,
-    sdmt_total_senior = sdmt_total_senior / 1.5,
-    mmse = coalesce(mmse_senior, mmse),
-    ravlt_total = coalesce(ravlt_total_senior, ravlt_total),
-    sdmt_total = coalesce(sdmt_total_senior, sdmt_total),
-    animals_total = coalesce(animals_total_senior, animals_total)
-  ) %>%
-  dplyr::select(id, mmse, ravlt_total, sdmt_total, animals_total)
-
-# tp1 reference to use baseline mean and SD for tp2
-tp1_ref <- pacc_tp1 %>%
-  summarise(
-    tp1_mean_mmse = mean(mmse, na.rm = TRUE),
-    tp1_sd_mmse = sd(mmse, na.rm = TRUE),
-    tp1_mean_ravlt_total = mean(ravlt_total, na.rm = TRUE),
-    tp1_sd_ravlt_total = sd(ravlt_total, na.rm = TRUE),
-    tp1_mean_sdmt_total = mean(sdmt_total, na.rm = TRUE),
-    tp1_sd_sdmt_total = sd(sdmt_total, na.rm = TRUE),
-    tp1_mean_animals_total = mean(animals_total, na.rm = TRUE),
-    tp1_sd_animals_total = sd(animals_total, na.rm = TRUE)
-  )
-
-cog_composite_tp1 <- pacc_tp1 %>%
-  mutate(
-    z_mmse = (mmse - tp1_ref$tp1_mean_mmse) / tp1_ref$tp1_sd_mmse,
-    z_ravlt_total = (ravlt_total - tp1_ref$tp1_mean_ravlt_total) / tp1_ref$tp1_sd_ravlt_total,
-    z_sdmt_total = (sdmt_total - tp1_ref$tp1_mean_sdmt_total) / tp1_ref$tp1_sd_sdmt_total,
-    z_animals_total = (animals_total - tp1_ref$tp1_mean_animals_total) / tp1_ref$tp1_sd_animals_total
-  ) %>%
-  mutate(
-    cog_composite_1 = rowMeans(cbind(z_mmse, z_sdmt_total, z_animals_total), na.rm = TRUE)
-  ) %>%
-  dplyr::select(id, cog_composite_1)
-
-cog_composite_tp2 <- pacc_tp2 %>%
-  mutate(
-    z_mmse = (mmse - tp1_ref$tp1_mean_mmse) / tp1_ref$tp1_sd_mmse,
-    z_ravlt_total = (ravlt_total - tp1_ref$tp1_mean_ravlt_total) / tp1_ref$tp1_sd_ravlt_total,
-    z_sdmt_total = (sdmt_total - tp1_ref$tp1_mean_sdmt_total) / tp1_ref$tp1_sd_sdmt_total,
-    z_animals_total = (animals_total - tp1_ref$tp1_mean_animals_total) / tp1_ref$tp1_sd_animals_total
-  ) %>%
-  mutate(
-    cog_composite_2 = rowMeans(cbind(z_mmse, z_sdmt_total, z_animals_total), na.rm = TRUE)
-  ) %>%
-  dplyr::select(id, cog_composite_2)
-
-cog_composite_wide <- full_join(cog_composite_tp1, cog_composite_tp2, by = "id") %>%
-  group_by(id) %>%
-  summarise(
-    cog_composite_1 = if (all(is.na(cog_composite_1))) NA_real_ else mean(cog_composite_1, na.rm = TRUE),
-    cog_composite_2 = if (all(is.na(cog_composite_2))) NA_real_ else mean(cog_composite_2, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-cog_composite_long <- cog_composite_wide %>%
-  pivot_longer(
-    cols = c(cog_composite_1, cog_composite_2),
-    names_to = c(".value", "timepoint"),
-    names_pattern = "(cog_composite)_(\\d)"
-  ) %>%
-  mutate(timepoint = as.integer(timepoint))
-
-# Merge cognitive composite into master datasets
-data_wide <- data_wide %>%
-  left_join(cog_composite_wide, by = "id")
-
-data_long <- data_long %>%
-  left_join(cog_composite_long, by = c("id", "timepoint"))
-
+# Add age_1 to the long df for use as a covariate in the mixed models
 data_long <- data_long %>%
   left_join(data_wide %>% dplyr::select(id, age_1), by = "id")
-
-# Cognitive composite models
-vars <- c(
-  "factor(superager_long)1:scale(time)"
-)
-cog_composite_superager_age <- get_mixed_effects_stats(scale(cog_composite) ~ factor(superager_long) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data_long, vars)
-cog_composite_superager_age
-
-vars <- c(
-  "factor(superager_long)1"
-)
-cog_composite_superager <- get_mixed_effects_stats(scale(cog_composite) ~ factor(superager_long) + scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data_long, vars)
-cog_composite_superager
-
-plot_df_cog_composite <- data_long %>%
-  dplyr::select(id, age, superager_long, cog_composite) %>%
-  drop_na() %>%
-  mutate(
-    superager_group = factor(superager_long, levels = c(0, 1),
-                             labels = c("non-superager", "superager"))
-  )
-
-p_cog <- ggplot(plot_df_cog_composite, aes(x = age, y = cog_composite)) +
-  geom_line(aes(group = id), alpha = 0.18, linewidth = 0.3, color = "grey55") +
-  geom_point(aes(color = superager_group), alpha = 0.55, size = 1.8) +
-  geom_smooth(aes(color = superager_group), method = "lm", se = TRUE, linewidth = 1.2) +
-  scale_color_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
-  labs(x = "Age", y = "Cognitive Composite", color = NULL) +
-  theme_classic(base_size = 12) +
-  theme(legend.position = "none")
-
-###################
-# Analyzing RAVLT #
-###################
-
-# RAVLT total model
-vars <- c(
-  "factor(superager_long)1:scale(time)"
-)
-
-ravlt_total_superager_age <- get_mixed_effects_stats(
-  scale(ravlt_total) ~ factor(superager_long) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id),
-  data_long,
-  vars
-)
-
-ravlt_total_superager_age
-
-vars <- c(
-  "factor(superager_long)1"
-)
-
-ravlt_total_superager <- get_mixed_effects_stats(
-  scale(ravlt_total) ~ factor(superager_long) + scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id),
-  data_long,
-  vars
-)
-
-ravlt_total_superager
-
-plot_df_ravlt_total <- data_long %>%
-  dplyr::select(id, age, superager_long, ravlt_total) %>%
-  drop_na() %>%
-  mutate(
-    superager_group = factor(
-      superager_long,
-      levels = c(0, 1),
-      labels = c("non-superager", "superager")
-    )
-  )
-
-p_ravlt <- ggplot(plot_df_ravlt_total, aes(x = age, y = ravlt_total)) +
-  geom_line(aes(group = id), alpha = 0.18, linewidth = 0.3, color = "grey55") +
-  geom_point(aes(color = superager_group), alpha = 0.55, size = 1.8) +
-  geom_smooth(aes(color = superager_group), method = "lm", se = TRUE, linewidth = 1.2) +
-  scale_color_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
-  labs(x = "Age", y = "Episodic Memory", color = NULL) +
-  theme_classic(base_size = 12)
-
-fig2 <- (p_cog + p_ravlt) +
-  plot_annotation(tag_levels = "A") &
-  theme(plot.tag = element_text(size = 14, face = "bold"))
-
-ggsave(
-  filename = "~/Documents/2023:2024/Superager study/Writing/Figures/Fig2.png",
-  plot = fig2,
-  width = 10, height = 4.5, dpi = 300
-)
 
 ###########################
 # SFC by superager status #
@@ -889,29 +671,19 @@ sfc_slope_model_stats <- list(
   sfc_control_slope = sfc_superager_control_slope
 )
 
-pacc_model_stats <- list(
-  cog_composite_superager = cog_composite_superager,
-  cog_composite_superager_age = cog_composite_superager_age,
-  ravlt_total_superager = ravlt_total_superager,
-  ravlt_total_superager_age = ravlt_total_superager_age
-)
-
 fdr_results <- run_group_fdr(list(
-  cog_mem_models = pacc_model_stats,
   sfc_models = sfc_model_stats,
   ravlt_models = ravlt_model_stats,
   sfc_slope_models = sfc_slope_model_stats,
   ravlt_slope_models = ravlt_slope_model_stats
 ))
 
-cog_mem_fdr_results <- fdr_results %>% filter(group == "cog_mem_models")
 sfc_fdr_results <- fdr_results %>% filter(group == "sfc_models")
 ravlt_fdr_results <- fdr_results %>% filter(group == "ravlt_models")
 sfc_slope_fdr_results <- fdr_results %>% filter(group == "sfc_slope_models")
 ravlt_slope_fdr_results <- fdr_results %>% filter(group == "ravlt_slope_models")
 
 options(scipen = 999)
-print(as.data.frame(cog_mem_fdr_results), row.names = FALSE)
 print(sfc_fdr_results)
 print(ravlt_fdr_results)
 print(sfc_slope_fdr_results)
