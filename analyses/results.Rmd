@@ -74,10 +74,7 @@ get_fdr_raw <- function(fdr_df, model_name) {
 fmt_r2m <- function(x) formatC(as.numeric(x$marginal_r2),    format = "f", digits = 4)
 fmt_r2c <- function(x) formatC(as.numeric(x$conditional_r2), format = "f", digits = 4)
 
-# R² from LM models
-fmt_r2 <- function(x) formatC(as.numeric(x$r2), format = "f", digits = 4)
-
-# Mean ± SD 
+# Mean ± SD
 fmt_ms <- function(x) {
   paste0(formatC(mean(x, na.rm = TRUE), format = "f", digits = 2),
          " \u00b1 ",
@@ -102,19 +99,17 @@ pct_f_nsa   <- round(n_f_nsa   / n_nsa   * 100, 1)
 mean_age <- formatC(mean(summary_df$age_1, na.rm = TRUE), format = "f", digits = 2)
 sd_age   <- formatC(sd(summary_df$age_1,   na.rm = TRUE), format = "f", digits = 2)
 
-# Minimum p across RAVLT slope models (for the "ps >" summary statement)
-min_ravlt_slope_p <- min(
-  sapply(ravlt_slope_model_stats, function(x) as.numeric(x$p_value)[1]),
-  na.rm = TRUE
-)
-# Floor to 1 d.p. so the "ps >" statement is conservative
-min_ravlt_slope_p_floor <- formatC(floor(min_ravlt_slope_p * 10) / 10,
-                                   format = "f", digits = 1)
+# Min p and pFDR across SFC change models 
+min_sfc_slope_p      <- min(sapply(sfc_slope_model_stats,   function(x) as.numeric(x$p_value)[1]), na.rm = TRUE)
+min_sfc_slope_p_fdr  <- min(sfc_slope_fdr_results$p_fdr,  na.rm = TRUE)
+min_ravlt_slope_p    <- min(sapply(ravlt_slope_model_stats, function(x) as.numeric(x$p_value)[1]), na.rm = TRUE)
+min_ravlt_slope_p_fdr <- min(ravlt_slope_fdr_results$p_fdr, na.rm = TRUE)
+fmt_round2 <- function(p) formatC(round(p, 2), format = "f", digits = 2)
 ```
 
-Our overall cohort included `r n_total` participants with `r pct_f_total`% female and a mean baseline age of `r mean_age` (SD `r sd_age`) years. `r pct_sa`% of the cohort met longitudinal superager criteria. Superagers and non-superagers did not vary on baseline age (p`r fmt_p(age_baseline_p)`), years of education (p`r fmt_p(yoe_p)`), baseline MMSE scores (p`r fmt_p(mmse_p)`), or follow-up duration (p`r fmt_p(followup_duration_p)`); however, superagers were more likely to be female (p`r fmt_p(sex_p)`). These demographic statistics are summarized in Table 2.
+Our overall cohort included `r n_total` participants with `r pct_f_total`% female and a mean baseline age of `r mean_age` (SD `r sd_age`) years. `r pct_sa`% of the cohort met longitudinal superager criteria. Superagers and non-superagers did not vary on baseline age (p`r fmt_p(age_baseline_p)`), years of education (p`r fmt_p(yoe_p)`), baseline MMSE scores (p`r fmt_p(mmse_p)`), or follow-up duration (p`r fmt_p(followup_duration_p)`); however, superagers were more likely to be female (p`r fmt_p(sex_p)`). These demographic statistics are summarized in Table 1.
 
-**Table 2** Demographic characteristics
+**Table 1** Demographic characteristics
 
 ```{r table2}
 tbl2 <- tibble(
@@ -175,9 +170,9 @@ Figure 3 (A) shows a cortical surface and subcortical map of the unthresholded m
 
 When we examined SFC and episodic memory, we found that higher SFC was associated with better episodic memory in the whole cohort when measured globally (β=`r fmt_b(ravlt_sfc_weighted)`, 95% CI `r fmt_ci_text(ravlt_sfc_weighted)`, p`r fmt_p(ravlt_sfc_weighted$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_weighted_mean")`, marginal r²=`r fmt_r2m(ravlt_sfc_weighted)`, conditional r²=`r fmt_r2c(ravlt_sfc_weighted)`), in heteromodal regions (β=`r fmt_b(ravlt_sfc_hmod)`, 95% CI `r fmt_ci_text(ravlt_sfc_hmod)`, p`r fmt_p(ravlt_sfc_hmod$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_hmod")`, marginal r²=`r fmt_r2m(ravlt_sfc_hmod)`, conditional r²=`r fmt_r2c(ravlt_sfc_hmod)`), and in the DMN (β=`r fmt_b(ravlt_sfc_dmn)`, 95% CI `r fmt_ci_text(ravlt_sfc_dmn)`, p`r fmt_p(ravlt_sfc_dmn$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_dmn")`, marginal r²=`r fmt_r2m(ravlt_sfc_dmn)`, conditional r²=`r fmt_r2c(ravlt_sfc_dmn)`). Though there was a trend, we found no significant association between ECN (p`r fmt_p(ravlt_sfc_control$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_control")`) and SN (p`r fmt_p(ravlt_sfc_salience$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_salience")`) SFC and episodic memory. Moreover, there was no evidence of an association between sensory region SFC and episodic memory (p`r fmt_p(ravlt_sfc_sensory$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_sensory")`). These results are displayed in Figure 3 panel C. 
 
-We then examined SFC annual change and superager status. We did not find any evidence of significant relationships between superager status and global (p`r fmt_p(sfc_superager_weighted_slope$p_value)`, pFDR`r get_fdr(sfc_slope_fdr_results, "sfc_weighted_mean_slope")`), heteromodal (p`r fmt_p(sfc_superager_hmod_slope$p_value)`, pFDR`r get_fdr(sfc_slope_fdr_results, "sfc_hmod_slope")`), DMN (p`r fmt_p(sfc_superager_dmn_slope$p_value)`, pFDR`r get_fdr(sfc_slope_fdr_results, "sfc_dmn_slope")`), ECN (p`r fmt_p(sfc_superager_control_slope$p_value)`, pFDR`r get_fdr(sfc_slope_fdr_results, "sfc_control_slope")`), or sensory SFC annual change (p`r fmt_p(sfc_superager_sensory_slope$p_value)`, pFDR`r get_fdr(sfc_slope_fdr_results, "sfc_sensory_slope")`). We found limited evidence of an association between SN SFC annual change and superager status, but this did not survive correction for multiple comparisons (p`r fmt_p(sfc_superager_salience_slope$p_value)`, pFDR`r get_fdr(sfc_slope_fdr_results, "sfc_salience_slope")`). With SFC annual change and episodic memory, we found no evidence that SFC annual change in any of the investigated regions was associated with episodic memory (ps > `r min_ravlt_slope_p_floor`). These results are summarized in Table 3.
+We next examined whether SFC change over follow-up differed by superager status or was associated with episodic memory. We found no evidence that superager status predicted SFC change in any network (all ps ≥ `r fmt_round2(min_sfc_slope_p)`, all pFDRs ≥ `r fmt_round2(min_sfc_slope_p_fdr)`), or that SFC change predicted episodic memory (all ps ≥ `r fmt_round2(min_ravlt_slope_p)`, all pFDRs ≥ `r fmt_round2(min_ravlt_slope_p_fdr)`), though a small trend emerged in the SN for both superager status (p`r fmt_p(sfc_superager_salience_slope$p_value)`) and episodic memory (p`r fmt_p(ravlt_sfc_salience_slope$p_value)`). These results are summarized in Table 2.
 
-**Table 3** Associations between structure-function coupling, superager status, and episodic memory
+**Table 2** Associations between structure-function coupling, superager status, and episodic memory
 
 ```{r table3}
 # Helpers to build data rows for LME and LM models
@@ -189,17 +184,6 @@ lme_row <- function(region, model, fdr_df, fdr_key) {
     pFDR                   = fmt_p_star(get_fdr_raw(fdr_df, fdr_key)),
     `Marginal r²`     = fmt_r2m(model),
     `Conditional r²`  = fmt_r2c(model)
-  )
-}
-
-lm_row <- function(region, model, fdr_df, fdr_key) {
-  list(
-    Region                 = region,
-    `Coefficient (95% CI)` = fmt_coef_ci(model),
-    `p-value`              = fmt_p_star(as.numeric(model$p_value)[1]),
-    pFDR                   = fmt_p_star(get_fdr_raw(fdr_df, fdr_key)),
-    `Marginal r²`     = fmt_r2(model),
-    `Conditional r²`  = ""
   )
 }
 
@@ -228,15 +212,15 @@ tbl3 <- bind_rows(
   lme_row("SN SFC",          sfc_superager_salience, sfc_fdr_results, "sfc_salience"),
   lme_row("Sensory SFC",     sfc_superager_sensory,  sfc_fdr_results, "sfc_sensory"),
 
-  # ── Superager status — annual change (LM) ───────────────────────────────
-  type_row("Linear regression analyses — annual change"),
+  # ── Superager status — change (LME interaction) ─────────────────────────
+  type_row("Repeated measures linear mixed effects analyses — change"),
   hdr_row("Superager status"),
-  lm_row("Global SFC annual change",      sfc_superager_weighted_slope, sfc_slope_fdr_results, "sfc_weighted_mean_slope"),
-  lm_row("Heteromodal SFC annual change", sfc_superager_hmod_slope,     sfc_slope_fdr_results, "sfc_hmod_slope"),
-  lm_row("DMN SFC annual change",         sfc_superager_dmn_slope,      sfc_slope_fdr_results, "sfc_dmn_slope"),
-  lm_row("ECN SFC annual change",         sfc_superager_control_slope,  sfc_slope_fdr_results, "sfc_control_slope"),
-  lm_row("SN SFC annual change",          sfc_superager_salience_slope, sfc_slope_fdr_results, "sfc_salience_slope"),
-  lm_row("Sensory SFC annual change",     sfc_superager_sensory_slope,  sfc_slope_fdr_results, "sfc_sensory_slope"),
+  lme_row("Global SFC × time",      sfc_superager_weighted_slope, sfc_slope_fdr_results, "sfc_weighted_mean_slope"),
+  lme_row("Heteromodal SFC × time", sfc_superager_hmod_slope,     sfc_slope_fdr_results, "sfc_hmod_slope"),
+  lme_row("DMN SFC × time",         sfc_superager_dmn_slope,      sfc_slope_fdr_results, "sfc_dmn_slope"),
+  lme_row("ECN SFC × time",         sfc_superager_control_slope,  sfc_slope_fdr_results, "sfc_control_slope"),
+  lme_row("SN SFC × time",          sfc_superager_salience_slope, sfc_slope_fdr_results, "sfc_salience_slope"),
+  lme_row("Sensory SFC × time",     sfc_superager_sensory_slope,  sfc_slope_fdr_results, "sfc_sensory_slope"),
 
   # ── Episodic memory (LME) ───────────────────────────────────────────────
   type_row("Repeated measures linear mixed effects analyses"),
@@ -248,22 +232,21 @@ tbl3 <- bind_rows(
   lme_row("SN SFC",          ravlt_sfc_salience, ravlt_fdr_results, "ravlt_sfc_salience"),
   lme_row("Sensory SFC",     ravlt_sfc_sensory,  ravlt_fdr_results, "ravlt_sfc_sensory"),
 
-  # ── Episodic memory — annual change (LME) ───────────────────────────────
-  type_row("Repeated measures linear mixed effects analyses — annual change"),
+  # ── Episodic memory — change (LME interaction) ──────────────────────────
+  type_row("Repeated measures linear mixed effects analyses — change"),
   hdr_row("Episodic memory"),
-  lme_row("Global SFC annual change",      ravlt_sfc_weighted_slope, ravlt_slope_fdr_results, "ravlt_sfc_weighted_mean_slope"),
-  lme_row("Heteromodal SFC annual change", ravlt_sfc_hmod_slope,     ravlt_slope_fdr_results, "ravlt_sfc_hmod_slope"),
-  lme_row("DMN SFC annual change",         ravlt_sfc_dmn_slope,      ravlt_slope_fdr_results, "ravlt_sfc_dmn_slope"),
-  lme_row("ECN SFC annual change",         ravlt_sfc_control_slope,  ravlt_slope_fdr_results, "ravlt_sfc_control_slope"),
-  lme_row("SN SFC annual change",          ravlt_sfc_salience_slope, ravlt_slope_fdr_results, "ravlt_sfc_salience_slope"),
-  lme_row("Sensory SFC annual change",     ravlt_sfc_sensory_slope,  ravlt_slope_fdr_results, "ravlt_sfc_sensory_slope")
+  lme_row("Global SFC × time",      ravlt_sfc_weighted_slope, ravlt_slope_fdr_results, "ravlt_sfc_weighted_mean_slope"),
+  lme_row("Heteromodal SFC × time", ravlt_sfc_hmod_slope,     ravlt_slope_fdr_results, "ravlt_sfc_hmod_slope"),
+  lme_row("DMN SFC × time",         ravlt_sfc_dmn_slope,      ravlt_slope_fdr_results, "ravlt_sfc_dmn_slope"),
+  lme_row("ECN SFC × time",         ravlt_sfc_control_slope,  ravlt_slope_fdr_results, "ravlt_sfc_control_slope"),
+  lme_row("SN SFC × time",          ravlt_sfc_salience_slope, ravlt_slope_fdr_results, "ravlt_sfc_salience_slope"),
+  lme_row("Sensory SFC × time",     ravlt_sfc_sensory_slope,  ravlt_slope_fdr_results, "ravlt_sfc_sensory_slope")
 )
 
 # Identify type rows (model description) and section header rows
 type_labels <- c(
   "Repeated measures linear mixed effects analyses",
-  "Linear regression analyses — annual change",
-  "Repeated measures linear mixed effects analyses — annual change"
+  "Repeated measures linear mixed effects analyses — change"
 )
 type_idx <- which(tbl3$Region %in% type_labels)
 hdr_idx  <- setdiff(which(tbl3$`Coefficient (95% CI)` == ""), type_idx)
