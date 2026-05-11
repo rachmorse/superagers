@@ -399,38 +399,6 @@ get_mixed_effects_stats <- function(formula, data, vars_priority) {
   ))
 }
 
-# Another for LMs
-get_regression_stats <- function(formula, data, vars_priority) {
-  model <- lm(formula, data = data)
-  summary_model <- summary(model)
-  coefficients <- summary_model$coefficients
-  
-  # Initialize the variable index
-  variable_index <- NULL
-  
-  # Check for each variable in priority order and break on the first match
-  for (var in vars_priority) {
-    if (var %in% rownames(coefficients)) {
-      variable_index <- which(rownames(coefficients) == var)
-      break
-    }
-  }
-  
-  # Check if a relevant variable was found
-  if (is.null(variable_index)) {
-    stop("None of the priority variables are in the model.")
-  }
-  
-  coef <- coefficients[variable_index, 1]
-  ci <- confint(model)[variable_index, ]
-  p_value <- coefficients[variable_index, 4]
-  t_stat <- coefficients[variable_index, 3]
-  adj_r2 <- summary_model$adj.r.squared
-  r2 <- summary_model$r.squared
-  
-  return(list(coef = coef, ci = ci, p_value = p_value, t_stat = t_stat, adj_r2 = adj_r2, r2 = r2))
-}
-
 # Run FDR correction within each model group
 run_group_fdr <- function(model_groups, method = "fdr") {
   extract_p <- function(x) {
@@ -485,18 +453,19 @@ sfc_superager_salience
 sfc_superager_control <- get_mixed_effects_stats(scale(sfc_control) ~ factor(superager_long) + scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data = data_long, vars)
 sfc_superager_control
 
-vars_slope <- c("factor(superager_long)1")
-sfc_superager_weighted_slope <- get_regression_stats(scale(sfc_weighted_mean_slope) ~ factor(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars_slope)
+vars_slope <- c("factor(superager_long)1:scale(time)")
+
+sfc_superager_weighted_slope <- get_mixed_effects_stats(scale(sfc_weighted_mean) ~ factor(superager_long) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data = data_long, vars_slope)
 sfc_superager_weighted_slope
-sfc_superager_hmod_slope <- get_regression_stats(scale(sfc_hmod_slope) ~ factor(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars_slope)
+sfc_superager_hmod_slope <- get_mixed_effects_stats(scale(sfc_hmod) ~ factor(superager_long) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data = data_long, vars_slope)
 sfc_superager_hmod_slope
-sfc_superager_sensory_slope <- get_regression_stats(scale(sfc_sensory_slope) ~ factor(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars_slope)
+sfc_superager_sensory_slope <- get_mixed_effects_stats(scale(sfc_sensory) ~ factor(superager_long) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data = data_long, vars_slope)
 sfc_superager_sensory_slope
-sfc_superager_dmn_slope <- get_regression_stats(scale(sfc_dmn_slope) ~ factor(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars_slope)
+sfc_superager_dmn_slope <- get_mixed_effects_stats(scale(sfc_dmn) ~ factor(superager_long) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data = data_long, vars_slope)
 sfc_superager_dmn_slope
-sfc_superager_salience_slope <- get_regression_stats(scale(sfc_salience_slope) ~ factor(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars_slope)
+sfc_superager_salience_slope <- get_mixed_effects_stats(scale(sfc_salience) ~ factor(superager_long) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data = data_long, vars_slope)
 sfc_superager_salience_slope
-sfc_superager_control_slope <- get_regression_stats(scale(sfc_control_slope) ~ factor(superager_long) + scale(age_1) + sex + scale(YoE), data = data_wide, vars_slope)
+sfc_superager_control_slope <- get_mixed_effects_stats(scale(sfc_control) ~ factor(superager_long) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data = data_long, vars_slope)
 sfc_superager_control_slope
 
 # SFC-only significance label from the adjusted mixed model
@@ -565,25 +534,25 @@ ravlt_sfc_control <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(s
 ravlt_sfc_control
 
 vars <- c(
-  "scale(sfc_weighted_mean_slope)",
-  "scale(sfc_hmod_slope)",
-  "scale(sfc_sensory_slope)",
-  "scale(sfc_dmn_slope)",
-  "scale(sfc_salience_slope)",
-  "scale(sfc_control_slope)"
+  "scale(sfc_weighted_mean):scale(time)",
+  "scale(sfc_hmod):scale(time)",
+  "scale(sfc_sensory):scale(time)",
+  "scale(sfc_dmn):scale(time)",
+  "scale(sfc_salience):scale(time)",
+  "scale(sfc_control):scale(time)"
 )
 
-ravlt_sfc_weighted_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_weighted_mean_slope) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_weighted_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_weighted_mean) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_weighted_slope
-ravlt_sfc_hmod_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_hmod_slope) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_hmod_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_hmod) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_hmod_slope
-ravlt_sfc_sensory_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_sensory_slope) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_sensory_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_sensory) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_sensory_slope
-ravlt_sfc_dmn_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_dmn_slope) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_dmn_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_dmn) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_dmn_slope
-ravlt_sfc_salience_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_salience_slope) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_salience_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_salience) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_salience_slope
-ravlt_sfc_control_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_control_slope) + scale(age_1) + scale(time) + sex + scale(YoE) + (1 | id), data_long, vars)
+ravlt_sfc_control_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_control) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_control_slope
 
 m1 <- lmer(
