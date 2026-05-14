@@ -10,122 +10,10 @@ from sklearn.base import clone
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold, GridSearchCV
-from sklearn.metrics import roc_auc_score, average_precision_score, brier_score_loss, balanced_accuracy_score
+from sklearn.metrics import roc_auc_score
 from sklearn.utils import check_random_state
-from statsmodels.stats.multitest import multipletests
 from prep_data_for_en import get_subjects_to_process
-from sklearn.linear_model import LinearRegression
 
-
-def _compute_feature_group_stats(
-    X: np.ndarray,
-    y: np.ndarray,
-    feature_names: list,
-    prefix: str,
-    n_boot: int = 2000,
-    alpha: float = 0.05,
-    random_state: int = 7,
-):
-    """Compute per-feature SA vs non-SA group differences and uncertainty.
-    
-    Args:
-        X (np.ndarray): Feature matrix of shape (n_samples, n_features).
-        y (np.ndarray): Binary labels (0 = non-superager, 1 = superager).
-        feature_names (list): List of feature names corresponding to columns of X.
-        prefix (str): Prefix for column names in the output DataFrame (e.g. "raw" or "adj").
-        n_boot (int): Number of bootstrap samples for confidence intervals.
-        alpha (float): Significance level for confidence intervals.
-        random_state (int): Seed for reproducibility in bootstrapping.
-    
-    Returns:
-        pd.DataFrame: DataFrame with group statistics for each feature,
-            including means, differences, Cohen's d, direction, and confidence intervals.
-    """
-    X = np.asarray(X, dtype=float)
-    y = np.asarray(y).astype(int)
-    mask_sa = (y == 1)
-    mask_non = (y == 0)
-    X_sa = X[mask_sa]
-    X_non = X[mask_non]
-    n_sa = X_sa.shape[0]
-    n_non = X_non.shape[0]
-    if n_sa < 2 or n_non < 2:
-        raise ValueError("Need at least 2 samples per class to compute group statistics.")
-
-    mean_sa = X_sa.mean(axis=0)
-    mean_non = X_non.mean(axis=0)
-    delta = mean_sa - mean_non
-
-    var_sa = X_sa.var(axis=0, ddof=1)
-    var_non = X_non.var(axis=0, ddof=1)
-
-    # Cohen's d with pooled SD.
-    pooled_var = ((n_sa - 1) * var_sa + (n_non - 1) * var_non) / (n_sa + n_non - 2)
-    pooled_sd = np.sqrt(np.clip(pooled_var, a_min=0.0, a_max=None))
-    cohen_d = np.divide(delta, pooled_sd, out=np.full_like(delta, np.nan), where=pooled_sd > 0)
-
-    # Stratified bootstrap CI for mean difference.
-    rng = np.random.default_rng(random_state)
-    boot_deltas = np.empty((n_boot, X.shape[1]), dtype=float)
-    for b in range(n_boot):
-        idx_sa = rng.integers(0, n_sa, size=n_sa)
-        idx_non = rng.integers(0, n_non, size=n_non)
-        boot_deltas[b] = X_sa[idx_sa].mean(axis=0) - X_non[idx_non].mean(axis=0)
-    lo = np.percentile(boot_deltas, 100.0 * (alpha / 2.0), axis=0)
-    hi = np.percentile(boot_deltas, 100.0 * (1.0 - alpha / 2.0), axis=0)
-
-    direction = np.where(delta > 0, "higher_in_SA", "lower_in_SA")
-    direction = np.where(np.isclose(delta, 0.0), "no_difference", direction)
-
-    return pd.DataFrame({
-        "feature": feature_names,
-        f"{prefix}_n_sa": n_sa,
-        f"{prefix}_n_non_sa": n_non,
-        f"{prefix}_mean_sa": mean_sa,
-        f"{prefix}_mean_non_sa": mean_non,
-        f"{prefix}_delta_sa_minus_non_sa": delta,
-        f"{prefix}_delta_ci_low": lo,
-        f"{prefix}_delta_ci_high": hi,
-        f"{prefix}_cohen_d": cohen_d,
-        f"{prefix}_direction": direction,
-    })
-
-
-def compute_group_effects(
-    X: np.ndarray,
-    y: np.ndarray,
-    feature_names: list,
-    covariates: np.ndarray = None,
-    n_boot: int = 2000,
-    alpha: float = 0.05,
-    random_state: int = 7,
-):
-    """Build raw and covariate-adjusted SA vs non-SA feature summaries.
-    
-    Args:
-        X (np.ndarray): Feature matrix of shape (n_samples, n_features).
-        y (np.ndarray): Binary labels (0 = non-superager, 1 = superager).
-        feature_names (list): List of feature names corresponding to columns of X.
-        covariates (np.ndarray): Covariate matrix of shape (n_samples, n_covariates) for adjustment. If None, no adjustment is done.
-        n_boot (int): Number of bootstrap samples for confidence intervals.
-        alpha (float): Significance level for confidence intervals.
-        random_state (int): Seed for reproducibility in bootstrapping.
-    
-    Returns:
-        pd.DataFrame: DataFrame with group statistics for each feature,
-            including raw and adjusted means, differences, Cohen's d, direction, and confidence intervals.
-    """
-    raw_df = _compute_feature_group_stats(
-        X, y, feature_names, prefix="raw", n_boot=n_boot, alpha=alpha, random_state=random_state
-    )
-    if covariates is None:
-        return raw_df
-
-    X_adj = take_residuals_covars(X_train=X, covariates_train=covariates)
-    adj_df = _compute_feature_group_stats(
-        X_adj, y, feature_names, prefix="adj", n_boot=n_boot, alpha=alpha, random_state=random_state + 1000
-    )
-    return raw_df.merge(adj_df, on="feature", how="left")
 
 
 def bootstrap_auc_ci(y_true, y_prob, n_boot=2000, alpha=0.05, random_state=7):
@@ -158,7 +46,7 @@ def bootstrap_auc_ci(y_true, y_prob, n_boot=2000, alpha=0.05, random_state=7):
     return (float(lo), float(hi))
 
 
-def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data, connectivity_type, group_level, which_features, label_type=None):
+def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data, connectivity_type):
     """Prepares the data for analysis by extracting features and superager status
     from the specified directories.
 
@@ -169,17 +57,12 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
         sc_root_path (Path): Path to the root directory containing SC data.
         demographic_data (pd.DataFrame): DataFrame containing demographic information.
         connectivity_type (str): Type of connectivity data to process ("SFC", "FC", or "SC").
-        group_level (str): Grouping level for ROI averaging ("ROI" or "network").
-        label_type (str | None): Outcome timepoint ("tp1", "tp2", "long") to select covariate age.
 
     Returns:
         X_t1 (np.ndarray): Feature matrix for timepoint 1.
-        X_t2 (np.ndarray): Feature matrix for timepoint 2.
-        X_slope (np.ndarray): Feature matrix representing the slope between timepoints.
-        X_t1_t2 (np.ndarray): Combined feature matrix for timepoints 1 and 2.
-        superager_vec (np.ndarray): Binary vector indicating superager status.
-        X_all (np.ndarray): Combined feature matrix for all features.
-        covariates (np.ndarray): Matrix of covariates (age, years of education, sex).
+        X_slope (np.ndarray): Feature matrix representing annual change between timepoints.
+        superager_vec_long (np.ndarray): Binary vector indicating longitudinal superager status.
+        covariates (np.ndarray): Matrix of covariates (baseline age, years of education, sex).
     """
     # Prepare the data
     demographic_data = demographic_data.copy()
@@ -189,58 +72,30 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
 
     roi_refs = {}
     def load_modality(sub, mod):
-        """Helper function to load features for a given modality (eg SFC).
-        
+        """Helper function to load per-ROI features for a given modality.
+
         Args:
             sub (str): Subject ID.
             mod (str): Modality ("SFC", "FC", or "SC").
         """
-        if group_level == "ROI":
-            # Use ungrouped per-ROI features (214 ROIs)
-            if mod == "SFC":
-                p1 = root_path / "ses-01" / "individual_coupling_matrices"
-                p2 = root_path / "ses-02" / "individual_coupling_matrices"
-                f1 = p1 / f"{sub}_ses-01_structure_function_coupling.csv"
-                f2 = p2 / f"{sub}_ses-02_structure_function_coupling.csv"
-            elif mod == "FC":
-                f1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_flat.csv"
-                f2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_flat.csv"
-            else:  # SC
-                f1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_flat.csv"
-                f2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_flat.csv"
-            col = 'pearson_rho'
-        elif mod == "SFC":
+        # Use ungrouped per-ROI features (214 ROIs) for both timepoints
+        if mod == "SFC":
             p1 = root_path / "ses-01" / "individual_coupling_matrices"
             p2 = root_path / "ses-02" / "individual_coupling_matrices"
-            # Allow grouped_by_ROI option
-            if group_level == "ROI_grouped":
-                f1 = p1 / f"{sub}_ses-01_structure_function_coupling_grouped_by_ROI.csv"
-                f2 = p2 / f"{sub}_ses-02_structure_function_coupling_grouped_by_ROI.csv"
-            else:
-                f1 = p1 / f"{sub}_ses-01_structure_function_coupling_grouped_by_{group_level}.csv"
-                f2 = p2 / f"{sub}_ses-02_structure_function_coupling_grouped_by_{group_level}.csv"
-            col = 'pearson_rho'
+            f1 = p1 / f"{sub}_ses-01_structure_function_coupling.csv"
+            f2 = p2 / f"{sub}_ses-02_structure_function_coupling.csv"
         elif mod == "FC":
-            if group_level == "ROI_grouped":
-                f1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_grouped_by_ROI.csv"
-                f2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_grouped_by_ROI.csv"
-            else:
-                f1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_grouped_by_{group_level}.csv"
-                f2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_grouped_by_{group_level}.csv"
-            col = 'pearson_rho' 
+            f1 = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_functional_connectivity_flat.csv"
+            f2 = fc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_functional_connectivity_flat.csv"
         else:  # SC
-            if group_level == "ROI_grouped":
-                f1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_grouped_by_ROI.csv"
-                f2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_grouped_by_ROI.csv"
-            else:
-                f1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_grouped_by_{group_level}.csv"
-                f2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_grouped_by_{group_level}.csv"
-            col = 'pearson_rho'  
+            f1 = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{sub}_ses-01_structural_connectivity_flat.csv"
+            f2 = sc_root_path / f"ses-02/individual_connectivity_matrices/grouped_rois/{sub}_ses-02_structural_connectivity_flat.csv"
+        col = 'pearson_rho'
 
         def read_one(path, ses_name):
             """Reads a single CSV file for one subject, modality, and session.
             Checks that the ROI order matches across subjects and sessions.
-            
+
             Args:
                 path (Path): Path to the CSV file to read.
                 ses_name (str): Session name ("ses-01" or "ses-02") for ROI reference.
@@ -257,57 +112,20 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
             vec = pd.to_numeric(d[col].values, errors='coerce')
             return vec, roi
 
-        need_both = which_features in {'slope', 't1_slope', 'all', 't1_t2'}
-        if need_both:
-            v1, roi1 = read_one(f1, "ses-01")
-            v2, roi2 = read_one(f2, "ses-02")
-            if v1 is None or v2 is None:
-                return None, None
-            if roi1 != roi2:
-                raise ValueError(f"ROI order mismatch between timepoints for {sub} {mod}")
-            return v1, v2
-
-        if which_features == 't1':
-            v1, _ = read_one(f1, "ses-01")
-            if v1 is None:
-                return None, None
-            v2, _ = read_one(f2, "ses-02")
-            if v2 is None:
-                v2 = np.full_like(v1, np.nan, dtype=float)
-            return v1, v2
-
-        if which_features == 't2':
-            v2, _ = read_one(f2, "ses-02")
-            if v2 is None:
-                return None, None
-            v1, _ = read_one(f1, "ses-01")
-            if v1 is None:
-                v1 = np.full_like(v2, np.nan, dtype=float)
-            return v1, v2
-
-        return None, None
+        v1, roi1 = read_one(f1, "ses-01")
+        v2, roi2 = read_one(f2, "ses-02")
+        if v1 is None or v2 is None:
+            return None, None
+        if roi1 != roi2:
+            raise ValueError(f"ROI order mismatch between timepoints for {sub} {mod}")
+        return v1, v2
 
     records = []
     for sub in subjects:
         # Load features
-        if connectivity_type == "all":
-            feats = []
-            for mod in ("SFC","FC","SC"):
-                v1, v2 = load_modality(sub, mod)
-                if v1 is None:
-                    feats = None
-                    break
-                feats.append((v1, v2))
-            if feats is None:
-                continue
-            # Stack features from all modalities
-            feat1 = np.hstack([v1 for v1, _ in feats])
-            feat2 = np.hstack([v2 for _, v2 in feats])
-        else:
-            # Otherwise load a single modality
-            feat1, feat2 = load_modality(sub, connectivity_type)
-            if feat1 is None:
-                continue
+        feat1, feat2 = load_modality(sub, connectivity_type)
+        if feat1 is None:
+            continue
 
         # Pull demographics and superager status from demographic_data
         row = demographic_data[demographic_data['id'] == sub]
@@ -315,13 +133,11 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
             continue
         age1 = row.iloc[0]['age_1']
         age2 = row.iloc[0]['age_2']
-        superager1 = row.iloc[0]['superager_tp1']
-        superager2 = row.iloc[0]['superager_tp2']
         superager_long = row.iloc[0]['superager_long']
         YoE = row.iloc[0]['YoE']
         sex = row.iloc[0]['sex']
 
-        # Convert sex to binary 0/1, keep missing as NaN for fold-wise imputation
+        # Convert sex to binary 0/1, NaN subjects are excluded later via valid_rows
         if pd.isna(sex):
             sex = np.nan
         elif sex == 'male':
@@ -332,17 +148,15 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
             sex = np.nan
 
         records.append({
-            'id'        : sub,
-            'feat1'     : feat1,
-            'feat2'     : feat2,
-            'age1'      : age1,
-            'age2'      : age2,
-            'superager1' : superager1,
-            'superager2' : superager2,
+            'id'             : sub,
+            'feat1'          : feat1,
+            'feat2'          : feat2,
+            'age1'           : age1,
+            'age2'           : age2,
             'superager_long' : superager_long,
-            'YoE'       : YoE,
-            'sex'       : sex
-             })
+            'YoE'            : YoE,
+            'sex'            : sex,
+        })
 
     # Build DataFrame
     df = pd.DataFrame(records)
@@ -352,7 +166,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
             "Check ID formatting and required columns in demographic_data."
         )
 
-    # 1) Stack features
+    # 1) Stack features and compute annual change
     X_t1 = np.stack(df['feat1'].values)
     X_t2 = np.stack(df['feat2'].values)
     age_diff = pd.to_numeric(df['age2'] - df['age1'], errors='coerce').values.astype(float)
@@ -360,58 +174,14 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
     valid_age_diff = np.isfinite(age_diff) & (age_diff != 0)
     X_slope[valid_age_diff] = (X_t2[valid_age_diff] - X_t1[valid_age_diff]) / age_diff[valid_age_diff, None]
 
-    # Look only at demographics
-    if label_type == "tp2":
-        covariates = np.vstack([df['age2'].values, df['YoE'].values, df['sex'].values]).T
-    else:
-        covariates = np.vstack([df['age1'].values, df['YoE'].values, df['sex'].values]).T
+    # 2) Covariates: baseline age, years of education, sex
+    covariates = np.vstack([df['age1'].values, df['YoE'].values, df['sex'].values]).T
 
-    # 2) Make a superager vector 
-    superager_vec_tp1 = pd.to_numeric(df['superager1'], errors='coerce').values
-    superager_vec_tp2 = pd.to_numeric(df['superager2'], errors='coerce').values
+    # 3) Longitudinal superager label
     superager_vec_long = pd.to_numeric(df['superager_long'], errors='coerce').values
 
-    # 3) Generate a stacked version of tp1 and tp2 features
-    X_all = np.hstack([X_t1, X_t2, X_slope])   # shape: (N_subjects, 3 * n_features)
-    X_t1_t2 = np.hstack([X_t1, X_t2])  
+    return X_t1, X_slope, superager_vec_long, covariates
 
-    return X_t1, X_t2, X_slope, X_t1_t2, superager_vec_tp1, superager_vec_tp2, superager_vec_long, X_all, covariates
-
-
-def take_residuals_covars(X_train, covariates_train, X_apply=None, covariates_apply=None):
-    """Takes the residuals of ROI features using covariates (age, YoE, sex).
-    For each feature column, fits a linear regression using the covariates,
-    and the residuals (feature minus predicted component) returned. This
-    ensures that downstream models can operate only on variance unexplained by
-    the covariates.
-
-    Args:
-        X_train (np.ndarray): Training feature matrix.
-        covariates_train (np.ndarray): Training covariates.
-        X_apply (np.ndarray): Feature matrix to residualize. If None, residualize X_train.
-        covariates_apply (np.ndarray): Covariates for X_apply. If None, uses covariates_train.
-
-    Returns:
-        np.ndarray: Residualized feature matrix of shape (n_samples, n_features),
-                    where each column has been adjusted for the covariates.
-    """
-    if X_apply is None:
-        X_apply = X_train
-    if covariates_apply is None:
-        covariates_apply = covariates_train
-
-    n_samples, n_features = X_apply.shape
-    X_resid = np.zeros_like(X_apply)
-
-    for j in range(n_features):
-        # Fit linear regression of feature j on covariates
-        model = LinearRegression().fit(covariates_train, X_train[:, j])
-        # Predicted values from covariates
-        pred = model.predict(covariates_apply)
-        # Residuals = observed - predicted
-        X_resid[:, j] = X_apply[:, j] - pred
-
-    return X_resid
 
 
 def _perm_importance_on_train_cv(pipe, best_params, X_tr, y_tr, inner_cv, n_repeats, random_state):
@@ -451,7 +221,6 @@ def run_elastic_net(
     feature_names: list,
     n_permutations: int = 1000,
     n_repeats_importance: int = 20,
-    class_weight=None,
     random_state: int = 42,
     verbose: int = 1,
     checkpoint_n=None,
@@ -459,10 +228,6 @@ def run_elastic_net(
     group_level=None,
     which_features=None,
     label_type=None,
-    covariate_mode=None,
-    covariates: np.ndarray=None,
-    group_effect_covariates: np.ndarray=None,
-    n_boot_group_effects: int = 2000,
 ):
     """Train and evaluate an elastic net logistic classifier with nested cross-validation,
     out-of-fold predictions, permutation testing, and permutation-based feature importance.
@@ -474,30 +239,24 @@ def run_elastic_net(
         n_permutations (int): Number of label permutations for building the null distribution
             (used to compute model-level p-value).
         n_repeats_importance (int): Number of repeats per feature for permutation importance
-            (evaluated on each outer test fold).
-        class_weight ({dict, None}): Class weighting for LogisticRegression 
-            (e.g. whether to add balancing weights for imbalanced group numbers).
+            (evaluated on each outer training set across inner CV folds).
         random_state (int): Seed for random number generation in splits and shuffles.
         verbose (int): Verbosity level; prints ~10% progress during permutations if > 0.
-        connectivity_type (str): Type of connectivity data ("SFC", "FC", "SC", or "all") for naming outputs.
-        group_level (str): Grouping level for ROI averaging ("ROI" or "network") for naming outputs.
+        connectivity_type (str): Type of connectivity data ("SFC", "FC", "SC") for naming outputs.
+        group_level (str): Grouping level for ROI averaging (always "ROI") for naming outputs.
         checkpoint_n (int): Save progress every `checkpoint_n` permutations to a pickle file.
-        which_features (str): Which features are being used ('t1', 't2', 'slope', 't1_slope', 't1_t2', 'all') for naming outputs.
-        label_type (str): Outcome timepoint ("tp1", "tp2", "long") for naming outputs.
-        covariate_mode (str): Covariate handling mode ("residualize", "include") for naming outputs.
-        covariates (np.ndarray): Covariate matrix of shape (n_samples, n_covariates) for residualization.
-        group_effect_covariates (np.ndarray): Covariates used for post-hoc group-difference adjustment.
-        n_boot_group_effects (int): Bootstrap samples for SA-vs-nonSA delta confidence intervals.
+        which_features (str): Which features are being used ('t1' or 't1_slope') for naming outputs.
+        label_type (str): Outcome timepoint (always "long") for naming outputs.
 
     Returns:
         dict containing:
-            - "observed": with metrics {"auc", "pr_auc", "brier", "balanced_acc"}.
-            - "cv_fold_metrics": with metrics per cross-validation fold.
+            - "observed": with metrics {"auc"}.
+            - "cv_fold_metrics": with per-fold AUC.
             - "oof": with {"y_true", "y_prob", "test_index"} for out-of-fold predictions.
             - "best_params_per_fold": with best hyperparameters per fold.
             - "coef_mean": with mean coefficients across folds.
             - "coef_std": with coefficient standard deviations across folds.
-            - "feat_importance": with feature-wise mean/std permutation importance.
+            - "feat_importance": with feature-wise permutation importance, coefficients, and selection frequency.
             - "permutation_test": with {"aucs": np.ndarray, "p_value": float}.
     """
     # Create reproducible splits
@@ -509,14 +268,6 @@ def run_elastic_net(
     assert set(np.unique(y)) <= {0, 1}, "y must be binary (0/1)."
     assert X.shape[0] == y.shape[0], "X and y must have the same number of samples."
     assert X.shape[1] == len(feature_names), "feature_names length must match n_features."
-    if covariates is not None:
-        covariates = np.asarray(covariates, dtype=float)
-        assert covariates.shape[0] == X.shape[0], "covariates and X must have the same number of samples."
-    if group_effect_covariates is not None:
-        group_effect_covariates = np.asarray(group_effect_covariates, dtype=float)
-        assert group_effect_covariates.shape[0] == X.shape[0], (
-            "group_effect_covariates and X must have the same number of samples."
-        )
     if checkpoint_n is None or checkpoint_n <= 0:
         checkpoint_n = n_permutations
 
@@ -535,7 +286,6 @@ def run_elastic_net(
             penalty="elasticnet",
             solver="saga", # only solver in scikit-learn that supports EN
             max_iter=20000, # increased because of convergence warnings at 5,000
-            class_weight=class_weight,
             random_state=random_state,
             n_jobs=1
         )),
@@ -563,16 +313,6 @@ def run_elastic_net(
     # Outer CV - for each outer split holds out X_te/y_te as the final test set
     for fold_id, (tr_idx, te_idx) in enumerate(outer_splits, start=1):
         X_tr, X_te = X[tr_idx], X[te_idx] # X_tr is the outer training set, X_te is the test set
-
-        # Residualize ROI features against covariates inside the outer split
-        if covariates is not None:
-            cov_tr = covariates[tr_idx].copy()
-            cov_te = covariates[te_idx].copy()
-            X_tr_raw = X_tr
-            X_te_raw = X_te
-            X_tr = take_residuals_covars(X_tr_raw, cov_tr)
-            X_te = take_residuals_covars(X_tr_raw, cov_tr, X_te_raw, cov_te)
-
         y_tr, y_te = y[tr_idx], y[te_idx]
 
         gs = GridSearchCV( # splits X_tr into inner train and validation sets
@@ -596,10 +336,6 @@ def run_elastic_net(
 
         # Fold metrics
         auc = roc_auc_score(y_te, prob_te)
-        pr_auc = average_precision_score(y_te, prob_te) # average precision = area under PR curve
-        brier = brier_score_loss(y_te, prob_te) # measures calibration (lower is better) - how close are predicted probs to reality
-        y_hat = (prob_te >= 0.5).astype(int) 
-        bal_acc = balanced_accuracy_score(y_te, y_hat) # average of sensitivity and specificity
 
         # Metrics from the refit on the outer test set
         fold_metrics.append({
@@ -607,9 +343,6 @@ def run_elastic_net(
             "n_train": len(tr_idx),
             "n_test": len(te_idx),
             "auc": auc,
-            "pr_auc": pr_auc,
-            "brier": brier,
-            "balanced_acc": bal_acc
         })
 
         # Coefficients from the refit/best model 
@@ -625,9 +358,6 @@ def run_elastic_net(
 
     # Metrics for how well the EN model did overall (on all out-of-fold predictions)
     observed_auc = roc_auc_score(y_true_oof, y_prob_oof)
-    observed_pr_auc = average_precision_score(y_true_oof, y_prob_oof)
-    observed_brier = brier_score_loss(y_true_oof, y_prob_oof)
-    observed_bal_acc = balanced_accuracy_score(y_true_oof, (y_prob_oof >= 0.5).astype(int))
 
     # Metrics for how important each feature was overall
     coefs = np.vstack(coefs)
@@ -635,7 +365,6 @@ def run_elastic_net(
     coef_std = coefs.std(axis=0, ddof=1)
     selection_freq = (coefs != 0).mean(axis=0)
 
-    # Permutation importance for calculating feature-level p-values
     perm_importance_accumulator = np.vstack(perm_importance_accumulator)
     pi_mean = perm_importance_accumulator.mean(axis=0)
 
@@ -647,22 +376,12 @@ def run_elastic_net(
         "selected_freq": selection_freq,
         "abs_coef_mean": np.abs(coef_mean)
     }).sort_values(["abs_coef_mean"], ascending=False)
-    group_effects_df = compute_group_effects(
-        X=X,
-        y=y,
-        feature_names=feature_names,
-        covariates=group_effect_covariates,
-        n_boot=n_boot_group_effects,
-        alpha=0.05,
-        random_state=random_state,
-    )
-    feature_df = feature_df.merge(group_effects_df, on="feature", how="left")
 
     # Model-level permutation test - now build the null distribution training the models on shuffled labels
     # Start by adding a check point for if the server crashes while this is running, not all progress is lost
     checkpoint_file = (
         f"results/{connectivity_type}_{group_level}_{which_features}_"
-        f"{label_type}_{covariate_mode}_perm_results.pkl"
+        f"{label_type}_include_perm_results.pkl"
     )
     start_p = 0
     completed = 0
@@ -674,22 +393,18 @@ def run_elastic_net(
             saved = pickle.load(f)
 
         completed = int(np.count_nonzero(~np.isnan(saved["perm_aucs"])))
-        n_features = X.shape[1]
         target_total = max(n_permutations, completed)
 
         if completed < target_total:
             # Expand arrays to the new total and copy old data
             perm_aucs = np.empty(target_total, dtype=float); perm_aucs[:] = np.nan
-            pi_null   = np.zeros((target_total, n_features), dtype=float)
             valid_mask = ~np.isnan(saved["perm_aucs"])
             n_valid = valid_mask.sum()
             perm_aucs[:n_valid] = saved["perm_aucs"][valid_mask]
-            pi_null[:n_valid]   = saved["pi_null"][valid_mask]
             print(f"Expanding from {completed} → {target_total} total permutations.")
         else:
             # Reuse existing arrays
             perm_aucs = saved["perm_aucs"]
-            pi_null   = saved["pi_null"]
             target_total = max(n_permutations, completed)
             print(f"Using existing {completed} total permutations.")
 
@@ -698,7 +413,6 @@ def run_elastic_net(
         print(f"Starting permutations from scratch, running {n_permutations} total.")
         target_total = n_permutations
         perm_aucs = np.empty(target_total, dtype=float); perm_aucs[:] = np.nan
-        pi_null   = np.zeros((target_total, X.shape[1]), dtype=float)
         start_p = 0
 
     progress_every = max(1, target_total // 10) # report progress after every 10%
@@ -712,17 +426,9 @@ def run_elastic_net(
 
             # Save the out-of-fold predictions for each permutation
             perm_oof = np.zeros_like(y, dtype=float)
-            per_fold_imps = []
 
             for (tr_idx, te_idx) in outer_splits:
                 X_tr, X_te = X[tr_idx], X[te_idx]
-                if covariates is not None:
-                    cov_tr = covariates[tr_idx].copy()
-                    cov_te = covariates[te_idx].copy()
-                    X_tr_raw = X_tr
-                    X_te_raw = X_te
-                    X_tr = take_residuals_covars(X_tr_raw, cov_tr)
-                    X_te = take_residuals_covars(X_tr_raw, cov_tr, X_te_raw, cov_te)
                 y_tr_perm = y_perm[tr_idx]       # permuted labels for training
                 # Train and run on permuted labels
                 gs_perm = GridSearchCV(
@@ -737,33 +443,14 @@ def run_elastic_net(
                 best_perm = gs_perm.best_estimator_
                 perm_oof[te_idx] = best_perm.predict_proba(X_te)[:, 1]
 
-                # Now calculate the importance of features in this permutation
-                # Use permuted labels and inner-CV validation folds 
-                pi_perm_mean = _perm_importance_on_train_cv(
-                    pipe,
-                    gs_perm.best_params_,
-                    X_tr,
-                    y_tr_perm,
-                    inner_cv,
-                    n_repeats_importance,
-                    random_state + 10_000 + p,
-                )
-                per_fold_imps.append(pi_perm_mean)
-        
             perm_aucs[p] = roc_auc_score(y, perm_oof)
-
-            # Average feature importances across outer folds for this permutation
-            if per_fold_imps:
-                pi_null[p, :] = np.mean(np.vstack(per_fold_imps), axis=0)
-            else:
-                pi_null[p, :] = 0.0 
-
+        
+            # Save results at each checkpoint_n permutations
             if (p + 1) % checkpoint_n == 0 or (p + 1) == target_total:
                 with open(checkpoint_file, "wb") as f:
                     pickle.dump({
                         "last_p": p,
                         "perm_aucs": perm_aucs,
-                        "pi_null": pi_null,
                         "feature": feature_names,   # safe mid-run
                     }, f)
                 print(f"Checkpoint saved at permutation {p+1}")
@@ -775,25 +462,15 @@ def run_elastic_net(
     # Needs a sufficient number of permutations to get a good estimate of the p-value
     p_value = (np.sum(perm_aucs >= observed_auc) + 1.0) / (target_total + 1.0)
 
-    # Feature-level p-values corrected FDR
-    completed = np.count_nonzero(~np.isnan(perm_aucs))
-    pvals = ((pi_null[:completed] >= pi_mean).sum(axis=0) + 1.0) / (completed + 1.0)
-    rej, pvals_fdr, _, _ = multipletests(pvals, alpha=0.05, method='fdr_bh')
+    feature_df.sort_values("perm_importance_mean", ascending=False, inplace=True)
 
-    feature_df["p_value"] = pvals
-    feature_df["p_fdr"] = pvals_fdr
-    feature_df.sort_values(["perm_importance_mean", "p_value"], ascending=[False, True], inplace=True)
-
-    # Save results at each checkpoint_n permutations
+    # Save final state including p-value
     with open(f"{checkpoint_file}", "wb") as f:
         pickle.dump({
             "last_p": target_total - 1,
             "perm_aucs": perm_aucs,
-            "pi_null": pi_null,
             "feature": feature_names,
             "p_value": p_value,   # model-level p
-            "pvals": pvals,       # feature-wise raw p
-            "p_fdr": pvals_fdr    # feature-wise FDR
         }, f)
          
     if start_p < target_total:  
@@ -802,9 +479,6 @@ def run_elastic_net(
     results = {
         "observed": {
             "auc": observed_auc,
-            "pr_auc": observed_pr_auc,
-            "brier": observed_brier,
-            "balanced_acc": observed_bal_acc
         },
         "cv_fold_metrics": pd.DataFrame(fold_metrics),
         "oof": {
@@ -824,134 +498,71 @@ def run_elastic_net(
     return results
 
 def main():
-    connectivity_type = "SFC"  # Options: "SFC", "FC", "SC", "all"
-    # These are the features used to predict superager status 
-    which_features = 't1' # Options: 't1', 't2', 'slope', 't1_slope', 't1_t2', 'all'
-    group_level = "ROI" # Options: "ROI" (n=214), "ROI_grouped" (n=59), "network" (n=7)
-    # The outcome variable being predicted - superager defined at tp1, tp2, or longitudinally
-    type = "long" # Options: "tp1", "tp2", "long"
-    # Either take the residuals of covars and use the residualized features, or include covars as additional features in the model
-    covariate_mode = "include"  # Options: "residualize", "include"
-    # Balancing option to consider uneven numbers of superagers and controls
-    class_weight = None  # Options: None, "balanced"
+    connectivity_type = "SFC"  # Options: "SFC", "FC", "SC"
+    # These are the features used to predict superager status
+    which_features = 't1'  # Options: 't1' (baseline only), 't1_slope' (baseline + annual change)
     root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
     fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
     sc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
     csv_path = Path("/home/rachel/Desktop/data/superager.csv")
     demographic_data = pd.read_csv(csv_path)
     demographic_data.columns = [re.sub(r"^w(\d+)_(.*)", r"\2_\1", c) for c in demographic_data.columns]
-    required_cols = {"id", "age_1", "age_2", "YoE", "sex", "superager_tp1", "superager_tp2", "superager_long"}
+    required_cols = {"id", "age_1", "age_2", "YoE", "sex", "superager_long"}
     missing_cols = sorted(required_cols - set(demographic_data.columns))
     if missing_cols:
         raise ValueError(f"Missing required columns in {csv_path}: {missing_cols}")
     age_dir = Path("/home/rachel/Desktop/data")
 
-    # Get the list of subjects to process
+    # Longitudinal superager definition requires both sessions
     subjects_tp1 = get_subjects_to_process(root_path / "ses-01" / "individual_coupling_matrices", "ses-01", age_dir)
     subjects_tp2 = get_subjects_to_process(root_path / "ses-02" / "individual_coupling_matrices", "ses-02", age_dir)
-    if type == "long":
-        subjects = sorted(set(subjects_tp1) & set(subjects_tp2))
-    elif which_features == "t1":
-        subjects = sorted(set(subjects_tp1))
-    elif which_features == "t2":
-        subjects = sorted(set(subjects_tp2))
-    else:
-        subjects = sorted(set(subjects_tp1) & set(subjects_tp2))
+    subjects = sorted(set(subjects_tp1) & set(subjects_tp2))
     print(f"Subjects: {len(subjects)}")
 
-    # Prepare the data for analysis 
-    X_t1, X_t2, X_slope, X_t1_t2, superager_vec_tp1, superager_vec_tp2, superager_vec_long, X_all, covariates = prep_data(
-        subjects, root_path, fc_root_path, sc_root_path, demographic_data, connectivity_type, group_level, which_features, label_type=type)
+    # Prepare the data for analysis
+    X_t1, X_slope, superager_vec_long, covariates = prep_data(
+        subjects, root_path, fc_root_path, sc_root_path, demographic_data, connectivity_type)
 
-    # Map feature indices back to ROI names
-    ses_for_names = "ses-02" if which_features == "t2" else "ses-01"
-    if group_level == "ROI":
-        if connectivity_type == "SFC":
-            roi_names_path = root_path / ses_for_names / "individual_coupling_matrices" / f"{subjects[0]}_{ses_for_names}_structure_function_coupling.csv"
-        elif connectivity_type == "FC":
-            roi_names_path = fc_root_path / f"{ses_for_names}/individual_connectivity_matrices/grouped_rois/{subjects[0]}_{ses_for_names}_functional_connectivity_flat.csv"
-        else:
-            # For SC and "all", use SC ROI names (same ROI list across modalities)
-            roi_names_path = sc_root_path / f"{ses_for_names}/individual_connectivity_matrices/grouped_rois/{subjects[0]}_{ses_for_names}_structural_connectivity_flat.csv"
-    elif connectivity_type == "SFC":
-        roi_names_path = root_path / ses_for_names / "individual_coupling_matrices" / f"{subjects[0]}_{ses_for_names}_structure_function_coupling_grouped_by_{group_level}.csv"
-        if group_level == "ROI_grouped" and not roi_names_path.is_file():
-            roi_names_path = root_path / ses_for_names / "individual_coupling_matrices" / f"{subjects[0]}_{ses_for_names}_structure_function_coupling_grouped_by_ROI.csv"
+    # Map feature indices back to ROI names 
+    if connectivity_type == "SFC":
+        roi_names_path = root_path / "ses-01" / "individual_coupling_matrices" / f"{subjects[0]}_ses-01_structure_function_coupling.csv"
     elif connectivity_type == "FC":
-        roi_names_path = fc_root_path / f"{ses_for_names}/individual_connectivity_matrices/grouped_rois/{subjects[0]}_{ses_for_names}_functional_connectivity_grouped_by_{group_level}.csv"
-        if group_level == "ROI_grouped" and not roi_names_path.is_file():
-            roi_names_path = fc_root_path / f"{ses_for_names}/individual_connectivity_matrices/grouped_rois/{subjects[0]}_{ses_for_names}_functional_connectivity_grouped_by_ROI.csv"
-    else:
-        roi_names_path = sc_root_path / f"{ses_for_names}/individual_connectivity_matrices/grouped_rois/{subjects[0]}_{ses_for_names}_structural_connectivity_grouped_by_{group_level}.csv"
-        if group_level == "ROI_grouped" and not roi_names_path.is_file():
-            roi_names_path = sc_root_path / f"{ses_for_names}/individual_connectivity_matrices/grouped_rois/{subjects[0]}_{ses_for_names}_structural_connectivity_grouped_by_ROI.csv"
-    roi_names_pre = pd.read_csv(roi_names_path)['ROI_name'].tolist()
+        roi_names_path = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{subjects[0]}_ses-01_functional_connectivity_flat.csv"
+    else:  # SC
+        roi_names_path = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{subjects[0]}_ses-01_structural_connectivity_flat.csv"
+    roi_names = pd.read_csv(roi_names_path)['ROI_name'].tolist()
 
-    if connectivity_type in ["SFC", "SC", "FC"]:
-        roi_names = roi_names_pre
-    else:
-        # For "all", add modality prefixes to each ROI name
-        modalities = ["sfc", "fc", "sc"]
-        roi_names = [f"{mod}_{roi}" for mod in modalities for roi in roi_names_pre]
-
-    # Get the ROI names with two timepoints + slope for X_all:
     roi_names_tp1 = [f"{r}_1" for r in roi_names]
-    roi_names_tp2 = [f"{r}_2" for r in roi_names]
     roi_names_slope = [f"{r}_slope" for r in roi_names]
     X_t1_slope = np.hstack([X_t1, X_slope])
-    all_roi_names = roi_names_tp1 + roi_names_tp2 + roi_names_slope
-    
+
     # Select which features to use, matching them to ROI names
     match which_features:
         case 't1':
             X_use = X_t1
-            feat_names_use = roi_names           # e.g., 59 streamline ROIs
-        case 't2':
-            X_use = X_t2
-            feat_names_use = roi_names
-        case 'slope':
-            X_use = X_slope
             feat_names_use = roi_names
         case 't1_slope':
             X_use = X_t1_slope
             feat_names_use = roi_names_tp1 + roi_names_slope
-        case 'all':
-            X_use = X_all
-            feat_names_use = all_roi_names      # e.g., 59*3 = 177 features
-        case 't1_t2':
-            X_use = X_t1_t2
-            feat_names_use = roi_names_tp1 + roi_names_tp2
         case _:
-            raise ValueError("which_features must be one of: 't1', 't2', 'slope', 't1_slope', 'all', 't1_t2'")
+            raise ValueError("which_features must be one of: 't1', 't1_slope'")
 
-    if type == "tp1":
-        y_use = superager_vec_tp1
-    elif type == "tp2":
-        y_use = superager_vec_tp2
-    elif type == "long":
-        y_use = superager_vec_long
-    else:
-        raise ValueError("type must be one of: 'tp1', 'tp2', 'long'")
+    y_use = superager_vec_long
 
     valid_rows = np.isfinite(y_use) & np.isfinite(X_use).all(axis=1)
     valid_rows = valid_rows & np.isfinite(covariates).all(axis=1)
     X_use = X_use[valid_rows]
     y_use = y_use[valid_rows].astype(int)
     covariates = covariates[valid_rows]
-    covariates_for_group_effects = covariates.copy()
 
-    if covariate_mode == "include":
-        cov_use = covariates.astype(float)
-        X_use = np.hstack([X_use, cov_use])
-        feat_names_use = feat_names_use + ["cov_age", "cov_YoE", "cov_sex"]
-        covariates = None
-    elif covariate_mode != "residualize":
-        raise ValueError("covariate_mode must be one of: 'residualize', 'include'")
+    # Include covariates as model features
+    X_use = np.hstack([X_use, covariates.astype(float)])
+    feat_names_use = feat_names_use + ["cov_age", "cov_YoE", "cov_sex"]
 
     print(
         f"Training EN on {which_features} features "
         f"({X_use.shape[1]} predictors) for "
-        f"{connectivity_type=}, {group_level=}, {type=}, {covariate_mode=}..."
+        f"{connectivity_type=}..."
     )
 
     t0 = time.time()
@@ -960,24 +571,16 @@ def main():
         X_use, y_use, feat_names_use,
         n_permutations=1000,
         n_repeats_importance=10,
-        class_weight=class_weight,
         random_state=7,
         verbose=1,
         checkpoint_n=10,
         connectivity_type=connectivity_type,
-        group_level=group_level,
+        group_level="ROI",
         which_features=which_features,
-        label_type=type,
-        covariate_mode=covariate_mode,
-        covariates=covariates,
-        group_effect_covariates=covariates_for_group_effects,
-        n_boot_group_effects=2000,
+        label_type="long",
     )
 
-    feature_importance_csv = (
-        f"{connectivity_type}_{group_level}_{which_features}_"
-        f"{type}_{covariate_mode}_feature_importance.csv"
-    )
+    feature_importance_csv = f"{connectivity_type}_ROI_{which_features}_long_include_feature_importance.csv"
     results["feat_importance"].to_csv(feature_importance_csv, index=False)
     print(f"Saved feature importance table: {feature_importance_csv}")
 
@@ -1000,28 +603,13 @@ def main():
         l1_val = p.get("clf__l1_ratio")
         print(f"  fold {i}: C={c_val}, l1_ratio={l1_val}")
     print("Model-level p-value:", results["permutation_test"]["p_value"])
+
     feat = results["feat_importance"].copy()
     feat = feat[~feat["feature"].str.startswith("cov_", na=False)]
-    compact_cols = [
-        "feature",
-        "perm_importance_mean",
-        "selected_freq",
-        "adj_delta_sa_minus_non_sa",
-        "adj_delta_ci_low",
-        "adj_delta_ci_high",
-        "adj_direction",
-        "p_value",
-        "p_fdr",
-    ]
-    compact = feat.loc[:, compact_cols].copy()
-    compact = compact[(compact["selected_freq"] >= 0.7)]
-    compact = compact.sort_values("perm_importance_mean", ascending=False).head(15)
-    if compact.empty:
-        print("Compact interpretation table is empty with current filters (selected_freq >= 0.7).")
-    else:
-        print("Top stable features (selected_freq >= 0.7, adjusted CI excludes 0):")
-        with pd.option_context("display.max_columns", None):
-            print(compact.to_string(index=False))
+    compact = feat[["feature", "perm_importance_mean", "selected_freq"]].head(15)
+    print("Top features by permutation importance:")
+    with pd.option_context("display.max_columns", None):
+        print(compact.to_string(index=False))
     dt = time.time() - t0
     print(f"Run took {dt:.2f}s")
     
