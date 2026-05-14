@@ -7,9 +7,9 @@ import pandas as pd
 from nilearn.datasets import fetch_atlas_schaefer_2018
 from prep_data_for_en import get_subjects_to_process
 
-DEBUG = True  # Master switch for verbose diagnostic prints during manual checks.
-_PRINTED_ROI_DOMAIN_EXAMPLES = False  # One-time guard so sensory/hmod ROI examples print once.
-_SUBCORT_DEBUG_PRINTS = 0  # Caps how many aseg file-path debug lines are printed.
+DEBUG = False
+_PRINTED_ROI_DOMAIN_EXAMPLES = False
+_SUBCORT_DEBUG_PRINTS = 0
 _SCHAEFER_LABEL_TO_COUNT = None  # Lazy-loaded cache of Schaefer ROI -> voxel count weights.
 SFC_NETWORKS = ("SalVentAttn", "Cont", "Default")
 SFC_NETWORK_COL_SUFFIX = {
