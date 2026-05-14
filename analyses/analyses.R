@@ -4,10 +4,8 @@ suppressPackageStartupMessages({
   library(lme4)
   library(lmerTest)
   library(ggplot2)
-  library(patchwork)
   library(readxl)
   library(MuMIn)
-  library(emmeans)
 })
 
 #################
@@ -46,11 +44,9 @@ weighted <- weighted %>%
   rename_with(~ gsub("^w([12])_(.*)$", "\\2_\\1", .x)) %>%
   rename_with(~ gsub("^(.*)_tp([12])_(.*)$", "\\1_\\3_\\2", .x))
 
-# Cohort inclusion: present in all files + complete key weighted summaries at both waves
+# Cohort inclusion: present in all files + complete key weighted summaries at both timepoints
 key_summary_cols <- c(
-  "sfc_weighted_mean_1", "sfc_weighted_mean_2",
-  "fc_weighted_mean_1", "fc_weighted_mean_2",
-  "sc_weighted_mean_1", "sc_weighted_mean_2"
+  "sfc_weighted_mean_1", "sfc_weighted_mean_2"
 )
 
 missing_key_cols <- setdiff(key_summary_cols, names(weighted))
@@ -177,8 +173,7 @@ plot_bar_distributions <- function(df, vars, bins = 20) {
 
 # Variables used in the models/plots in this script (for quick distribution checks)
 distribution_vars <- unique(c(
-  "YoE", "age", "delayed_recall_raw", "ravlt_total",
-  "sfc_weighted_mean", "fc_weighted_mean", "sc_weighted_mean",
+  "YoE", "age", "delayed_recall_raw", "ravlt_total", "sfc_weighted_mean", 
   "sfc_hmod", "sfc_sensory", "sfc_dmn", "sfc_salience"
 ))
 
@@ -376,8 +371,6 @@ sfc_superager_control_slope
 ##################
 # SFC and memory #
 ##################
-data_long$delayed_recall_raw_z <- scale(data_long$delayed_recall_raw)
-data_long$sfc_hmod_z <- scale(data_long$sfc_hmod)
 
 # Get stats
 vars <- c(
