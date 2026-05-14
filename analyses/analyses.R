@@ -132,7 +132,7 @@ data_long <- data_wide %>%
   mutate(time = age - min(age, na.rm = TRUE)) %>%
   ungroup()
 
-# Remove RAVLT_total = 0 from both dfs
+# Remove RAVLT_total = 0 from both dfs because missing data
 data_long$ravlt_total <- na_if(data_long$ravlt_total, 0)
 data_wide$ravlt_total_1 <- na_if(data_wide$ravlt_total_1, 0)
 data_wide$ravlt_total_2 <- na_if(data_wide$ravlt_total_2, 0)
@@ -251,101 +251,6 @@ group_table <- tibble(
   )
 )
 print(group_table)
-
-#############################
-# Weighted summaries vs age #
-#############################
-
-weighted_plot_df <- data_long %>%
-  dplyr::select(id, age, superager_long, sfc_weighted_mean, fc_weighted_mean, sc_weighted_mean) %>%
-  pivot_longer(
-    cols = c(sfc_weighted_mean, fc_weighted_mean, sc_weighted_mean),
-    names_to = "metric",
-    values_to = "value"
-  ) %>%
-  drop_na(age, value, superager_long) %>%
-  mutate(
-    superager_group = factor(superager_long, levels = c(0, 1), labels = c("non-superager", "superager")),
-    metric = recode(
-      metric,
-      fc_weighted_mean = "Functional connectivity",
-      sc_weighted_mean = "Structural connectivity",
-      sfc_weighted_mean = "Structure function coupling"
-    )
-  )
-
-ggplot(weighted_plot_df, aes(x = age, y = value, color = metric)) +
-  geom_line(aes(group = id), alpha = 0.18, linewidth = 0.3) +
-  geom_point(alpha = 0.35, size = 1.7) +
-  geom_smooth(method = "lm", se = TRUE, linewidth = 1.2) +
-  facet_wrap(~ metric, ncol = 3, scales = "free_y") +
-  scale_color_manual(values = c(
-    "Functional connectivity" = "#F8766D",
-    "Structural connectivity" = "#00BA38",
-    "Structure function coupling" = "#619CFF"
-  )) +
-  labs(x = "Age", y = "Weighted mean") +
-  theme_gray() +
-  guides(color = "none")
-
-# Weighted summaries by superager status
-ggplot(weighted_plot_df, aes(x = age, y = value, color = superager_group)) +
-  geom_point(alpha = 0.30, size = 1.4) +
-  geom_smooth(method = "lm", se = TRUE, linewidth = 1.1) +
-  facet_wrap(~ metric, ncol = 3, scales = "free_y") +
-  scale_color_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
-  labs(x = "Age", y = "Weighted mean", color = NULL) +
-  theme_gray()
-
-# Weighted summaries within SFC networks
-weighted_plot_networks <- data_long %>%
-  dplyr::select(id, age, superager_long, sfc_dmn, sfc_salience, sfc_vis, sfc_sommot, sfc_hippocampus, sfc_hmod, sfc_sensory) %>%
-  pivot_longer(
-    cols = c(sfc_dmn, sfc_salience, sfc_vis, sfc_sommot, sfc_hippocampus, sfc_hmod, sfc_sensory),
-    names_to = "metric",
-    values_to = "value"
-  ) %>%
-  drop_na(age, value, superager_long) %>%
-  mutate(
-    superager_group = factor(superager_long, levels = c(0, 1), labels = c("non-superager", "superager")),
-    metric = recode(
-      metric,
-      sfc_salience = "Salience SFC",
-      sfc_vis = "Visual SFC",
-      sfc_dmn = "DMN SFC",
-      sfc_hippocampus = "HC SFC",
-      sfc_sommot = "Motor SFC",
-      sfc_hmod = "Heteromodal SFC",
-      sfc_sensory = "Sensory SFC"
-    )
-  )
-
-ggplot(weighted_plot_networks, aes(x = age, y = value, color = metric)) +
-  geom_line(aes(group = id), alpha = 0.18, linewidth = 0.3) +
-  geom_point(alpha = 0.35, size = 1.7) +
-  geom_smooth(method = "lm", se = TRUE, linewidth = 1.2) +
-  facet_wrap(~ metric, ncol = 3, scales = "free_y") +
-  scale_color_manual(values = c(
-    "Salience SFC" = "#F8766D",
-    "Visual SFC" = "#00BA38",
-    "DMN SFC" = "#619CFF",
-    "HC SFC" = "#FE9EC7",
-    "Motor SFC" = "#FFA95A",
-    "Heteromodal SFC" = "#B7BDF7",
-    "Sensory SFC" = "#0C7779"
-  )) +
-  labs(x = "Age", y = "Weighted mean") +
-  theme_gray() +
-  guides(color = "none")
-
-# Weighted summaries by superager status
-ggplot(weighted_plot_networks, aes(x = age, y = value, color = superager_group)) +
-  geom_point(alpha = 0.30, size = 1.4) +
-  geom_smooth(method = "lm", se = TRUE, linewidth = 1.1) +
-  facet_wrap(~ metric, ncol = 3, scales = "free_y") +
-  scale_color_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
-  labs(x = "Age", y = "Weighted mean", color = NULL) +
-  theme_gray()
 
 #####################
 # LME and LM models #
@@ -468,42 +373,6 @@ sfc_superager_salience_slope
 sfc_superager_control_slope <- get_mixed_effects_stats(scale(sfc_control) ~ factor(superager_long) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data = data_long, vars_slope)
 sfc_superager_control_slope
 
-# SFC-only significance label from the adjusted mixed model
-m_sfc <- lmer(sfc_hmod ~ factor(superager_long) + time + age_1 + sex + YoE + (1 | id),
-              data = data_long, REML = FALSE)
-p_sfc <- as.data.frame(summary(m_sfc)$coefficients)["factor(superager_long)1", "Pr(>|t|)"]
-p_star <- dplyr::case_when(
-  p_sfc < 0.001 ~ "***",
-  p_sfc < 0.01 ~ "**",
-  p_sfc < 0.05 ~ "*",
-  TRUE ~ "ns"
-)
-
-plot_df <- data_long %>%
-  dplyr::select(superager_long, sfc_hmod) %>%
-  drop_na() %>%
-  mutate(
-    superager_group = factor(superager_long, levels = c(0, 1),
-                             labels = c("non-superager", "superager"))
-  )
-
-y_min <- min(plot_df$sfc_hmod, na.rm = TRUE)
-y_max <- max(plot_df$sfc_hmod, na.rm = TRUE)
-y_bar <- y_max + 0.06 * (y_max - y_min)
-y_star <- y_max + 0.10 * (y_max - y_min)
-
-ggplot(plot_df, aes(x = superager_group, y = sfc_hmod, fill = superager_group)) +
-  geom_violin(trim = FALSE, alpha = 0.30, color = NA) +
-  geom_boxplot(width = 0.18, outlier.shape = NA, alpha = 0.65, color = "black") +
-  geom_jitter(width = 0.08, alpha = 0.22, size = 0.9, color = "black") +
-  stat_summary(fun = mean, geom = "point", shape = 23, size = 2.5, fill = "white", color = "black") +
-  annotate("segment", x = 1, xend = 2, y = y_bar, yend = y_bar, linewidth = 0.45) +
-  annotate("text", x = 1.5, y = y_star, label = p_star, size = 5) +
-  scale_fill_manual(values = c("non-superager" = "#0178bf", "superager" = "#FFAA00")) +
-  labs(x = NULL, y = "SFC heteromodal mean") +
-  theme_classic(base_size = 12) +
-  theme(legend.position = "none")
-
 ##################
 # SFC and memory #
 ##################
@@ -555,55 +424,11 @@ ravlt_sfc_salience_slope
 ravlt_sfc_control_slope <- get_mixed_effects_stats(scale(delayed_recall_raw) ~ scale(sfc_control) * scale(time) + scale(age_1) + sex + scale(YoE) + (1 | id), data_long, vars)
 ravlt_sfc_control_slope
 
-m1 <- lmer(
-  delayed_recall_raw_z ~ sfc_hmod_z + age_1 + time + sex + YoE + (1 | id),
-  data = data_long,
-  REML = FALSE
-)
-
-emm_sfc <- emmeans(
-  m1,
-  ~ sfc_hmod_z,
-  at = list(
-    sfc_hmod_z = seq(
-      min(data_long$sfc_hmod_z, na.rm = TRUE),
-      max(data_long$sfc_hmod_z, na.rm = TRUE),
-      length.out = 100
-    )
-  )
-)
-
-emm_df <- as.data.frame(emm_sfc)
-
-ggplot(data_long, aes(x = sfc_hmod_z, y = delayed_recall_raw_z)) +
-  geom_line(aes(group = id), alpha = 0.25, color = "grey50") +
-  geom_point(alpha = 0.45, color = "grey35", size = 2) +
-  geom_ribbon(
-    data = emm_df,
-    aes(x = sfc_hmod_z, ymin = lower.CL, ymax = upper.CL),
-    inherit.aes = FALSE,
-    fill = "#de8c8c",
-    alpha = 0.18
-  ) +
-  geom_line(
-    data = emm_df,
-    aes(x = sfc_hmod_z, y = emmean),
-    inherit.aes = FALSE,
-    color = "#de8c8c",
-    linewidth = 1.2
-  ) +
-  labs(
-    x = "Structure-Function Coupling in Heteromodal Regions",
-    y = "RAVLT Delayed"
-  ) +
-  theme_classic()
-
 ##################
 # FDR correction #
 ##################
 
-# I think it makes sense to look at global SFC, heteromodal, DMN, SN, ECN, 
-# and sensory as a control 
+# Look at global SFC, heteromodal, DMN, SN, ECN, and sensory as a control 
 ravlt_model_stats <- list(
   ravlt_sfc_hmod = ravlt_sfc_hmod,
   ravlt_sfc_weighted_mean = ravlt_sfc_weighted,
