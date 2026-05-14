@@ -12,8 +12,8 @@ The code is available under the MIT License, allowing others to reuse and adapt 
 
 - [Folders](#folders)
   - [superager_classification](#superager_classification)
-  - [fsaverage_masks](#fsaverage)
-  - [fmri_analysis](#fmri-analysis)
+  - [fsaverage_masks](#fsaverage_masks)
+  - [fmri_analysis](#fmri_analysis)
   - [structural_analysis](#structural_analysis)
   - [structure_function_coupling](#structure_function_coupling)
   - [elastic_net](#elastic_net)
