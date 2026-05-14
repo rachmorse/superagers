@@ -106,28 +106,41 @@ def main():
     subjects = sorted(set(subjects_tp1) | set(subjects_tp2))
 
     # Flatten the NxN FC and SC matrices to per-ROI mean connectivity vectors
-    for sub in subjects:
-        for ses in sessions:
-            ses_path_fc = fc_root_path / ses / "individual_connectivity_matrices"
-            ses_path_sc = sc_root_path / ses / "individual_connectivity_matrices"
+    fc_found = fc_missing = sc_found = sc_missing = 0
+    n_total = len(subjects) * len(sessions)
+    for i, (sub, ses) in enumerate(
+        ((s, ses) for s in subjects for ses in sessions), start=1
+    ):
+        ses_path_fc = fc_root_path / ses / "individual_connectivity_matrices"
+        ses_path_sc = sc_root_path / ses / "individual_connectivity_matrices"
 
-            # Functional connectivity
-            fc_csv = ses_path_fc / f"{sub}_{ses}_functional_connectivity_matrix_fisher_z.csv"
-            if fc_csv.is_file():
-                fc_flat = flatten_connectivity_csv(fc_csv, measure_col="pearson_rho")
-                fc_output_dir = ses_path_fc / "grouped_rois"
-                fc_output_dir.mkdir(parents=True, exist_ok=True)
-                fc_flat.to_csv(fc_output_dir / f"{sub}_{ses}_functional_connectivity_flat.csv", index=False)
+        # Functional connectivity
+        fc_csv = ses_path_fc / f"{sub}_{ses}_functional_connectivity_matrix_fisher_z.csv"
+        if fc_csv.is_file():
+            fc_flat = flatten_connectivity_csv(fc_csv, measure_col="pearson_rho")
+            fc_output_dir = ses_path_fc / "grouped_rois"
+            fc_output_dir.mkdir(parents=True, exist_ok=True)
+            fc_flat.to_csv(fc_output_dir / f"{sub}_{ses}_functional_connectivity_flat.csv", index=False)
+            fc_found += 1
+        else:
+            fc_missing += 1
 
-            # Structural connectivity
-            sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix.csv"
-            if sc_csv.is_file():
-                sc_flat = flatten_connectivity_csv(sc_csv, measure_col="pearson_rho")
-                sc_output_dir = ses_path_sc / "grouped_rois"
-                sc_output_dir.mkdir(parents=True, exist_ok=True)
-                sc_flat.to_csv(sc_output_dir / f"{sub}_{ses}_structural_connectivity_flat.csv", index=False)
-            else:
-                print(f"Missing SC CSV at path: {sc_csv}")
+        # Structural connectivity
+        sc_csv = ses_path_sc / f"{sub}_{ses}_structural_connectivity_matrix.csv"
+        if sc_csv.is_file():
+            sc_flat = flatten_connectivity_csv(sc_csv, measure_col="pearson_rho")
+            sc_output_dir = ses_path_sc / "grouped_rois"
+            sc_output_dir.mkdir(parents=True, exist_ok=True)
+            sc_flat.to_csv(sc_output_dir / f"{sub}_{ses}_structural_connectivity_flat.csv", index=False)
+            sc_found += 1
+        else:
+            sc_missing += 1
+
+        if i % 25 == 0 or i == n_total:
+            print(f"Progress: {i}/{n_total} subject-sessions processed")
+
+    print(f"\nFC: {fc_found} written, {fc_missing} missing")
+    print(f"SC: {sc_found} written, {sc_missing} missing")
 
 
 if __name__ == "__main__":
