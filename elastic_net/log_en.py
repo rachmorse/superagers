@@ -310,34 +310,36 @@ def run_elastic_net(
     # Precompute and cache outer splits 
     outer_splits = list(outer_cv.split(X, y))
 
-    # Outer CV - for each outer split holds out X_te/y_te as the final test set
+    # Outer CV: each fold holds out ~10% of subjects (X_te/y_te) as a test set 
+    # This runs all 10 folds and every subject get exactly one OOF prediction
     for fold_id, (tr_idx, te_idx) in enumerate(outer_splits, start=1):
         X_tr, X_te = X[tr_idx], X[te_idx] # X_tr is the outer training set, X_te is the test set
         y_tr, y_te = y[tr_idx], y[te_idx]
 
-        gs = GridSearchCV( # splits X_tr into inner train and validation sets
+        # Inner CV: try all C/l1_ratio combos on X_tr via 5-fold CV, pick the best
+        # refit=True trains a final model on all of X_tr with the winning params
+        gs = GridSearchCV(
             estimator=pipe,
             param_grid=param_grid,
             scoring="roc_auc",
-            cv=inner_cv, # runs inner CV on X_tr split into inner train/val sets
-            refit=True, # fits the best model on the whole X_tr after tuning
+            cv=inner_cv,
+            refit=True,
             n_jobs=20,
         )
-        gs.fit(X_tr, y_tr) 
+        gs.fit(X_tr, y_tr)
 
-        best = gs.best_estimator_
+        best = gs.best_estimator_  # model refitted on full X_tr with best hyperparameters
         best_params = gs.best_params_
         best_params_per_fold.append(best_params)
 
+        # Use X_te and predict superager probability for held-out subjects
         prob_te = best.predict_proba(X_te)[:, 1]
         y_prob_oof[te_idx] = prob_te
         y_true_oof[te_idx] = y_te
         test_index_oof[te_idx] = True
 
-        # Fold metrics
+        # AUC on this fold's test set — saved to check variance across folds
         auc = roc_auc_score(y_te, prob_te)
-
-        # Metrics from the refit on the outer test set
         fold_metrics.append({
             "fold": fold_id,
             "n_train": len(tr_idx),
@@ -345,12 +347,12 @@ def run_elastic_net(
             "auc": auc,
         })
 
-        # Coefficients from the refit/best model 
+        # Coefficients from the logistic regression step, averaged across folds after the loop
         coef = best.named_steps["clf"].coef_.ravel()
         assert coef.shape[0] == X.shape[1]
         coefs.append(coef)
 
-        # Permutation importance on inner-CV validation folds 
+        # Permutation importance on X_tr inner folds to keep the test set clean
         pi_mean = _perm_importance_on_train_cv(
             pipe, best_params, X_tr, y_tr, inner_cv, n_repeats_importance, random_state + fold_id
         )
