@@ -84,3 +84,4 @@ The code is available under the MIT License, allowing others to reuse and adapt 
     - `results.Rmd`: R Markdown document that sources `analyses.R` and auto-fills the results section with model outputs.
     - `plot_sfc_difference.py`: Averages superager vs. non-superager SFC difference maps and saves a cortical/subcortical figure.
     - `plot_sfc_em_cortex.py`: Combines the figure from `plot_sfc_difference.py` with forest plots of stats from `results.html`.
+    - `consort_figure.py`: Computes participant counts at each exclusion step and draws the CONSORT-style diagram.
