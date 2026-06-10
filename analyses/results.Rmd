@@ -113,7 +113,7 @@ min_ravlt_slope_p_fdr <- min(
 fmt_round2 <- function(p) formatC(round(p, 2), format = "f", digits = 2)
 ```
 
-Our overall cohort included `r n_total` participants with `r pct_f_total`% female and a mean baseline age of `r mean_age` (SD `r sd_age`) years. `r pct_sa`% of the cohort met longitudinal superager criteria. Superagers and non-superagers did not vary on baseline age (p`r fmt_p(age_baseline_p)`), years of education (p`r fmt_p(yoe_p)`), baseline MMSE scores (p`r fmt_p(mmse_p)`), or follow-up duration (p`r fmt_p(followup_duration_p)`); however, superagers were more likely to be female (p`r fmt_p(sex_p)`). These demographic statistics are summarized in Table 1.
+Our cohort included `r n_total` participants (`r pct_f_total`% female; mean baseline age `r mean_age` (SD `r sd_age`) years). `r pct_sa`% of the cohort met longitudinal superager criteria. Superagers and non-superagers did not vary on baseline age (p`r fmt_p(age_baseline_p)`), years of education (p`r fmt_p(yoe_p)`), baseline MMSE scores (p`r fmt_p(mmse_p)`), or follow-up duration (p`r fmt_p(followup_duration_p)`); however, superagers were more likely to be female (p`r fmt_p(sex_p)`). These demographic statistics are summarized in Table 1.
 
 **Table 1** Demographic characteristics
 
