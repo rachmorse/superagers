@@ -13,7 +13,7 @@ suppressPackageStartupMessages({
 #################
 
 # Load source data
-raw_data <- read.csv("~/Documents/2023:2024/Data/Exported data/superager.csv")
+raw_data <- read.csv("~/Documents/2023:2024/Data/Exported data/superager_clean.csv")
 sfc_data_1 <- read.csv("~/Documents/2023:2024/Data/Exported data/all_sfc_data_ses-01.csv")
 sfc_data_2 <- read.csv("~/Documents/2023:2024/Data/Exported data/all_sfc_data_ses-02.csv")
 weighted <- read.csv("~/Documents/2023:2024/Data/Exported data/weighted_global_roi_averages.csv")
@@ -128,15 +128,6 @@ data_long <- data_wide %>%
   mutate(time = age - min(age, na.rm = TRUE)) %>%
   ungroup()
 
-# Remove RAVLT_total = 0 from both dfs because missing data
-data_long$ravlt_total <- na_if(data_long$ravlt_total, 0)
-data_wide$ravlt_total_1 <- na_if(data_wide$ravlt_total_1, 0)
-data_wide$ravlt_total_2 <- na_if(data_wide$ravlt_total_2, 0)
-
-data_long$delayed_recall_raw <- na_if(data_long$delayed_recall_raw, 0)
-data_wide$delayed_recall_raw_1 <- na_if(data_wide$delayed_recall_raw_1, 0)
-data_wide$delayed_recall_raw_2 <- na_if(data_wide$delayed_recall_raw_2, 0)
-
 # Plot variable distributions (categorical bar chart; numeric binned bar chart)
 plot_bar_distributions <- function(df, vars, bins = 20) {
   missing_vars <- setdiff(vars, names(df))
@@ -196,7 +187,7 @@ fmt_mean_sd <- function(x) {
 fmt_pct_female <- function(x) {
   paste0(formatC(mean(tolower(as.character(x)) == "female", na.rm = TRUE) * 100, format = "f", digits = 1), "%")
 }
-fmt_p <- function(p) ifelse(is.na(p), NA_character_, formatC(p, format = "f", digits = 4))
+fmt_p <- function(p) ifelse(is.na(p), NA_character_, formatC(p, format = "g", digits = 2))
 
 summary_df <- data_wide %>%
   mutate(
@@ -247,9 +238,9 @@ group_table <- tibble(
 )
 print(group_table)
 
-#####################
-# LME and LM models #
-#####################
+##############
+# LME models #
+##############
 
 # Add a function for getting the stats from LME models
 get_mixed_effects_stats <- function(formula, data, vars_priority) {
