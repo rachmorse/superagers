@@ -181,7 +181,7 @@ We next examined whether global and network level SFC change – modeled as an i
 **Table 2** Associations between structure-function coupling, superager status, and episodic memory
 
 ```{r table3}
-# Helpers to build data rows for LME and LM models
+# Helpers to build data rows for LME models
 lme_row <- function(region, model, fdr_df, fdr_key) {
   list(
     Region                 = region,
