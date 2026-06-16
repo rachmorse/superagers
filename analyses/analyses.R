@@ -187,7 +187,7 @@ fmt_mean_sd <- function(x) {
 fmt_pct_female <- function(x) {
   paste0(formatC(mean(tolower(as.character(x)) == "female", na.rm = TRUE) * 100, format = "f", digits = 1), "%")
 }
-fmt_p <- function(p) ifelse(is.na(p), NA_character_, formatC(p, format = "g", digits = 2))
+fmt_p <- function(p) ifelse(is.na(p), NA_character_, formatC(p, format = "f", digits = 4))
 
 summary_df <- data_wide %>%
   mutate(
