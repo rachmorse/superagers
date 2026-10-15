@@ -6,6 +6,7 @@ import subprocess
 import logging
 from pathlib import Path
 from joblib import Parallel, delayed
+from run_pipeline import ATLAS, COHORTS, N_JOBS, N_PARCELS, OUTPUT_ROOT, RECONALL_DIRS, SESSIONS, SUBJECTS
 
 # Set up logging
 logging.basicConfig(
@@ -83,6 +84,9 @@ def get_subjects_to_process(reconall_dir, out_dir, ses, cohort):
         # If sub is not in valid IDs, skip
         if valid_ids is not None and subject_id.replace("sub-", "") not in valid_ids:
             continue
+
+        if subject_id not in SUBJECTS:
+            continue
         
         # Check if the required directory exists and hasn't been processed yet
         subject_recon_dir = reconall_dir / subject_dir
@@ -119,9 +123,9 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
         logger.info(f"Processing subject: {subject_id} (directory: {subject_dir})")
         logger.info(f"{'='*50}\n")
         
-        # Set up annotation files - these are the Schaefer 200 atlas files from GitHub
-        schaefer_fsaverage_left = Path('/home/rachel/Desktop/superagers/fsaverage_masks/lh.Schaefer2018_200Parcels_7Networks_order.annot')
-        schaefer_fsaverage_right = Path('/home/rachel/Desktop/superagers/fsaverage_masks/rh.Schaefer2018_200Parcels_7Networks_order.annot')        
+        # Set up annotation files - these are the Schaefer atlas files from GitHub
+        schaefer_fsaverage_left = Path(f'/home/rachel/Desktop/superagers/fsaverage_masks/lh.Schaefer2018_{N_PARCELS}Parcels_7Networks_order.annot')
+        schaefer_fsaverage_right = Path(f'/home/rachel/Desktop/superagers/fsaverage_masks/rh.Schaefer2018_{N_PARCELS}Parcels_7Networks_order.annot')
         
         # Check if they exist
         if not schaefer_fsaverage_left.exists() or not schaefer_fsaverage_right.exists():
@@ -130,11 +134,15 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
             return False
             
         # Set up paths for output annotations
-        lh_annotation = output_folder / f"lh.Schaefer2018_200Parcels_7Networks_order.annot"
-        rh_annotation = output_folder / f"rh.Schaefer2018_200Parcels_7Networks_order.annot"
-        
+        lh_annotation = output_folder / f"lh.Schaefer2018_{N_PARCELS}Parcels_7Networks_order.annot"
+        rh_annotation = output_folder / f"rh.Schaefer2018_{N_PARCELS}Parcels_7Networks_order.annot"
+
+        # Set SUBJECTS_DIR per subject because reused parallel workers keep the environment of the first cohort
+        custom_env = os.environ.copy()
+        custom_env["SUBJECTS_DIR"] = str(reconall_dir)
+
         # Map annotations from fsaverage to subject-specfic surface space
-        logger.info("Mapping Schaefer 200 atlas annotations from fsaverage to subject's surface")
+        logger.info(f"Mapping {ATLAS} atlas annotations from fsaverage to subject's surface")
         
         # Left hemisphere
         cmd_map_left = [
@@ -146,7 +154,7 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
             "--tval", str(lh_annotation)
         ]
         try:
-            subprocess.run(cmd_map_left, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            subprocess.run(cmd_map_left, env=custom_env, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         except subprocess.CalledProcessError as e:
             logger.error(f"Error mapping left hemisphere: {e.stderr}")
             return False
@@ -161,17 +169,12 @@ def process_subject(subject_dir, subject_id, reconall_dir, output_folder):
             "--tval", str(rh_annotation)
         ]
         try:
-            subprocess.run(cmd_map_right, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            subprocess.run(cmd_map_right, env=custom_env, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         except subprocess.CalledProcessError as e:
             logger.error(f"Error mapping right hemisphere: {e.stderr}")
             return False
 
         # Then transform the subject-specific surface annotations to volumetric T1 space
-        # Create a custom environment for FreeSurfer to be able to take the results from the previous step
-        subjects_dir = os.environ.get('SUBJECTS_DIR', str(output_folder))
-        custom_env = os.environ.copy()
-        custom_env["SUBJECTS_DIR"] = subjects_dir
-
         # Left hemisphere
         subject_t1 = reconall_dir / subject_dir / "mri" / "T1.mgz"
 
@@ -223,12 +226,8 @@ def main():
 
     print("-----------------------Running 01_fsaverage_to_t1.py-----------------------")
 
-    # Set up parameters
-    cohorts = ["bbhi", "bbhi senior"]
-    sessions = ['ses-01', 'ses-02']
-
-    for cohort in cohorts:
-        for session in sessions:
+    for cohort in COHORTS:
+        for session in SESSIONS:
             print("-------------------------")
             print(f"Processing {cohort} {session}")
             print("-------------------------")
@@ -236,14 +235,9 @@ def main():
             if not session.startswith('ses-'):
                 session = f'ses-{session}'
 
-            output_folder = Path(f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}')
+            output_folder = OUTPUT_ROOT / session
 
-            # Set paths based on cohort
-            if cohort == "bbhi":
-                # BBHI paths
-                reconall_dir = Path('/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6')
-            else:  # cohort == "bbhi senior"
-                reconall_dir = Path('/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6')
+            reconall_dir = RECONALL_DIRS[cohort]
 
             # Set environment variables
             os.environ['SUBJECTS_DIR'] = str(reconall_dir)
@@ -255,20 +249,16 @@ def main():
                 logger.info("No subjects found that need processing.")
                 continue
             
-            # Uncomment this code to process a single subject 
-            # Format subject_data = [(subject_id, subject_dir)]
-            # subject_data = [("sub-1014", "sub-1014_ses-02")]
-
             subjects = [s[0] for s in subject_data]
             logger.info(f"Will process {len(subjects)} subjects: {', '.join(subjects)}")
             
             # Process each subject
-            results = Parallel(n_jobs=10)(
+            results = Parallel(n_jobs=N_JOBS)(
                 delayed(process_subject)(
                     subject_dir,  
                     subject_id,   
                     reconall_dir,
-                    Path(f'/home/rachel/Desktop/schaefer_analysis/fsaverage/{session}/{subject_id}/t1_masks')
+                    output_folder / subject_id / "t1_masks"
                 ) for subject_id, subject_dir in subject_data
             )
             

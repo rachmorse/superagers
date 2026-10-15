@@ -5,6 +5,7 @@ import nibabel as nib
 import numpy as np
 import logging
 from pathlib import Path
+from run_pipeline import ATLAS, COHORTS, N_PARCELS, OUTPUT_ROOT, SESSIONS, SHARED_ROOT, SUBJECTS
 
 # Set up logging
 logging.basicConfig(
@@ -31,18 +32,19 @@ def get_subjects_to_process(output_folder, ses):
 
     # Iterate over all possible subject directories
     for subject in os.listdir(output_folder):
-        if not subject.startswith("sub-"):
+        if not subject.startswith("sub-") or subject not in SUBJECTS:
             continue
         
         # Check if the required directory exists and hasn't been processed yet  
         subject_t1_folder = output_folder / subject / "t1_masks"
         subject_subcort_folder = output_folder / subject / "subcortical_t1_masks"
+        shared_subcort_folder = SHARED_ROOT / ses / subject / "subcortical_t1_masks"
 
         left_t1_file_path = subject_t1_folder / f"{subject}_schaefer_volumetric_t1_lh.nii.gz"
         right_t1_file_path = subject_t1_folder / f"{subject}_schaefer_volumetric_t1_rh.nii.gz"
-        subcort_left_file_path = subject_subcort_folder / f"{subject}_left_subcortical14_t1.nii.gz"
-        subcort_right_file_path = subject_subcort_folder / f"{subject}_right_subcortical14_t1.nii.gz"
-        output_file_path = subject_subcort_folder / f"{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz"
+        subcort_left_file_path = shared_subcort_folder / f"{subject}_left_subcortical14_t1.nii.gz"
+        subcort_right_file_path = shared_subcort_folder / f"{subject}_right_subcortical14_t1.nii.gz"
+        output_file_path = subject_subcort_folder / f"{subject}_{ses}_{ATLAS}_subcortical14_t1_space.nii.gz"
 
         if left_t1_file_path.exists() and right_t1_file_path.exists() and subcort_left_file_path.exists() and subcort_right_file_path.exists() and not output_file_path.exists():
             subjects_to_process.append(subject)
@@ -71,12 +73,14 @@ def process_subject(output_folder, subject, ses):
         # Define the subject folder
         subject_t1_folder = output_folder / subject / "t1_masks"
         subject_subcort_folder = output_folder / subject / "subcortical_t1_masks"
-        
+        subject_subcort_folder.mkdir(parents=True, exist_ok=True)
+        shared_subcort_folder = SHARED_ROOT / ses / subject / "subcortical_t1_masks"
+
         # Load the individual brain atlas components with correct paths
         right_cortical_path = subject_t1_folder / f"{subject}_schaefer_volumetric_t1_rh.nii.gz"
         left_cortical_path = subject_t1_folder / f"{subject}_schaefer_volumetric_t1_lh.nii.gz"
-        left_subcortical_path = subject_subcort_folder / f"{subject}_left_subcortical14_t1.nii.gz"
-        right_subcortical_path = subject_subcort_folder / f"{subject}_right_subcortical14_t1.nii.gz"
+        left_subcortical_path = shared_subcort_folder / f"{subject}_left_subcortical14_t1.nii.gz"
+        right_subcortical_path = shared_subcort_folder / f"{subject}_right_subcortical14_t1.nii.gz"
 
         left_cortical_img = nib.load(left_cortical_path)
         right_cortical_img = nib.load(right_cortical_path)
@@ -102,11 +106,11 @@ def process_subject(output_folder, subject, ses):
                     f"(expected {reference_shape}, got {img.shape})"
                 )
         
-        # Adjust values to create non-overlapping ranges for each region
-        left_cortical_adj = np.where(left_cortical != 0, left_cortical, 0)                    # cortical: values from 1 to 100 (keeping background as 0)
-        right_cortical_adj = np.where(right_cortical != 0, right_cortical + 100, 0)           # cortical: values from 101 to 200 (keeping background as 0)
-        left_subcortical_adj = np.where(left_subcortical != 0, left_subcortical + 200, 0)     # ls: values from 201 to 207 (keeping background as 0)
-        right_subcortical_adj = np.where(right_subcortical != 0, right_subcortical + 207, 0)  # rs: values from 208 to 214 (keeping background as 0)
+        # Adjust values to create non-overlapping ranges for each region (value ranges below are for Schaefer 200)
+        left_cortical_adj = np.where(left_cortical != 0, left_cortical, 0)                                      # cortical: values from 1 to 100 (keeping background as 0)
+        right_cortical_adj = np.where(right_cortical != 0, right_cortical + N_PARCELS // 2, 0)                  # cortical: values from 101 to 200 (keeping background as 0)
+        left_subcortical_adj = np.where(left_subcortical != 0, left_subcortical + N_PARCELS, 0)                 # ls: values from 201 to 207 (keeping background as 0)
+        right_subcortical_adj = np.where(right_subcortical != 0, right_subcortical + N_PARCELS + 7, 0)          # rs: values from 208 to 214 (keeping background as 0)
         
         # Get the affine transformation matrix from the original image
         affine = reference_affine # uses left cortical as reference as they all have same affine
@@ -183,16 +187,17 @@ def process_subject(output_folder, subject, ses):
         # For non-overlapping areas, sum the values since only one will be non-zero. This preserves the original labels.
         result[~overlap_mask] = np.sum(stacked[~overlap_mask], axis=-1)
         
-        # Check that all 214 areas are preserved
+        # Check that all 214 areas are preserved (414 for Schaefer 400)
+        n_regions = N_PARCELS + 14
         unique_values = np.unique(result)
-        if unique_values.shape[0] != 215:  # 214 regions + background (0)
-            logger.warning(f"Subject {subject} has incomplete atlas: {unique_values.shape[0]-1} regions instead of 214")
+        if unique_values.shape[0] != n_regions + 1: 
+            logger.warning(f"Subject {subject} has incomplete atlas: {unique_values.shape[0]-1} regions instead of {n_regions}")
             # Log incomplete Schaefer atlas information
-            with open("schaefer_incomplete.txt", "a") as f:
+            with open(f"{ATLAS}_incomplete.txt", "a") as f:
                 f.write(f"{subject} {unique_values.shape[0]-1}\n")
-        
+
         # Save the combined atlas
-        nib.save(nib.Nifti1Image(result, affine), Path(f"{subject_subcort_folder}/{subject}_{ses}_schaefer200_subcortical14_t1_space.nii.gz"))
+        nib.save(nib.Nifti1Image(result, affine), Path(f"{subject_subcort_folder}/{subject}_{ses}_{ATLAS}_subcortical14_t1_space.nii.gz"))
         
         logger.info(f"Successfully processed subject {subject}")
         return True
@@ -203,22 +208,18 @@ def process_subject(output_folder, subject, ses):
 
 
 def main():
-    # Define paths
-    cohorts = ["bbhi", "bbhi senior"]
-    sessions = ["ses-01", "ses-02"]
-    
     # Set up logging level
     logger.setLevel(logging.INFO)
 
     print("-----------------------Running 03_combine_t1_altases.py-----------------------")
-        
-    for cohort in cohorts:
-        for ses in sessions:
+
+    for cohort in COHORTS:
+        for ses in SESSIONS:
             print("-------------------------")
             print(f"Processing {cohort} {ses}")
             print("-------------------------")
 
-            output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
+            output_folder = OUTPUT_ROOT / ses
 
             # Get subjects to process
             subjects, already_processed = get_subjects_to_process(output_folder, ses)
@@ -231,7 +232,7 @@ def main():
             else:  # cohort == "bbhi senior"
                 subjects = [subject for subject in subjects if int(subject.split("-")[1]) < 5000]
                 already_processed = [subject for subject in already_processed if int(subject.split("-")[1]) < 5000]
-            
+
             print(f"Number of subjects already processed: {len(already_processed)}")
             print(f"Number of subjects to process: {len(subjects)}")
 

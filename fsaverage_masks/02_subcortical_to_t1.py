@@ -5,6 +5,7 @@ import subprocess
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
+from run_pipeline import COHORTS, FSL_DIR, RECONALL_DIRS, SESSIONS, SHARED_ROOT, SUBJECTS
 
 
 # Set up logging
@@ -32,7 +33,7 @@ def get_subjects_to_process(output_folder, reconall_folder):
 
     # Iterate over all possible subject directories
     for subject in os.listdir(output_folder):
-        if not subject.startswith("sub-"):
+        if not subject.startswith("sub-") or subject not in SUBJECTS:
             continue
         
         # Check if the required directory exists and hasn't been processed yet  
@@ -96,12 +97,12 @@ def process_subcortical_regions(aseg_file, subject, reference_file, output_folde
 
         # Set up FSL environment variables inside this function
         # Automatically pulls 6.0.4 for consistency with fMRI analysis
-        os.environ["FSLDIR"] = "/vol/software/fsl_6_0_4"
+        os.environ["FSLDIR"] = str(FSL_DIR)
         os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:{os.environ['PATH']}"
         os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
 
         # Add this path as it has trouble finding fslmaths otherwise
-        fslmaths_bin = "/vol/software/fsl_6_0_4/bin/fslmaths"
+        fslmaths_bin = str(FSL_DIR / "bin" / "fslmaths")
 
         # Process each label
         labels_list = subcortical_labels.split()
@@ -230,23 +231,18 @@ def cleanup_temp_files(output_folder_sub):
 def main():
     # Set up logging level based on verbose flag
     logger.setLevel(logging.DEBUG)
-    cohorts = ["bbhi", "bbhi senior"]
-    sessions = ["ses-01", "ses-02"]   
 
     print("-----------------------Running 02_subcortical_to_t1.py-----------------------")
 
-    for cohort in cohorts:
-        for ses in sessions:
+    for cohort in COHORTS:
+        for ses in SESSIONS:
             print("-------------------------")
             print(f"Processing {cohort} {ses}")
             print("-------------------------")
 
-            output_folder = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
+            output_folder = SHARED_ROOT / ses
 
-            if cohort == "bbhi":
-                reconall_folder = Path('/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6')
-            else:  # cohort == "bbhi senior"
-                reconall_folder = Path('/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6')
+            reconall_folder = RECONALL_DIRS[cohort]
 
             # Determine subjects to process
             subject_list, already_processed = get_subjects_to_process(output_folder, reconall_folder)
@@ -260,14 +256,11 @@ def main():
                 already_processed = [s for s in already_processed if int(s.split('-')[1]) < 5000]
 
             print(f"Number of subjects already processed subjects: {len(already_processed)}")
-            
+
             if not subjects:
                 logger.info("No subjects found that need processing.")
                 continue
 
-            # Uncomment this line to run the script with one subject
-            # subjects = ["sub-1014"]
-        
             # Initialize lists to track successful and failed subjects
             successful_subjects = []
             failed_subjects = []
@@ -275,7 +268,7 @@ def main():
             print(f"Number of subjects to process: {len(subjects)}")
 
             for subject in subjects:
-                output_folder_sub = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}/{subject}/subcortical_t1_masks")
+                output_folder_sub = output_folder / subject / "subcortical_t1_masks"
 
                 # Create the output directory if it doesn't exist
                 os.makedirs(output_folder_sub, exist_ok=True)
