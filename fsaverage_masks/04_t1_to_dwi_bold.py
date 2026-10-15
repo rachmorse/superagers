@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 import nibabel as nib
 import numpy as np
+from run_pipeline import ATLAS, COHORTS, FSL_DIR, N_JOBS, OUTPUT_ROOT, RECONALL_DIRS, SESSIONS, SHARED_ROOT, SUBJECTS
 
 @dataclass
 class SubjectPaths:
@@ -34,6 +35,7 @@ class DwiProcessingPaths:
     out_native_masks: Path
     output_path_dwi: Path
     out_subject_dir: Path
+    shared_transform_mat: Path
 
 
 @dataclass
@@ -55,7 +57,7 @@ def run_parallel_tasks(tasks, processor, job_name):
     if not tasks:
         return successes, failures
 
-    cores = 10
+    cores = N_JOBS
     if cores <= 1:
         for subject, paths in tasks:
             result = processor(paths)
@@ -157,10 +159,10 @@ def get_subjects_to_process(subject_infos: List[SubjectPaths]) -> Tuple[List[str
     return subjects_for_dwi, subjects_for_bold, already_processed
 
 
-def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, output_path, out_native_masks, subject):
-    """Create a b0 reference and transform the T1w space mask to native DWI space 
+def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, output_path, out_native_masks, subject, shared_transform_mat):
+    """Create a b0 reference and transform the T1w space mask to native DWI space
     using epi_reg and flirt.
-    
+
     Args:
         t1w_mask (Path): Path to the T1w space mask.
         t1_anat (Path): Path to the T1 NIfTI image from recon-all.
@@ -170,6 +172,7 @@ def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, ou
         output_path (Path): Path to save the DWI space mask file.
         out_native_masks (Path): Output directory to where the mask is saved.
         subject (str): Subject ID for logging.
+        shared_transform_mat (Path): Existing T1w to b0 transform. Used instead of rerunning epi_reg if it exists.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -190,6 +193,36 @@ def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, ou
         print(f"ERROR: Failed to create b0 reference: {b0_ref}")
         raise FileNotFoundError(f"b0 reference not created: {b0_ref}")
 
+    # Reuse the existing transform so all atlases share the same registration
+    if shared_transform_mat.exists():
+        print(f"{subject}: reusing T1w to b0 transform {shared_transform_mat}")
+        transform_mat = shared_transform_mat
+    else:
+        transform_mat = register_t1w_to_b0(t1_anat, t1_brain, b0_ref, out_native_masks, subject)
+
+    # Apply the transformation to the T1w mask to bring it into DWI space
+    subprocess.run(
+        f"flirt -in {t1w_mask} -ref {b0_ref} -applyxfm -init {transform_mat} -out {output_path} -paddingsize 0.0 -interp nearestneighbour",
+        shell=True,
+        check=True,
+    )
+
+    print(f"Transformed T1w mask to DWI space: {output_path}")
+
+
+def register_t1w_to_b0(t1_anat, t1_brain, b0_ref, out_native_masks, subject):
+    """Compute the T1w to b0 transform using epi_reg.
+
+    Args:
+        t1_anat (Path): Path to the T1 NIfTI image from recon-all.
+        t1_brain (Path): Path to the brain-extracted T1 image.
+        b0_ref (Path): Path to the b0 reference image.
+        out_native_masks (Path): Output directory for the registration files.
+        subject (str): Subject ID for logging.
+
+    Returns:
+        Path: Path to the T1w to b0 transformation matrix.
+    """
     epi_reg_prefix = out_native_masks / "epi_reg"
     epi_reg_prefix.parent.mkdir(parents=True, exist_ok=True)
 
@@ -200,7 +233,7 @@ def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, ou
 
     cmd = (
         f'export PATH="{shim_dir}:$PATH"; '
-        f'source /vol/software/fsl_6_0_4/etc/fslconf/fsl.sh; '
+        f'source {FSL_DIR}/etc/fslconf/fsl.sh; '
         f'epi_reg '
         f'--epi={b0_ref} '
         f'--t1={t1_anat} '
@@ -289,15 +322,8 @@ def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, ou
         check=True,
     )
 
-    # Apply the transformation to the T1w mask to bring it into DWI space
-    subprocess.run(
-        f"flirt -in {t1w_mask} -ref {b0_ref} -applyxfm -init {transform_mat} -out {output_path} -paddingsize 0.0 -interp nearestneighbour",
-        shell=True,
-        check=True,
-    )
+    return transform_mat
 
-    print(f"Transformed T1w mask to DWI space: {output_path}")
-    
 
 def transform_t1w_to_bold(t1w_mask, bold_path, out_bold_masks, output_path_bold):
     """Transform the T1w space mask to BOLD native T1 space using mri_vol2vol.
@@ -422,6 +448,7 @@ def process_subject_dwi(paths: DwiProcessingPaths):
             paths.output_path_dwi,
             paths.out_native_masks,
             subject,
+            paths.shared_transform_mat,
         )
 
         print(f"Successfully created native space DWI mask for {subject}")
@@ -474,38 +501,34 @@ def process_subject_bold(paths: BoldProcessingPaths):
 
 def main():
     """Main function to transform the Schaefer/Harvard-Oxford mask to native DWI and native T1 BOLD."""
-    # Set up parameters
-    cohorts = ["bbhi", "bbhi senior"]
-    sessions = ["1", "2"]
-
-    sys.stdout.flush() 
+    sys.stdout.flush()
     print("-----------------------Running 04_t1_to_dwi_bold.py-----------------------")
 
-    for cohort in cohorts:
-        for ses in sessions: 
+    for cohort in COHORTS:
+        for ses_label in SESSIONS:
             print("-------------------------")
-            print(f"Processing {cohort} ses-0{ses}")
+            print(f"Processing {cohort} {ses_label}")
             print("-------------------------")
 
             # Set up FSL so it runs correctly in this script
             # Automatically pulls 6.0.4 for consistency with fMRI analysis
-            os.environ["FSLDIR"] = "/vol/software/fsl_6_0_4"
+            os.environ["FSLDIR"] = str(FSL_DIR)
             os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:" + os.environ["PATH"]
-            subprocess.run(["bash", "-c", "source /vol/software/fsl_6_0_4/etc/fslconf/fsl.sh"], check=True)
+            subprocess.run(["bash", "-c", f"source {FSL_DIR}/etc/fslconf/fsl.sh"], check=True)
 
             # Set FSL to output compressed NIFTI files
             os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
 
-            out_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/ses-0{ses}")
-            dwi_bbhi_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/dtifit_ses-0{ses}_fsl-604")
-            dwi_bbhi_senior_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/dtifit_ses-0{ses}_fsl-604")
+            out_dir = OUTPUT_ROOT / ses_label
+            dwi_bbhi_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/dtifit_{ses_label}_fsl-604")
+            dwi_bbhi_senior_dir = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/dtifit_{ses_label}_fsl-604")
 
             subject_infos: List[SubjectPaths] = []
             dwi_inputs: dict[str, DwiProcessingPaths] = {}
             bold_inputs: dict[str, BoldProcessingPaths] = {}
 
             for subject_dir in sorted(os.listdir(out_dir)):
-                if not subject_dir.startswith("sub-"):
+                if not subject_dir.startswith("sub-") or subject_dir not in SUBJECTS:
                     continue
 
                 subject_num = int(subject_dir.split("-")[1])
@@ -515,24 +538,24 @@ def main():
                     continue
 
                 subject = subject_dir
-                ses_label = f"ses-0{ses}"
                 out_subject_dir = out_dir / subject
-                t1w_mask = out_subject_dir / f"subcortical_t1_masks/{subject}_{ses_label}_schaefer200_subcortical14_t1_space.nii.gz"
-                dwi_mask_output = out_subject_dir / f"dwi_space_masks/{subject}_{ses_label}_schaefer200_subcortical14_dwi_space.nii.gz"
-                bold_mask_output = out_subject_dir / f"bold_space_masks/{subject}_{ses_label}_schaefer200_subcortical14_bold_space.nii.gz"
+                t1w_mask = out_subject_dir / f"subcortical_t1_masks/{subject}_{ses_label}_{ATLAS}_subcortical14_t1_space.nii.gz"
+                dwi_mask_output = out_subject_dir / f"dwi_space_masks/{subject}_{ses_label}_{ATLAS}_subcortical14_dwi_space.nii.gz"
+                bold_mask_output = out_subject_dir / f"bold_space_masks/{subject}_{ses_label}_{ATLAS}_subcortical14_bold_space.nii.gz"
+                shared_transform_mat = SHARED_ROOT / ses_label / subject / "dwi_space_masks" / "T1w_to_b0.mat"
 
                 if cohort == "bbhi":
-                    t1_mgz_path = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6/{subject}_{ses_label}_run-01/mri/T1.mgz")
-                    brain_mgz_path = Path(f"/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6/{subject}_{ses_label}_run-01/mri/brain.mgz")
-                    dwi_root_dir = dwi_bbhi_dir / f"{subject}_ses-0{ses}"
-                    if ses == "2":
-                        bold_path = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon_tp{ses}/{subject}/native_T1/{subject}_{ses_label}_run-01_rest_bold_ap_T1-space.nii.gz")
+                    t1_mgz_path = Path(f"{RECONALL_DIRS[cohort]}/{subject}_{ses_label}_run-01/mri/T1.mgz")
+                    brain_mgz_path = Path(f"{RECONALL_DIRS[cohort]}/{subject}_{ses_label}_run-01/mri/brain.mgz")
+                    dwi_root_dir = dwi_bbhi_dir / f"{subject}_{ses_label}"
+                    if ses_label == "ses-02":
+                        bold_path = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon_tp2/{subject}/native_T1/{subject}_{ses_label}_run-01_rest_bold_ap_T1-space.nii.gz")
                     else:
                         bold_path = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon/{subject}/native_T1/{subject}_{ses_label}_run-01_rest_bold_ap_T1-space.nii.gz")
                 else:
-                    t1_mgz_path = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6/{subject}_{ses_label}/mri/T1.mgz")
-                    brain_mgz_path = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6/{subject}_{ses_label}/mri/brain.mgz")
-                    dwi_root_dir = dwi_bbhi_senior_dir / f"{subject}_ses-0{ses}"
+                    t1_mgz_path = Path(f"{RECONALL_DIRS[cohort]}/{subject}_{ses_label}/mri/T1.mgz")
+                    brain_mgz_path = Path(f"{RECONALL_DIRS[cohort]}/{subject}_{ses_label}/mri/brain.mgz")
+                    dwi_root_dir = dwi_bbhi_senior_dir / f"{subject}_{ses_label}"
                     bold_path = Path(f"/pool/guttmann/institut/UB/Superagers/MRI/resting_preproc_fs6-recon/{subject}/{ses_label}/native_T1/{subject}_{ses_label}_run-01_rest_bold_ap_T1-space.nii.gz")
 
                 eddy_corrected = dwi_root_dir / "eddy_corrected_data.nii.gz"
@@ -565,6 +588,7 @@ def main():
                     out_native_masks=out_native_masks,
                     output_path_dwi=dwi_mask_output,
                     out_subject_dir=out_subject_dir,
+                    shared_transform_mat=shared_transform_mat,
                 )
 
                 bold_inputs[subject] = BoldProcessingPaths(
@@ -579,10 +603,6 @@ def main():
                 )
 
             subjects_for_dwi, subjects_for_bold, already_processed = get_subjects_to_process(subject_infos)
-
-            # Uncomment the following line to process specific subjects
-            # subjects_for_dwi = ["sub-1014"] 
-            # subjects_for_bold = ["sub-1014"] 
 
             # Process each subject
             result_dwi = []
