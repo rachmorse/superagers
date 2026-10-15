@@ -3,9 +3,28 @@
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 import datetime
 
+
+ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer400"
+TEST_SUBJECT: Optional[str] = None  # e.g. "sub-1014" to run only that subject
+SUBJECTS_FILE = Path("/home/rachel/Desktop/data/final_cohort_ids.txt")  # final longitudinal cohort (n = 240)
+SUBJECTS: List[str] = [TEST_SUBJECT] if TEST_SUBJECT else SUBJECTS_FILE.read_text().split()
+COHORTS: List[Literal["bbhi", "bbhi senior"]] = ["bbhi", "bbhi senior"]
+SESSIONS: List[Literal["ses-01", "ses-02"]] = ["ses-01", "ses-02"]
+N_JOBS = 14
+N_PARCELS = int(ATLAS.removeprefix("schaefer"))
+
+RECONALL_DIRS: Dict[str, Path] = {
+    "bbhi": Path("/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6"),
+    "bbhi senior": Path("/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6"),
+}
+FSL_DIR = Path("/vol/software/fsl_6_0_4")
+
+# Subcortical masks and DWI registrations are atlas-independent so all atlases reuse the ones in the original Schaefer 200 folder
+SHARED_ROOT = Path("/home/rachel/Desktop/schaefer_analysis/fsaverage")
+OUTPUT_ROOT = SHARED_ROOT if ATLAS == "schaefer200" else Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage_{ATLAS}")
 
 SCRIPTS: List[str] = [
     "01_fsaverage_to_t1.py",
@@ -13,6 +32,8 @@ SCRIPTS: List[str] = [
     "03_combine_t1_atlases.py",
     "04_t1_to_dwi_bold.py",
 ]
+if ATLAS != "schaefer200":
+    SCRIPTS.remove("02_subcortical_to_t1.py")
 
 
 def run_script(script_path: Path, log_path: Path) -> Tuple[int, str]:
@@ -49,10 +70,10 @@ def run_script(script_path: Path, log_path: Path) -> Tuple[int, str]:
 
 def main() -> None:
     base_dir = Path(__file__).resolve().parent
-    log_path = base_dir / "nohup_fsaverage.out"
+    log_path = base_dir / f"nohup_fsaverage_{ATLAS}.out"
 
     start_time = datetime.datetime.now()
-    print(f"Starting pipeline at {start_time}")
+    print(f"Starting {ATLAS} pipeline at {start_time}")
 
     failures: List[str] = []
     for script in SCRIPTS:
