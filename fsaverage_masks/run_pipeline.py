@@ -119,7 +119,7 @@ def run_script(script_path: Path, log_path: Path) -> Tuple[int, str]:
 
 def main() -> None:
     base_dir = Path(__file__).resolve().parent
-    log_path = base_dir / f"nohup_fsaverage_{ATLAS}.out"
+    log_path = base_dir / f"nohup_fsaverage_{ATLAS}_{datetime.date.today():%Y%m%d}.out"
 
     # Clear results from any previous run so the summary only covers this one
     SUMMARY_PATH.unlink(missing_ok=True)
