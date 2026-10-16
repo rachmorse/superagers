@@ -8,7 +8,16 @@ from pathlib import Path
 from matplotlib.image import imread
 from nilearn import datasets, surface, plotting
 from nilearn.datasets import fetch_surf_fsaverage
+from typing import Literal
 import yabplot as yab
+
+ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer200"
+SESSIONS: list[Literal["ses-01", "ses-02"]] = ["ses-01", "ses-02"]
+LABEL_TYPE: Literal["long", "tp"] = "long"  # "long" = longitudinal superagers, "tp" = each session's own label
+SFC_ROOT = Path(f"/home/rachel/Desktop/schaefer_analysis/structure_function_coupling_{ATLAS}")
+AVERAGE_OUTPUT_DIR = SFC_ROOT / "average_across_sessions"
+SUBJECTS = Path("/home/rachel/Desktop/data/final_cohort_ids.txt").read_text().split()  # final longitudinal cohort 
+DEMOGRAPHICS_CSV = Path("/home/rachel/Desktop/data/superager.csv")
 
 
 def trim_whitespace(img: np.ndarray) -> np.ndarray:
@@ -164,7 +173,7 @@ def visualize_coupling(
     output_path.mkdir(parents=True, exist_ok=True)
 
     fsaverage = fetch_surf_fsaverage("fsaverage5")
-    schaefer  = datasets.fetch_atlas_schaefer_2018(n_rois=200, yeo_networks=7, resolution_mm=2)
+    schaefer  = datasets.fetch_atlas_schaefer_2018(n_rois=int(ATLAS.removeprefix("schaefer")), yeo_networks=7, resolution_mm=2)
 
     atlas_img      = nib.load(schaefer["maps"])
     atlas_data     = atlas_img.get_fdata()
@@ -347,7 +356,7 @@ def visualize_coupling(
         cbar.set_label(colorbar_label, fontsize=25, labelpad=16)
         cbar.ax.tick_params(labelsize=18)
 
-    parts = [group_name] + ([f"ses-{ses}"] if ses else []) + ([file_suffix] if file_suffix else [])
+    parts = [group_name] + ([ses] if ses else []) + ([file_suffix] if file_suffix else [])
     combined_path = output_path / f"{'_'.join(parts)}.png"
     plt.savefig(combined_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
     print(f"Combined visualization saved to {combined_path}")
@@ -357,8 +366,36 @@ def visualize_coupling(
     return fig
 
 
+def session_difference(ses, label_type):
+    """Compute the superager minus non-superager Fisher-z coupling difference for one session.
+
+    Args:
+        ses: Session ID (format: ses-01).
+        label_type: Superager labeling scheme where "long" is the longitudinally
+            defined superagers, otherwise the label for that session is used.
+
+    Returns:
+        pd.Series: Mean Fisher-z difference per ROI, named after the session.
+    """
+    individual_dir = SFC_ROOT / ses / "individual_coupling_matrices"
+    coupling = pd.DataFrame({
+        subject: pd.read_csv(individual_dir / f"{subject}_{ses}_structure_function_coupling.csv")
+        .set_index("ROI_name")["pearson_rho"]
+        for subject in SUBJECTS
+    }).T
+    fisher_z = np.arctanh(coupling)
+
+    demographics = pd.read_csv(DEMOGRAPHICS_CSV)
+    demographics["id"] = "sub-" + demographics["id"].astype(str).str.replace("^sub-", "", regex=True)
+    label_col = "superager_long" if label_type == "long" else f"superager_tp{ses[-1]}"
+    labels = demographics.set_index("id")[label_col].reindex(fisher_z.index)
+
+    print(f"{ses}: {int((labels == 1).sum())} superagers, {int((labels == 0).sum())} non-superagers")
+    return (fisher_z[labels == 1].mean() - fisher_z[labels == 0].mean()).rename(ses)
+
+
 def average_session_differences(
-    session_dirs,
+    sessions,
     label_type,
     vmin=None,
     vmax=None,
@@ -370,13 +407,12 @@ def average_session_differences(
 ):
     """Average difference maps across sessions and plot the result.
 
-    Loads the per-session superager vs. non-superager difference CSVs,
+    Computes the per-session superager vs. non-superager differences,
     averages them across timepoints, saves the averaged CSV, and calls
     visualize_coupling to produce the final surface figure.
 
     Args:
-        session_dirs: Dictionary mapping session identifiers (e.g. "01",
-            "02") to the Path of that session's group connectivity directory.
+        sessions: Sessions to average (e.g. ["ses-01", "ses-02"]).
         label_type: Superager labeling scheme where "long" is the longitudinally
             defined superagers.
         vmin: Minimum value for colormap scaling. If None, inferred
@@ -392,26 +428,9 @@ def average_session_differences(
         subcortical_name_map: Dict mapping lowercase region name to yabplot
             aseg name, passed through to visualize_coupling.
     """
-    diff_series = []
-    for ses, session_dir in session_dirs.items():
-        if label_type == "long":
-            diff_name = "diff_superagers_vs_non_superagers_long"
-        elif ses == "01":
-            diff_name = "diff_superagers_vs_non_superagers_tp1"
-        else:
-            diff_name = "diff_superagers_vs_non_superagers_tp2"
+    diff_series = [session_difference(ses, label_type) for ses in sessions]
 
-        diff_file = Path(session_dir) / f"{diff_name}_average.csv"
-        if not diff_file.exists():
-            print(f"Skipping {diff_file}: file not found.")
-            continue
-        diff_series.append(pd.read_csv(diff_file, index_col=0).iloc[:, 0].rename(ses))
-
-    if len(diff_series) < 2:
-        print("Skipping averaged difference plot: need both ses-01 and ses-02 difference files.")
-        return
-
-    average_output_dir = Path(next(iter(session_dirs.values()))).parent.parent / "average_across_sessions"
+    average_output_dir = AVERAGE_OUTPUT_DIR
     average_output_dir.mkdir(parents=True, exist_ok=True)
 
     average_name = "diff_superagers_average"
@@ -435,11 +454,6 @@ def average_session_differences(
 
 
 if __name__ == "__main__":
-    session_dirs = {
-        "01": Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-01/group_connectivity_matrices"),
-        "02": Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-02/group_connectivity_matrices"),
-    }
-
     subcortical_name_map = {
         "left hippocampus":  "Left-Hippocampus",
         "left amygdala":     "Left-Amygdala",
@@ -458,8 +472,8 @@ if __name__ == "__main__":
     }
 
     average_session_differences(
-        session_dirs=session_dirs,
-        label_type="long",
+        sessions=SESSIONS,
+        label_type=LABEL_TYPE,
         vmin=-0.03,
         vmax=0.03,
         colorbar_label="Structure-function\ncoupling difference",
