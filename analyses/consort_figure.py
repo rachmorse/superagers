@@ -3,14 +3,18 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from typing import Literal
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
+ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer200"
+SESSIONS: list[Literal["ses-01", "ses-02"]] = ["ses-01", "ses-02"]
 DATA_DIR = Path('/home/rachel/Desktop/data')
 RAW_DIR = DATA_DIR / 'consort_raw'
-SFC_DIR = Path('/home/rachel/Desktop/schaefer_analysis/structure_function_coupling')
-SCHAEFER_DIR = Path('/home/rachel/Desktop/schaefer_analysis/fsaverage')
+# Schaefer 200 masks live in fsaverage, other atlases in suffixed folders
+SCHAEFER_DIR = Path('/home/rachel/Desktop/schaefer_analysis') / ('fsaverage' if ATLAS == 'schaefer200' else f'fsaverage_{ATLAS}')
 BBHI_MRI = Path('/pool/guttmann/institut/BBHI/MRI')
 SENIOR_MRI = Path('/pool/guttmann/institut/UB/Superagers/MRI')
 BBHI_RECONALL = BBHI_MRI / 'derivatives/reconall_fs6'
@@ -23,15 +27,15 @@ def has_reconall(sub, ses):
 
     Args:
         sub (str): Subject ID in the format 'sub-xxx'.
-        ses (int): Session number (1 or 2).
+        ses (str): Session label (e.g. 'ses-01').
 
     Returns:
         bool: True if the recon-all directory exists, False otherwise.
     """
     num = int(sub.replace('sub-', ''))
     if num > 6000:
-        return (BBHI_RECONALL / f"{sub}_ses-0{ses}_run-01").exists()
-    return (SENIOR_RECONALL / f"{sub}_ses-0{ses}").exists()
+        return (BBHI_RECONALL / f"{sub}_{ses}_run-01").exists()
+    return (SENIOR_RECONALL / f"{sub}_{ses}").exists()
 
 
 def expected_dwi_files(sub, ses):
@@ -39,7 +43,7 @@ def expected_dwi_files(sub, ses):
 
     Args:
         sub (str): Subject ID in the format 'sub-xxx'.
-        ses (int): Session number (1 or 2).
+        ses (str): Session label (e.g. 'ses-01').
 
     Returns:
         list[Path]: Paths to the eddy-corrected image and the SIFT2 tractogram
@@ -49,10 +53,10 @@ def expected_dwi_files(sub, ses):
         num = int(sub.split('-')[1])
     except (IndexError, ValueError):
         return []
-    base = BBHI_MRI / 'processed_data' if num > 5000 else SENIOR_MRI
+    base = BBHI_MRI / 'processed_data' if num > 6000 else SENIOR_MRI
     return [
-        base / f"dtifit_ses-0{ses}_fsl-604/{sub}_ses-0{ses}/eddy_corrected_data.nii.gz",
-        base / f"tracto_SIFT2/{sub}_ses-0{ses}/{sub}_ses-0{ses}_dwi_tractogram_10M_SIFT2_weights.txt",
+        base / f"dtifit_{ses}_fsl-604/{sub}_{ses}/eddy_corrected_data.nii.gz",
+        base / f"tracto_SIFT2/{sub}_{ses}/{sub}_{ses}_dwi_tractogram_10M_SIFT2_weights.txt",
     ]
 
 
@@ -61,7 +65,7 @@ def gather_dwi_checks(sub_ids, ses):
 
     Args:
         sub_ids (list[str]): Subject IDs in the format 'sub-xxx'.
-        ses (int): Session number (1 or 2).
+        ses (str): Session label (e.g. 'ses-01').
 
     Returns:
         dict: Maps each subject to {'eddy': bool, 'tract': bool}.
@@ -80,7 +84,7 @@ def expected_fmri_files(sub, ses):
 
     Args:
         sub (str): Subject ID in the format 'sub-xxx'.
-        ses (int): Session number (1 or 2).
+        ses (str): Session label (e.g. 'ses-01').
 
     Returns:
         list[Path]: Paths to the BOLD image in T1 space and the Schaefer/
@@ -90,15 +94,15 @@ def expected_fmri_files(sub, ses):
         num = int(sub.split('-')[1])
     except (IndexError, ValueError):
         return []
-    if num > 5000:
-        preproc = 'resting_preproc_fs6-recon' if ses == 1 else f'resting_preproc_fs6-recon_tp{ses}'
+    if num > 6000:
+        preproc = 'resting_preproc_fs6-recon' if ses == 'ses-01' else f'resting_preproc_fs6-recon_tp{ses[-1]}'
         bold = BBHI_MRI / 'processed_data' / preproc / sub / 'native_T1' / \
-            f"{sub}_ses-0{ses}_run-01_rest_bold_ap_T1-space.nii.gz"
+            f"{sub}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz"
     else:
-        bold = SENIOR_MRI / 'resting_preproc_fs6-recon' / sub / f'ses-0{ses}' / 'native_T1' / \
-            f"{sub}_ses-0{ses}_run-01_rest_bold_ap_T1-space.nii.gz"
-    mask = SCHAEFER_DIR / f"ses-0{ses}/{sub}/bold_space_masks/" \
-        f"{sub}_ses-0{ses}_schaefer200_subcortical14_bold_space.nii.gz"
+        bold = SENIOR_MRI / 'resting_preproc_fs6-recon' / sub / ses / 'native_T1' / \
+            f"{sub}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz"
+    mask = SCHAEFER_DIR / f"{ses}/{sub}/bold_space_masks/" \
+        f"{sub}_{ses}_{ATLAS}_subcortical14_bold_space.nii.gz"
     return [bold, mask]
 
 
@@ -107,7 +111,7 @@ def gather_fmri_checks(sub_ids, ses):
 
     Args:
         sub_ids (list[str]): Subject IDs in the format 'sub-xxx'.
-        ses (int): Session number (1 or 2).
+        ses (str): Session label (e.g. 'ses-01').
 
     Returns:
         dict: Maps each subject to {'bold': bool, 'mask': bool}.
@@ -195,9 +199,9 @@ def analysis_ids(sup):
     Returns:
         set[str]: Cleaned subject IDs in the final analysis cohort.
     """
-    s1 = pd.read_csv(SFC_DIR / 'ses-01' / 'all_to_all_roi_matrices' / 'all_sfc_data_ses-01.csv')
-    s2 = pd.read_csv(SFC_DIR / 'ses-02' / 'all_to_all_roi_matrices' / 'all_sfc_data_ses-02.csv')
-    w = pd.read_csv(DATA_DIR / 'weighted_global_roi_averages.csv')
+    s1 = pd.read_csv(DATA_DIR / f'all_sfc_data_ses-01_{ATLAS}.csv')
+    s2 = pd.read_csv(DATA_DIR / f'all_sfc_data_ses-02_{ATLAS}.csv')
+    w = pd.read_csv(DATA_DIR / f'weighted_global_roi_averages_{ATLAS}.csv')
 
     def rename(c):
         c = re.sub(r'^w([12])_(.*)$', r'\2_\1', c)
@@ -269,21 +273,17 @@ def compute_ns():
     #     processed, so no usable output), or missing structural/diffusion/fMRI output.
     #   * Excessive head motion: had complete usable MRI but excluded by scrubbing.
     analysis = analysis_ids(sup)
-    dwi1 = gather_dwi_checks(long_ids, 1)
-    dwi2 = gather_dwi_checks(long_ids, 2)
-    fmri1 = gather_fmri_checks(long_ids, 1)
-    fmri2 = gather_fmri_checks(long_ids, 2)
+    dwi = {ses: gather_dwi_checks(long_ids, ses) for ses in SESSIONS}
+    fmri = {ses: gather_fmri_checks(long_ids, ses) for ses in SESSIONS}
 
     def has_dwi(s):
-        return (s in dwi1 and dwi1[s]['eddy'] and dwi1[s]['tract'] and
-                s in dwi2 and dwi2[s]['eddy'] and dwi2[s]['tract'])
+        return all(s in dwi[ses] and dwi[ses][s]['eddy'] and dwi[ses][s]['tract'] for ses in SESSIONS)
 
     def has_fmri(s):
-        return (s in fmri1 and fmri1[s]['bold'] and fmri1[s]['mask'] and
-                s in fmri2 and fmri2[s]['bold'] and fmri2[s]['mask'])
+        return all(s in fmri[ses] and fmri[ses][s]['bold'] and fmri[ses][s]['mask'] for ses in SESSIONS)
 
     def complete_mri(s):
-        return (has_reconall(s, 1) and has_reconall(s, 2)
+        return (all(has_reconall(s, ses) for ses in SESSIONS)
                 and has_dwi(s) and has_fmri(s))
 
     n_final = n_excl_motion = n_excl_mridata = 0
