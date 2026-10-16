@@ -28,7 +28,7 @@ def prepare_directories(root_dir: Path, session: str, subdir_types: List[str]):
         subdir_types (List[str]): List of subdirectory types to create.
     """
     for subdir in subdir_types:
-        path = root_dir / f"ses-{session}" / subdir
+        path = root_dir / session / subdir
         path.mkdir(parents=True, exist_ok=True)
 
 
@@ -90,9 +90,9 @@ def compute_functional_connectivity(
     fisher_z_matrix = fisher_transform(connectivity_matrix)
 
     # Define target directories
-    all_to_all_dir = output_dir / f"ses-{ses}/all_to_all_roi_matrices"
-    within_network_dir = output_dir / f"ses-{ses}/within_network_matrices"
-    subcortical_dir = output_dir / f"ses-{ses}/subcortical_matrices"
+    all_to_all_dir = output_dir / f"{ses}/all_to_all_roi_matrices"
+    within_network_dir = output_dir / f"{ses}/within_network_matrices"
+    subcortical_dir = output_dir / f"{ses}/subcortical_matrices"
 
     # Ensure directories exist
     prepare_directories(output_dir, ses, ["all_to_all_roi_matrices"])
@@ -317,19 +317,21 @@ def visualize_fc_data(
     plt.xlabel("Regions")
     plt.ylabel("Regions")
     plt.grid(False)
-    plt.show()
 
     # Determine plot path based on Fisher Z transformation
     if is_fisher_z:
-        plot_filename = f"{subject_id}_ses-{ses}_fisher_z_all_to_all_roi_matrix.png"
+        plot_filename = f"{subject_id}_{ses}_fisher_z_all_to_all_roi_matrix.png"
     else:
-        plot_filename = f"{subject_id}_ses-{ses}_all_to_all_roi_matrix.png"
+        plot_filename = f"{subject_id}_{ses}_all_to_all_roi_matrix.png"
 
     # Create the visualization directory if it doesn't exist
-    visualization_dir = output_directory / f"ses-{ses}/visualization"
+    visualization_dir = output_directory / f"{ses}/visualization"
     visualization_dir.mkdir(parents=True, exist_ok=True)
 
     # Save the plot
     plot_path = visualization_dir / plot_filename
     plt.savefig(plot_path)
+
+    # Show after saving so the saved figure is not blank
+    plt.show()
     plt.close()
