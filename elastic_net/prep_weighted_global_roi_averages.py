@@ -5,7 +5,7 @@ import nibabel as nib
 import numpy as np
 import pandas as pd
 from nilearn.datasets import fetch_atlas_schaefer_2018
-from prep_data_for_en import get_subjects_to_process
+from prep_data_for_en import ATLAS, DATA_DIR, FC_ROOT, N_PARCELS, SC_ROOT, SFC_ROOT, get_subjects_to_process
 
 DEBUG = False
 _PRINTED_ROI_DOMAIN_EXAMPLES = False
@@ -194,7 +194,7 @@ def _get_schaefer_label_to_count():
     """Fetch Schaefer atlas info and return mapping of ROI label to voxel count, with caching."""
     global _SCHAEFER_LABEL_TO_COUNT
     if _SCHAEFER_LABEL_TO_COUNT is None:
-        atl = fetch_atlas_schaefer_2018(n_rois=200, yeo_networks=7, resolution_mm=1)
+        atl = fetch_atlas_schaefer_2018(n_rois=N_PARCELS, yeo_networks=7, resolution_mm=1)
         atlas = nib.load(atl.maps).get_fdata().astype(int)
         cortical_counts = Counter(atlas[atlas > 0].ravel())
         labels = [l.decode() if isinstance(l, bytes) else str(l) for l in atl.labels]
@@ -245,11 +245,29 @@ def _get_subcort_counts(subject: str, ses: str):
     return Counter(aseg[aseg > 0].ravel())
 
 
+def save_all_sfc(subjects, ses):
+    """Save raw coupling as one subject x ROI table for analyses.R.
+
+    Args:
+        subjects (list): Subject IDs to include.
+        ses (str): Session ID (format: ses-01).
+    """
+    individual_dir = SFC_ROOT / ses / "individual_coupling_matrices"
+    rows = {}
+    for sub in subjects:
+        sfc_csv = individual_dir / f"{sub}_{ses}_structure_function_coupling.csv"
+        if sfc_csv.is_file():
+            rows[sub] = pd.read_csv(sfc_csv).set_index("ROI_name")["pearson_rho"]
+    output_path = DATA_DIR / f"all_sfc_data_{ses}_{ATLAS}.csv"
+    pd.DataFrame(rows).T.to_csv(output_path)
+    print(f"Saved: {output_path} | n_subjects={len(rows)}")
+
+
 def main():
-    root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
-    fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
-    sc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
-    age_dir = Path("/home/rachel/Desktop/data")
+    root_path = SFC_ROOT
+    fc_root_path = FC_ROOT
+    sc_root_path = SC_ROOT
+    age_dir = DATA_DIR
 
     subjects_tp1 = get_subjects_to_process(
         root_path / "ses-01" / "individual_coupling_matrices", "ses-01", age_dir
@@ -349,12 +367,15 @@ def main():
             _dbg(f"Progress: completed {i}/{len(subjects)} subjects")
 
     df_out = pd.DataFrame(out_rows)
-    output_path = Path("/home/rachel/Desktop/data/weighted_global_roi_averages.csv")
+    output_path = DATA_DIR / f"weighted_global_roi_averages_{ATLAS}.csv"
     _dbg("NA counts by column:")
     for col, n_na in df_out.isna().sum().items():
         _dbg(f"  {col}: {n_na}")
     df_out.to_csv(output_path, index=False)
     print(f"Saved: {output_path} | n_subjects={len(df_out)}")
+
+    for ses in ["ses-01", "ses-02"]:
+        save_all_sfc(subjects, ses)
 
 
 if __name__ == "__main__":
