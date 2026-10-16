@@ -5,7 +5,7 @@ import nibabel as nib
 import numpy as np
 import logging
 from pathlib import Path
-from run_pipeline import ATLAS, COHORTS, N_PARCELS, OUTPUT_ROOT, SESSIONS, SHARED_ROOT, SUBJECTS
+from run_pipeline import ATLAS, COHORTS, N_PARCELS, OUTPUT_ROOT, SESSIONS, SHARED_ROOT, SUBJECTS, record_summary
 
 # Set up logging
 logging.basicConfig(
@@ -264,6 +264,8 @@ def main():
                 print("Failed subjects:")
                 for subject in failed_subjects:
                     print(f"  - {subject}")
+
+            record_summary("03_combine_t1_atlases.py", cohort, ses, len(successful_subjects), failed_subjects)
 
 
 if __name__ == "__main__":

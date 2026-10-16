@@ -6,7 +6,7 @@ import subprocess
 import logging
 from pathlib import Path
 from joblib import Parallel, delayed
-from run_pipeline import ATLAS, COHORTS, N_JOBS, N_PARCELS, OUTPUT_ROOT, RECONALL_DIRS, SESSIONS, SUBJECTS
+from run_pipeline import ATLAS, COHORTS, N_JOBS, N_PARCELS, OUTPUT_ROOT, RECONALL_DIRS, SESSIONS, SUBJECTS, record_summary
 
 # Set up logging
 logging.basicConfig(
@@ -268,6 +268,9 @@ def main():
             logger.info(f"Total subjects: {len(subject_data)}")
             logger.info(f"Successfully processed: {successful}")
             logger.info(f"Failed: {len(subject_data) - successful}")
+
+            failed_subjects = [subject_id for (subject_id, _), ok in zip(subject_data, results) if not ok]
+            record_summary("01_fsaverage_to_t1.py", cohort, session, successful, failed_subjects)
 
 if __name__ == "__main__":
     main()

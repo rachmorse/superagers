@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 import nibabel as nib
 import numpy as np
-from run_pipeline import ATLAS, COHORTS, FSL_DIR, N_JOBS, OUTPUT_ROOT, RECONALL_DIRS, SESSIONS, SHARED_ROOT, SUBJECTS
+from run_pipeline import ATLAS, COHORTS, FSL_DIR, N_JOBS, OUTPUT_ROOT, RECONALL_DIRS, SESSIONS, SHARED_ROOT, SUBJECTS, record_summary
 
 @dataclass
 class SubjectPaths:
@@ -654,6 +654,9 @@ def main():
                 print(f"Failed DWI subjects: {failed_dwi}")
             if failed_bold:
                 print(f"Failed BOLD subjects: {failed_bold}")
+
+            record_summary("04_t1_to_dwi_bold.py", cohort, ses_label, len(result_dwi), failed_dwi, step="DWI")
+            record_summary("04_t1_to_dwi_bold.py", cohort, ses_label, len(result_bold), failed_bold, step="BOLD")
 
     # Return both result lists
     return result_dwi, result_bold

@@ -5,7 +5,7 @@ import subprocess
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from run_pipeline import COHORTS, FSL_DIR, RECONALL_DIRS, SESSIONS, SHARED_ROOT, SUBJECTS
+from run_pipeline import COHORTS, FSL_DIR, RECONALL_DIRS, SESSIONS, SHARED_ROOT, SUBJECTS, record_summary
 
 
 # Set up logging
@@ -318,6 +318,8 @@ def main():
                 print("Failed subjects:")
                 for subject in failed_subjects:
                     print(f"  - {subject}")
+
+            record_summary("02_subcortical_to_t1.py", cohort, ses, len(successful_subjects), failed_subjects)
 
 
 if __name__ == "__main__":
