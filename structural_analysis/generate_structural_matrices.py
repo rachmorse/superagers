@@ -7,6 +7,7 @@ import sys
 from datetime import datetime
 import matplotlib.pyplot as plt
 from pathlib import Path
+from typing import Dict, List, Literal, Optional
 import tempfile
 
 
@@ -16,6 +17,27 @@ from compute_functional_connectivity import (
     prepare_directories,
     create_network_mappings,
 )
+
+ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer400"
+TEST_SUBJECT: Optional[str] = None  # e.g. "sub-1014" to run only that subject
+SUBJECTS_FILE = Path("/home/rachel/Desktop/data/final_cohort_ids.txt")  # final longitudinal cohort 
+SUBJECTS: List[str] = [TEST_SUBJECT] if TEST_SUBJECT else SUBJECTS_FILE.read_text().split()
+COHORTS: List[Literal["bbhi", "bbhi senior"]] = ["bbhi", "bbhi senior"]
+SESSIONS: List[Literal["ses-01", "ses-02"]] = ["ses-01", "ses-02"]
+
+TRACTOGRAM_DIRS: Dict[str, Path] = {
+    "bbhi": Path("/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_SIFT2"),
+    "bbhi senior": Path("/pool/guttmann/institut/UB/Superagers/MRI/tracto_SIFT2"),
+}
+MRTRIX_BIN = Path("/home/rachel/miniconda3/bin")
+N_THREADS = 2  # MRtrix uses all cores otherwise
+
+# Unsuffixed output folders are the original run, each atlas writes to its own suffixed folders
+# Schaefer 200 masks are the exception and live in fsaverage
+ROOT = Path("/home/rachel/Desktop/schaefer_analysis")
+MASK_ROOT = ROOT / ("fsaverage" if ATLAS == "schaefer200" else f"fsaverage_{ATLAS}")
+OUTPUT_ROOT = ROOT / f"structural_connectivity_{ATLAS}"
+LABELS_CSV = ROOT / f"timeseries_data_{ATLAS}" / "native_space" / "combined_labels.csv"
 
 
 def setup_logging(output_dir):
@@ -97,8 +119,10 @@ def get_subjects_to_process(tractogram_dir, mask_dir, output_dir, ses):
         # Check if native space mask exists
         mask_file = Path(
             f"{mask_dir}/{session}/{sub}/dwi_space_masks/"
-            f"{subject}_schaefer200_subcortical14_dwi_space.nii.gz"
+            f"{subject}_{ATLAS}_subcortical14_dwi_space.nii.gz"
         )
+        if sub not in SUBJECTS:
+            continue
         # Check if subject is already processed (in the CSV)
         if mask_file.exists() and sub not in existing_subjects and session == f"ses-{ses}":
             subjects_to_process.append(sub)
@@ -220,7 +244,7 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
     print(f"Tractogram file: {tractogram_file}")
     print(f"Weights file: {weights_file}")
     
-    mask_file = Path(f"{mask_dir}/ses-{ses}/{subject}/dwi_space_masks/{subject}_ses-{ses}_schaefer200_subcortical14_dwi_space.nii.gz")
+    mask_file = Path(f"{mask_dir}/ses-{ses}/{subject}/dwi_space_masks/{subject}_ses-{ses}_{ATLAS}_subcortical14_dwi_space.nii.gz")
     
     # Create output directories
     prepare_directories(output_dir, ses, ["all_to_all_roi_matrices", "within_network_matrices", "subcortical_matrices", "visualization"])
@@ -248,7 +272,8 @@ def generate_structural_connectivity(subject, tractogram_dir, mask_dir, output_d
         "-force",                                      # Overwrite existing files
         "-zero_diagonal",                              # Set diagonal elements to zero
         "-symmetric",                                  # Ensure matrix is symmetric
-        "-scale_invnodevol"                            # Scale by the inverse size of each node that the streamlines connect to
+        "-scale_invnodevol",                           # Scale by the inverse size of each node that the streamlines connect to
+        "-nthreads", str(N_THREADS),
     ]
     
     try:
@@ -408,11 +433,11 @@ def process_network_matrices(subject_id, full_matrix, combined_labels, output_di
 def main():
     """Main function to process structural connectivity for subjects."""
     # Set parameters
-    sessions = ["01", "02"]
-    cohorts = ["bbhi", "bbhi senior"]
-    mask_dir = Path("/home/rachel/Desktop/schaefer_analysis/fsaverage")
-    output_dir = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
-    labels_csv_path = "/home/rachel/Desktop/schaefer_analysis/timeseries_data/native_space/combined_labels.csv"
+    sessions = [ses.removeprefix("ses-") for ses in SESSIONS]
+    cohorts = COHORTS
+    mask_dir = MASK_ROOT
+    output_dir = OUTPUT_ROOT
+    labels_csv_path = LABELS_CSV
 
     # Create output directory if it does not exist
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -431,13 +456,10 @@ def main():
             print(f"Processing {cohort} {ses}...")
             print("------------------------------")
 
-            if cohort == "bbhi":
-                tractogram_dir = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_SIFT2")
-            else:
-                tractogram_dir = Path("/pool/guttmann/institut/UB/Superagers/MRI/tracto_SIFT2")
+            tractogram_dir = TRACTOGRAM_DIRS[cohort]
 
-            # Setup MRTrix 
-            os.environ["PATH"] = f"/home/rachel/miniconda3/bin:{os.environ['PATH']}"
+            # Setup MRTrix
+            os.environ["PATH"] = f"{MRTRIX_BIN}:{os.environ['PATH']}"
             
             # Create output directory if it does not exist
             output_dir.mkdir(parents=True, exist_ok=True)
