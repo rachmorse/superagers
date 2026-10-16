@@ -6,6 +6,46 @@ import nibabel as nib
 import numpy as np
 import pandas as pd
 from compute_functional_connectivity import compute_functional_connectivity, visualize_fc_data
+from run_fmri_pipeline import ANNOT_DIR, ATLAS, FC_ROOT, N_PARCELS, SESSIONS, SUBJECTS, TIMESERIES_ROOT
+
+# Order matches the subcortical label values in 03_combine_t1_atlases.py (left then right, each 1 to 7)
+SUBCORTICAL_STRUCTURES = ["Hippocampus", "Amygdala", "Pallidum", "Putamen", "Caudate", "Accumbens", "Thalamus"]
+
+
+def write_combined_labels(labels_csv_path: Path):
+    """Build the ROI labels in mask order (LH cortical, RH cortical, left subcortical, right subcortical)
+    from the Schaefer annot files, check them, and save them to CSV.
+
+    Args:
+        labels_csv_path (Path): Path to save the labels CSV.
+
+    Raises:
+        ValueError: If the labels do not match the expected atlas layout.
+    """
+    labels = []
+    for hemi in ["lh", "rh"]:
+        _, _, names = nib.freesurfer.read_annot(str(ANNOT_DIR / f"{hemi}.Schaefer2018_{N_PARCELS}Parcels_7Networks_order.annot"))
+        # Skip index 0 which is the medial wall
+        labels += [name.decode("utf-8") for name in names[1:]]
+
+    for side in ["Left", "Right"]:
+        for structure in SUBCORTICAL_STRUCTURES:
+            labels.append(f"Subcortical {len(labels) + 1}: {side} {structure}")
+
+    # Check the labels line up with the mask values (cortical 1 to N_PARCELS, subcortical N_PARCELS + 1 to N_PARCELS + 14)
+    half = N_PARCELS // 2
+    if len(labels) != N_PARCELS + 14:
+        raise ValueError(f"Expected {N_PARCELS + 14} labels for {ATLAS}, got {len(labels)}")
+    if not all(label.startswith("7Networks_LH_") for label in labels[:half]):
+        raise ValueError(f"First {half} labels are not all left hemisphere cortical labels")
+    if not all(label.startswith("7Networks_RH_") for label in labels[half:N_PARCELS]):
+        raise ValueError(f"Labels {half + 1} to {N_PARCELS} are not all right hemisphere cortical labels")
+    if labels[N_PARCELS] != f"Subcortical {N_PARCELS + 1}: Left Hippocampus" or labels[-1] != f"Subcortical {N_PARCELS + 14}: Right Thalamus":
+        raise ValueError("Subcortical labels are not numbered as expected")
+
+    labels_csv_path.parent.mkdir(parents=True, exist_ok=True)
+    labels_csv_path.write_text("\n".join(labels) + "\n")
+    print(f"Saved {len(labels)} labels to {labels_csv_path}")
 
 
 def process_subject_functional(args):
@@ -28,7 +68,7 @@ def process_subject_functional(args):
     """
     subject_id, ses, output_dir, root_directory, timeseries_path, error_log_path, combined_labels = args
 
-    timeseries_file = root_directory / f"{subject_id}_ses-{ses}_subcortical_schaefer200_timeseries.csv"
+    timeseries_file = root_directory / f"{subject_id}_{ses}_subcortical_{ATLAS}_timeseries.csv"
 
     # Load extracted timeseries
     print(f"--- Processing subject: {subject_id} ---")
@@ -50,7 +90,15 @@ def process_subject_functional(args):
     if timeseries is None or timeseries.size == 0:
         print(f"No valid timeseries loaded for subject {subject_id}")
         return
-        
+
+    # Check there is one timeseries column per label so connectivity values are not mislabelled
+    if timeseries.shape[1] != len(combined_labels):
+        print(f"Skipping {subject_id}: timeseries has {timeseries.shape[1]} ROIs but there are {len(combined_labels)} labels")
+        with open(error_log_path, "a") as f:
+            f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"ROI count mismatch for subject {subject_id}: {timeseries.shape[1]} timeseries columns, {len(combined_labels)} labels\n\n")
+        return
+
     # Compute functional connectivity with the combined atlas
     try:
         connectivity_matrix, fisher_z_matrix = compute_functional_connectivity(
@@ -88,11 +136,15 @@ def get_subjects_to_process(root_directory, output_directory, ses):
     Args:
         root_directory (Path): Path to the root directory containing the timeseries data.
         output_directory (Path): Path to the output directory where connectivity data is saved.
-        ses (str): Session / timepoint.
+        ses (str): Session label (e.g. 'ses-01').
     """
     subjects_to_process = []
 
-    csv_path = output_directory / f"ses-{ses}/all_to_all_roi_matrices/all_to_all_roi_matrix.csv"
+    if not root_directory.exists():
+        print(f"Timeseries directory not found: {root_directory}")
+        return subjects_to_process
+
+    csv_path = output_directory / f"{ses}/all_to_all_roi_matrices/all_to_all_roi_matrix.csv"
 
     if csv_path.exists():
         df = pd.read_csv(csv_path)
@@ -102,9 +154,9 @@ def get_subjects_to_process(root_directory, output_directory, ses):
         processed_subjects = set()
 
     for filename in os.listdir(root_directory):
-        if filename.startswith("sub-") and filename.endswith(f"_ses-{ses}_subcortical_schaefer200_timeseries.csv"):
+        if filename.startswith("sub-") and filename.endswith(f"_{ses}_subcortical_{ATLAS}_timeseries.csv"):
             subject_id = filename.split("_")[0]
-            if subject_id not in processed_subjects:
+            if subject_id in SUBJECTS and subject_id not in processed_subjects:
                 subjects_to_process.append(subject_id)
 
     return subjects_to_process
@@ -131,8 +183,10 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], timeser
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Read combined labels once
+    # Read combined labels once, generating them from the annot files if they do not exist yet
     labels_csv_path = timeseries_path / "combined_labels.csv"
+    if not labels_csv_path.exists():
+        write_combined_labels(labels_csv_path)
     try:
         combined_labels = pd.read_csv(labels_csv_path, header=None).squeeze().tolist()
     except FileNotFoundError:
@@ -157,18 +211,17 @@ def main(output_dir: Union[str, Path], root_directory: Union[str, Path], timeser
 
 
 if __name__ == "__main__":
-    sessions = ["01", "02"]
-    timeseries_path = Path("/home/rachel/Desktop/schaefer_analysis/timeseries_data/native_space")
-    output_directory = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
+    timeseries_path = TIMESERIES_ROOT
+    output_directory = FC_ROOT
 
-    for ses in sessions:
+    for ses in SESSIONS:
         print("-----------------------")
-        print(f"Processing ses-{ses}")
+        print(f"Processing {ses}")
         print("-----------------------")
 
         # Create the output directory if it does not exist
         output_directory.mkdir(parents=True, exist_ok=True)
-        root_directory = Path(f"{timeseries_path}/ses-{ses}")
+        root_directory = timeseries_path / ses
 
         # Generate a list of subjects to process
         subjects = get_subjects_to_process(root_directory, output_directory, ses)
