@@ -6,21 +6,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from run_sfc_pipeline import ATLAS, FC_ROOT, SFC_ROOT, STRUCT_ROOT
 
 
 def main():
     """Load single-subject connectivity data and save the three-panel figure.
-    
+
     For the SFC explanatory figure finished in Lucidchart.
     """
-    base_dir = Path("/home/rachel/Desktop/schaefer_analysis")
     subject = "sub-4019"
     ses = "ses-02"
 
-    sc_path = base_dir / f"structural_connectivity/{ses}/individual_connectivity_matrices/{subject}_{ses}_structural_connectivity_matrix.csv"
-    fc_path = base_dir / f"functional_connectivity/native_space/{ses}/individual_connectivity_matrices/{subject}_{ses}_functional_connectivity_matrix_fisher_z.csv"
-    sfc_path = base_dir / f"structure_function_coupling/{ses}/individual_coupling_matrices/{subject}_{ses}_structure_function_coupling.csv"
-    output_png = Path(__file__).parent / f"{subject}_{ses}_connectivity_figure.png"
+    sc_path = STRUCT_ROOT / ses / "individual_connectivity_matrices" / f"{subject}_{ses}_structural_connectivity_matrix.csv"
+    fc_path = FC_ROOT / ses / "individual_connectivity_matrices" / f"{subject}_{ses}_functional_connectivity_matrix_fisher_z.csv"
+    sfc_path = SFC_ROOT / ses / "individual_coupling_matrices" / f"{subject}_{ses}_structure_function_coupling.csv"
+    output_png = Path(__file__).parent / f"{subject}_{ses}_connectivity_figure_{ATLAS}.png"
 
     cmap = "RdBu_r"
     tick_positions = [0, 25, 50, 75, 100, 125, 150, 175, 200]

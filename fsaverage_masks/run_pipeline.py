@@ -10,11 +10,11 @@ import datetime
 
 ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer400"
 TEST_SUBJECT: Optional[str] = None  # e.g. "sub-1014" to run only that subject
-SUBJECTS_FILE = Path("/home/rachel/Desktop/data/final_cohort_ids.txt")  # final longitudinal cohort (n = 240)
+SUBJECTS_FILE = Path("/home/rachel/Desktop/data/final_cohort_ids.txt")  # final longitudinal cohort 
 SUBJECTS: List[str] = [TEST_SUBJECT] if TEST_SUBJECT else SUBJECTS_FILE.read_text().split()
 COHORTS: List[Literal["bbhi", "bbhi senior"]] = ["bbhi", "bbhi senior"]
 SESSIONS: List[Literal["ses-01", "ses-02"]] = ["ses-01", "ses-02"]
-N_JOBS = 14
+N_JOBS = 6
 N_PARCELS = int(ATLAS.removeprefix("schaefer"))
 
 RECONALL_DIRS: Dict[str, Path] = {
@@ -23,7 +23,7 @@ RECONALL_DIRS: Dict[str, Path] = {
 }
 FSL_DIR = Path("/vol/software/fsl_6_0_4")
 
-# Subcortical masks and DWI registrations are atlas-independent so all atlases reuse the ones in the original Schaefer 200 folder
+# Subcortical masks and DWI registrations are atlas-independent so all atlases reuse the ones in fsaverage
 SHARED_ROOT = Path("/home/rachel/Desktop/schaefer_analysis/fsaverage")
 OUTPUT_ROOT = SHARED_ROOT if ATLAS == "schaefer200" else Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage_{ATLAS}")
 

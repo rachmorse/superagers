@@ -1,7 +1,17 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from typing import Literal
 import os, re
+
+# Shared by log_en.py and prep_weighted_global_roi_averages.py
+ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer200"
+N_PARCELS = int(ATLAS.removeprefix("schaefer"))
+ROOT = Path("/home/rachel/Desktop/schaefer_analysis")
+SFC_ROOT = ROOT / f"structure_function_coupling_{ATLAS}"
+FC_ROOT = ROOT / f"functional_connectivity_{ATLAS}" / "native_space"
+SC_ROOT = ROOT / f"structural_connectivity_{ATLAS}"
+DATA_DIR = Path("/home/rachel/Desktop/data")
 
 def get_subjects_to_process(output_folder, ses, age_dir):
     """Generate a list of subjects to process. Also, filters for any subs with
@@ -93,10 +103,10 @@ def flatten_connectivity_csv(matrix_csv, measure_col="pearson_rho"):
 
 def main():
     sessions = ["ses-01", "ses-02"]
-    root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
-    fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
-    sc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
-    age_dir = Path("/home/rachel/Desktop/data")
+    root_path = SFC_ROOT
+    fc_root_path = FC_ROOT
+    sc_root_path = SC_ROOT
+    age_dir = DATA_DIR
 
     # Get the list of subjects to process
     subjects_tp1 = get_subjects_to_process(root_path / "ses-01" / "individual_coupling_matrices", "ses-01", age_dir)

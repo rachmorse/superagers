@@ -10,7 +10,7 @@ from matplotlib.lines import Line2D
 import numpy as np
 
 # Import function from plot_sfc_difference.py 
-from plot_sfc_difference import average_session_differences
+from plot_sfc_difference import ATLAS, AVERAGE_OUTPUT_DIR, average_session_differences
 
 
 def load_forest_stats(html_path: Path, region_map: dict):
@@ -153,15 +153,9 @@ def main():
     map (Panel A), loads the resulting PNG, then assembles it with two
     forest plots (Panels B and C) into a single figure.
     """
-    session_dirs = {
-        "01": Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-01/group_connectivity_matrices"),
-        "02": Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/ses-02/group_connectivity_matrices"),
-    }
-    average_output_dir = Path(
-        "/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/average_across_sessions"
-    )
+    average_output_dir = AVERAGE_OUTPUT_DIR
     output_path = Path(
-        "/home/rachel/Desktop/superagers/analyses/figures/em_sfc_cortex_plot.png"
+        f"/home/rachel/Desktop/superagers/analyses/figures/em_sfc_cortex_plot_{ATLAS}.png"
     )
     label_type = "long"
     vmin       = -0.03
@@ -200,7 +194,7 @@ def main():
     # Panel A: generate brain surface map (colorbar added separately below)
     print("Generating brain surface map…")
     average_session_differences(
-        session_dirs=session_dirs,
+        sessions=["ses-01", "ses-02"],
         label_type=label_type,
         vmin=vmin,
         vmax=vmax,

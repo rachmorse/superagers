@@ -3,8 +3,9 @@ import numpy as np
 import os
 from pathlib import Path
 import re
+from run_sfc_pipeline import FC_ROOT, IS_FISHER_Z, N_ROIS, SESSIONS, STRUCT_ROOT, SUBJECTS
 
-# Function to convert the data 
+# Function to convert the data
 def create_individual_matrices(input_file, output_dir, ses, is_functional=False, is_fisher_z=False):
     """Convert a CSV file of connectivity matrices into individual matrices for each subject.
 
@@ -17,7 +18,8 @@ def create_individual_matrices(input_file, output_dir, ses, is_functional=False,
     """
     # Read the input csv file
     df = pd.read_csv(input_file)
-    num_rois = 214
+    df = df[df.iloc[:, 0].isin(SUBJECTS)].reset_index(drop=True)
+    num_rois = N_ROIS
 
     # Get the subject IDs 
     subjects = df.iloc[:, 0].tolist()
@@ -50,7 +52,7 @@ def create_individual_matrices(input_file, output_dir, ses, is_functional=False,
     # Create a mapping from ROI pairs to matrix indices
     roi_to_index = {roi: i for i, roi in enumerate(roi_labels)}
     
-    # Expected number of connections for 214 ROIs (upper triangle only)
+    # Expected number of connections (upper triangle only)
     expected_connections = (num_rois * (num_rois - 1)) // 2
     
     # Verify the data has the expected number of columns
@@ -102,38 +104,29 @@ def create_individual_matrices(input_file, output_dir, ses, is_functional=False,
         conn_df.to_csv(output_file)
 
 def main():
-    # Paths 
-    sessions = ["ses-01", "ses-02"]
-
-    for ses in sessions:
+    for ses in SESSIONS:
         print("--------------------------")
         print(f"Processing session: {ses}")
         print("--------------------------")
 
-        structural_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structural_connectivity/{ses}")
-        functional_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space/{ses}")
+        structural_dir = STRUCT_ROOT / ses
         structural_matrix = structural_dir / "all_to_all_roi_matrices" / "all_to_all_roi_matrix.csv"
-        is_fisher_z = True  # Set to True for getting fisher z values
-        if is_fisher_z:
-            func_matrix = functional_dir / "all_to_all_roi_matrices" / "fisher_z_all_to_all_roi_matrix.csv"
-        else:
-            func_matrix = functional_dir / "all_to_all_roi_matrices" / "all_to_all_roi_matrix.csv"
-
-        # Output directories
         struct_output_dir = structural_dir / "individual_connectivity_matrices"
-        func_output_dir = functional_dir / "individual_connectivity_matrices"
-
-        # Create output directories if they don't exist
         os.makedirs(struct_output_dir, exist_ok=True)
+
+        functional_dir = FC_ROOT / ses
+        func_filename = "fisher_z_all_to_all_roi_matrix.csv" if IS_FISHER_Z else "all_to_all_roi_matrix.csv"
+        func_matrix = functional_dir / "all_to_all_roi_matrices" / func_filename
+        func_output_dir = functional_dir / "individual_connectivity_matrices"
         os.makedirs(func_output_dir, exist_ok=True)
-        
+
         # Process structural connectivity matrices
         print("Processing structural connectivity matrices...")
         create_individual_matrices(structural_matrix, struct_output_dir, ses, is_functional=False, is_fisher_z=False)
 
         # Process functional connectivity matrices
         print("Processing functional connectivity matrices...")
-        create_individual_matrices(func_matrix, func_output_dir, ses, is_functional=True, is_fisher_z=is_fisher_z)
+        create_individual_matrices(func_matrix, func_output_dir, ses, is_functional=True, is_fisher_z=IS_FISHER_Z)
 
         print("Conversion complete!")
 

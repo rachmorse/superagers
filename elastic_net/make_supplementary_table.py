@@ -9,12 +9,13 @@ import docx
 
 # Import the logic and paths used in 'plot_feature_importance.py'
 from plot_feature_importance import (
+    ATLAS,
     load_and_prepare,
     FEATURE_IMPORTANCE_T1_CSV,
     FEATURE_IMPORTANCE_SLOPE_CSV
 )
 
-OUTPUT_DOCX = Path("/home/rachel/Desktop/superagers/elastic_net/figures_tables/supplementary_table.docx")
+OUTPUT_DOCX = Path(f"/home/rachel/Desktop/superagers/elastic_net/figures_tables/supplementary_table_{ATLAS}.docx")
 
 def process_top_50(df, is_slope_model):
     """Extract top 50 features by importance mean and tag annual change features.

@@ -8,17 +8,16 @@ from matplotlib.colors import ListedColormap
 from matplotlib.image import imread
 import yabplot as yab
 
+from prep_data_for_en import ATLAS
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "analyses"))
 from plot_sfc_difference import crop_colorbar, trim_whitespace
 
-FEATURE_IMPORTANCE_T1_CSV = Path(
-    "/home/rachel/Desktop/superagers/elastic_net/results/SFC_ROI_t1_long_include_feature_importance.csv"
-)
-FEATURE_IMPORTANCE_SLOPE_CSV = Path(
-    "/home/rachel/Desktop/superagers/elastic_net/results/SFC_ROI_t1_slope_long_include_feature_importance.csv"
-)
+RESULTS_DIR = Path("/home/rachel/Desktop/superagers/elastic_net/results")
+FEATURE_IMPORTANCE_T1_CSV = RESULTS_DIR / f"{ATLAS}_SFC_ROI_t1_long_include_feature_importance.csv"
+FEATURE_IMPORTANCE_SLOPE_CSV = RESULTS_DIR / f"{ATLAS}_SFC_ROI_t1_slope_long_include_feature_importance.csv"
 OUTPUT_PATH = Path(
-    "/home/rachel/Desktop/superagers/elastic_net/figures_tables/feature_importance_brain.png"
+    f"/home/rachel/Desktop/superagers/elastic_net/figures_tables/feature_importance_brain_{ATLAS}.png"
 )
 TEMP_PATH = Path(
     "/home/rachel/Desktop/superagers/elastic_net/figures_tables/_brain_temp"
@@ -114,7 +113,7 @@ NETWORK_LABELS = {
 NETWORK_ORDER  = list(NETWORK_COLORS.keys())
 VMIN           = 0.5
 VMAX           = len(NETWORK_ORDER) + 0.5
-CORTICAL_ATLAS = "schaefer200"
+CORTICAL_ATLAS = ATLAS
 STYLE          = "glossy"
 
 SUBCORTICAL_NAME_MAP = {

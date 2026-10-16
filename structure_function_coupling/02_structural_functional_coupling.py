@@ -7,9 +7,10 @@ import nibabel as nib
 from nilearn import plotting, surface
 from nilearn.datasets import fetch_atlas_schaefer_2018, fetch_surf_fsaverage
 import matplotlib.pyplot as plt
+from run_sfc_pipeline import FC_ROOT, SAVE_FISHER_Z, SAVE_RAW, SESSIONS, SFC_ROOT, STRUCT_ROOT, SUBJECTS
 
 
-def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, structural_dir, require_fisher_z=False):
+def get_subjects_to_process(output_folder, ses, functional_dir, structural_dir, require_fisher_z=False):
     """Generate a list of subjects to process based on whether they have
     a structural and functional matrix and do not have coupling for the
     specified timepoint.
@@ -19,23 +20,16 @@ def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, struct
         ses (str): Session ID (format: ses-01).
         functional_dir (Path): Path to the directory containing functional connectivity matrices.
         structural_dir (Path): Path to the directory containing structural connectivity matrices.
-        mask_dir (Path): Path to the directory containing the mask files to use to check which subjects to process.
-        require_fisher_z (bool): If True, only consider subjects that are missing the Fisher z-transformed coupling file as needing processing. 
+        require_fisher_z (bool): If True, only consider subjects that are missing the Fisher z-transformed coupling file as needing processing.
             If False, only consider subjects missing the raw coupling file.
 
     Returns:
-        list: List of subject IDs to process.
+        tuple: List of subject IDs to process, list of already processed subject IDs.
     """
     subjects_to_process = []
     already_processed = []
 
-    # Iterate over all possible subject directories
-    for subject in mask_dir.iterdir():
-        subject = str(subject.name)
-        if not subject.startswith("sub-"):
-            continue
-        
-        # Check if the required directory exists and hasn't been processed yet  
+    for subject in SUBJECTS:
         func_conn_path = functional_dir / f"{subject}_{ses}_functional_connectivity_matrix_fisher_z.csv"
         struct_conn_path = structural_dir / f"{subject}_{ses}_structural_connectivity_matrix.csv"
         output_file_path = output_folder / f"{subject}_{ses}_structure_function_coupling.csv"
@@ -51,6 +45,8 @@ def get_subjects_to_process(output_folder, ses, mask_dir, functional_dir, struct
             already_processed.append(subject)
         elif struct_conn_path.exists() and not func_conn_path.exists():
             print(f"Functional connectivity matrix not found for {subject} {ses} likely due to scrubbing exclusion.")
+        elif not struct_conn_path.exists():
+            print(f"Structural connectivity matrix not found for {subject} {ses}.")
 
     return subjects_to_process, already_processed
 
@@ -161,43 +157,33 @@ def save_coupling_results(coupling_dict, output_path, save_raw=True, save_fisher
 
 
 def main():
-    # Define the directories using Path
-    sessions = ["ses-01", "ses-02"]
-    save_raw = True
-    save_fisher_z = True  # When True, saves *_fisher_z.csv alongside raw
-
-    for ses in sessions:
+    for ses in SESSIONS:
         print("--------------------------")
         print(f"Processing {ses} ...")
         print("--------------------------")
 
-        structural_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structural_connectivity/{ses}/individual_connectivity_matrices")
-        functional_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space/{ses}/individual_connectivity_matrices")
-        output_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/structure_function_coupling/{ses}/individual_coupling_matrices")
-        mask_dir = Path(f"/home/rachel/Desktop/schaefer_analysis/fsaverage/{ses}")
-        
+        structural_dir = STRUCT_ROOT / ses / "individual_connectivity_matrices"
+        functional_dir = FC_ROOT / ses / "individual_connectivity_matrices"
+        output_dir = SFC_ROOT / ses / "individual_coupling_matrices"
+
         # Make sure the output directory exists
         output_dir.mkdir(parents=True, exist_ok=True)
 
         subjects_to_process, already_processed = get_subjects_to_process(
             output_dir,
             ses,
-            mask_dir,
             functional_dir,
             structural_dir,
-            require_fisher_z=save_fisher_z,
+            require_fisher_z=SAVE_FISHER_Z,
         )
         print(f"Number of subjects already processed: {len(already_processed)}")
         print(f"Number of subjects to process: {len(subjects_to_process)}")
-        
-        # Uncomment to process manual list
-        # subjects_to_process = ["sub-134084"]
 
         for subject in subjects_to_process:
             # Calculate structure-function coupling for the specified ses
             results = calculate_structure_function_coupling(structural_dir, functional_dir, subject, ses)
 
-            save_coupling_results(results, output_dir, save_raw=save_raw, save_fisher_z=save_fisher_z)
+            save_coupling_results(results, output_dir, save_raw=SAVE_RAW, save_fisher_z=SAVE_FISHER_Z)
         
         
 if __name__ == "__main__":
