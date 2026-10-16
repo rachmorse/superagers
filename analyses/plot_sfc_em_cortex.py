@@ -10,7 +10,7 @@ from matplotlib.lines import Line2D
 import numpy as np
 
 # Import function from plot_sfc_difference.py 
-from plot_sfc_difference import ATLAS, AVERAGE_OUTPUT_DIR, average_session_differences
+from plot_sfc_difference import ATLAS, AVERAGE_OUTPUT_DIR, LABEL_TYPE, SESSIONS, average_session_differences
 
 
 def load_forest_stats(html_path: Path, region_map: dict):
@@ -157,7 +157,6 @@ def main():
     output_path = Path(
         f"/home/rachel/Desktop/superagers/analyses/figures/em_sfc_cortex_plot_{ATLAS}.png"
     )
-    label_type = "long"
     vmin       = -0.03
     vmax       =  0.03
     subcortical_name_map = {
@@ -194,8 +193,8 @@ def main():
     # Panel A: generate brain surface map (colorbar added separately below)
     print("Generating brain surface map…")
     average_session_differences(
-        sessions=["ses-01", "ses-02"],
-        label_type=label_type,
+        sessions=SESSIONS,
+        label_type=LABEL_TYPE,
         vmin=vmin,
         vmax=vmax,
         colorbar_label=None,
