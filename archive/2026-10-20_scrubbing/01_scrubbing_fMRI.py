@@ -43,11 +43,10 @@ def aggregate_fwd_data(roots, output_file, ses, cohort, subject_dir_suffix="nati
                 continue
 
             # Construct path to framewise_displ.txt
-            # It is in ses-XX/native_T1/framewise_displ.txt or just native_T1/framewise_displ.txt for bbhi
-            if cohort == "bbhi":
+            # It is in ses-XX/native_T1/framewise_displ.txt, except bbhi pool data which has no ses-XX level
+            fwd_path = Path(root_dir) / subject / f"ses-{ses}" / subject_dir_suffix / "framewise_displ.txt"
+            if cohort == "bbhi" and not fwd_path.exists():
                 fwd_path = Path(root_dir) / subject / subject_dir_suffix / "framewise_displ.txt"
-            else:
-                fwd_path = Path(root_dir) / subject / f"ses-{ses}" / subject_dir_suffix / "framewise_displ.txt"
             
             if fwd_path.exists():
                 try:
@@ -513,7 +512,7 @@ if __name__ == "__main__":
             pool_root = "/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon"
         output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data/bbhi")
     else:
-        root = "/home/rachel/Desktop/preprocessing-updated_reconall/resting_preprocessed"
+        root = "/home/rachel/Desktop/preprocessing-updated_reconall/bbhi_senior/resting_preprocessed"
         pool_root = "/pool/guttmann/institut/UB/Superagers/MRI/resting_preproc_fs6-recon"
         output_data = Path("/home/rachel/Desktop/schaefer_analysis/scrubbed_data")
 
