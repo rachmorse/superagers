@@ -1,11 +1,18 @@
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 import nibabel as nib
 import numpy as np
 import pandas as pd
 from nilearn.datasets import fetch_atlas_schaefer_2018
-from prep_data_for_en import ATLAS, DATA_DIR, FC_ROOT, N_PARCELS, SC_ROOT, SFC_ROOT, get_subjects_to_process
+from prep_data_for_en import DATA_DIR, ROOT, get_subjects_to_process
+
+ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer200"
+N_PARCELS = int(ATLAS.removeprefix("schaefer"))
+SFC_ROOT = ROOT / f"structure_function_coupling_{ATLAS}"
+FC_ROOT = ROOT / f"functional_connectivity_{ATLAS}" / "native_space"
+SC_ROOT = ROOT / f"structural_connectivity_{ATLAS}"
 
 DEBUG = False
 _PRINTED_ROI_DOMAIN_EXAMPLES = False
@@ -152,21 +159,26 @@ def _prepare_weighted_df(df: pd.DataFrame, subject: str, ses: str) -> pd.DataFra
     df["weight"] = df["ROI_name"].map(label_to_count)
 
     subcort_counts = _get_subcort_counts(subject, ses)
+    subcort_aseg_ids = {
+        "Left Hippocampus": 17,
+        "Left Amygdala": 18,
+        "Left Pallidum": 13,
+        "Left Putamen": 12,
+        "Left Caudate": 11,
+        "Left Accumbens": 26,
+        "Left Thalamus": 10,
+        "Right Hippocampus": 53,
+        "Right Amygdala": 54,
+        "Right Pallidum": 52,
+        "Right Putamen": 51,
+        "Right Caudate": 50,
+        "Right Accumbens": 58,
+        "Right Thalamus": 49,
+    }
+    # Subcortical ROIs are numbered after the cortical parcels (201+ or 401+).
     subcort_map = {
-        "Subcortical 201: Left Hippocampus": 17,
-        "Subcortical 202: Left Amygdala": 18,
-        "Subcortical 203: Left Pallidum": 13,
-        "Subcortical 204: Left Putamen": 12,
-        "Subcortical 205: Left Caudate": 11,
-        "Subcortical 206: Left Accumbens": 26,
-        "Subcortical 207: Left Thalamus": 10,
-        "Subcortical 208: Right Hippocampus": 53,
-        "Subcortical 209: Right Amygdala": 54,
-        "Subcortical 210: Right Pallidum": 52,
-        "Subcortical 211: Right Putamen": 51,
-        "Subcortical 212: Right Caudate": 50,
-        "Subcortical 213: Right Accumbens": 58,
-        "Subcortical 214: Right Thalamus": 49,
+        f"Subcortical {N_PARCELS + i}: {name}": aseg_id
+        for i, (name, aseg_id) in enumerate(subcort_aseg_ids.items(), start=1)
     }
     df["aseg_id"] = df["ROI_name"].map(subcort_map)
     df["weight_subcort"] = df["aseg_id"].map(subcort_counts)
