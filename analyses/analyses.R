@@ -14,9 +14,10 @@ suppressPackageStartupMessages({
 
 # Load source data
 raw_data <- read.csv("~/Documents/2023:2024/Data/Exported data/superager_clean.csv")
-sfc_data_1 <- read.csv("~/Documents/2023:2024/Data/Exported data/all_sfc_data_ses-01.csv")
-sfc_data_2 <- read.csv("~/Documents/2023:2024/Data/Exported data/all_sfc_data_ses-02.csv")
-weighted <- read.csv("~/Documents/2023:2024/Data/Exported data/weighted_global_roi_averages.csv")
+atlas <- "schaefer200"
+sfc_data_1 <- read.csv(paste0("~/Documents/2023:2024/Data/Exported data/all_sfc_data_ses-01_", atlas, ".csv"))
+sfc_data_2 <- read.csv(paste0("~/Documents/2023:2024/Data/Exported data/all_sfc_data_ses-02_", atlas, ".csv"))
+weighted <- read.csv(paste0("~/Documents/2023:2024/Data/Exported data/weighted_global_roi_averages_", atlas, ".csv"))
 bbhi_senior <- readxl::read_excel("~/Documents/2023:2024/Data/BBHI-Senior/bbhi senior data.xlsx", .name_repair = "unique_quiet")
 bbhi <- read.csv("~/Documents/2023:2024/Data/BBHI/BBHI Data Timept1 NPS.csv")
 
