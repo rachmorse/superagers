@@ -93,7 +93,8 @@ def get_subjects_to_process(reconall_dir, out_dir, ses, cohort):
         output_lh_path = out_dir_t1 / f"{subject_id}_schaefer_volumetric_t1_lh.nii.gz"
         output_rh_path = out_dir_t1 / f"{subject_id}_schaefer_volumetric_t1_rh.nii.gz"
 
-        if subject_recon_dir.exists() and not output_lh_path.exists() and not output_rh_path.exists():
+        # Reprocess if either hemisphere is missing (e.g., interrupted run)
+        if subject_recon_dir.exists() and not (output_lh_path.exists() and output_rh_path.exists()):
             subjects_to_process.append((subject_id, subject_dir))
         elif output_lh_path.exists() and output_rh_path.exists():
             already_processed.append(subject_id)
