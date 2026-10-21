@@ -39,12 +39,11 @@ The code is available under the MIT License, allowing others to reuse and adapt 
     - `run_pipeline.py`: Runs all scripts above, looping through each timepoint and cohort.  
 
 ### fmri_analysis
-- **Purpose:** Scrub the preprocessed fMRI data, extract timeseries data, and compute functional connectivity correlations. 
+- **Purpose:** Extract timeseries data and compute functional connectivity correlations. 
 - **Scripts:**
-    - `01_scrubbing_fMRI.py`: Scrubs BOLD images based on a Framewise Displacement (FWD) threshold. 
-    - `02_extract_subjects_timeseries.py`: Extracts timeseries data from BOLD images using Schaefer/subcortical atlases. 
+    - `01_extract_subjects_timeseries.py`: Extracts timeseries data from BOLD images using Schaefer/subcortical atlases. 
         - Uses functions in `extract_timeseries.py`.
-    - `03_compute_subject_functional_connectivity.py`: Processes timeseries data and computes Fisher z-transformation.
+    - `02_compute_subject_functional_connectivity.py`: Processes timeseries data and computes Fisher z-transformation.
         - Uses functions in `compute_functional_connectivity.py`.
 - **Notes:**
     - The scripts used to preprocesses fMRI data are available in another [repository](https://github.com/rachmorse/fmri_preprocessing).

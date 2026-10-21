@@ -13,7 +13,7 @@ SUBJECTS_FILE = Path("/home/rachel/Desktop/data/final_cohort_ids.txt")  # final 
 SUBJECTS: List[str] = [TEST_SUBJECT] if TEST_SUBJECT else SUBJECTS_FILE.read_text().split()
 COHORTS: List[Literal["bbhi", "bbhi senior"]] = ["bbhi", "bbhi senior"]
 SESSIONS: List[Literal["ses-01", "ses-02"]] = ["ses-01", "ses-02"]
-N_JOBS = 2
+N_JOBS = 3
 N_PARCELS = int(ATLAS.removeprefix("schaefer"))
 
 # Unsuffixed output folders are the original run, each atlas writes to its own suffixed folders
@@ -25,10 +25,9 @@ TIMESERIES_ROOT = ROOT / f"timeseries_data{SUFFIX}" / "native_space"
 FC_ROOT = ROOT / f"functional_connectivity{SUFFIX}" / "native_space"
 ANNOT_DIR = Path(__file__).resolve().parent.parent / "fsaverage_masks"
 
-# Scrubbing (01_scrubbing_fMRI.py) is run separately 
 SCRIPTS: List[str] = [
-    "02_extract_subjects_timeseries.py",
-    "03_compute_subject_functional_connectivity.py",
+    "01_extract_subjects_timeseries.py",
+    "02_compute_subject_functional_connectivity.py",
 ]
 
 
