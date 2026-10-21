@@ -207,6 +207,11 @@ def transform_t1w_to_dwi(t1w_mask, t1_anat, t1_brain, eddy_corrected, b0_ref, ou
         check=True,
     )
 
+    # flirt exits 0 even when it writes nothing (e.g., unreadable matrix)
+    if not Path(output_path).exists():
+        print(f"ERROR: DWI mask not created: {output_path}")
+        raise FileNotFoundError(f"DWI mask not created: {output_path}")
+
     print(f"Transformed T1w mask to DWI space: {output_path}")
 
 
