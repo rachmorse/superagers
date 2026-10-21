@@ -16,13 +16,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_subjects_to_process(output_folder, ses):
+def get_subjects_to_process(output_folder, ses, cohort):
     """Generate a list of subjects to process based on whether they have
     t1 cortical and subcortical atlases for the specified timepoint.
 
     Args:
         output_folder (Path): Path to the directory t1 results
         ses (str): Session ID (format: ses-01).
+        cohort (str): Cohort to keep (bbhi IDs > 5000, bbhi senior IDs < 5000).
 
     Returns:
         list: List of subject IDs to process.
@@ -34,7 +35,12 @@ def get_subjects_to_process(output_folder, ses):
     for subject in os.listdir(output_folder):
         if not subject.startswith("sub-") or subject not in SUBJECTS:
             continue
-        
+
+        # Filter by cohort before any checks so warnings print under the right cohort
+        is_bbhi = int(subject.split("-")[1]) > 5000
+        if is_bbhi != (cohort == "bbhi"):
+            continue
+
         # Check if the required directory exists and hasn't been processed yet  
         subject_t1_folder = output_folder / subject / "t1_masks"
         subject_subcort_folder = output_folder / subject / "subcortical_t1_masks"
@@ -222,16 +228,7 @@ def main():
             output_folder = OUTPUT_ROOT / ses
 
             # Get subjects to process
-            subjects, already_processed = get_subjects_to_process(output_folder, ses)
-
-            # Filter subjects by cohort ID
-            if cohort == "bbhi":
-                # Keep only subjects whose numeric ID is >= 5000
-                subjects = [subject for subject in subjects if int(subject.split("-")[1]) > 5000]
-                already_processed = [subject for subject in already_processed if int(subject.split("-")[1]) > 5000]
-            else:  # cohort == "bbhi senior"
-                subjects = [subject for subject in subjects if int(subject.split("-")[1]) < 5000]
-                already_processed = [subject for subject in already_processed if int(subject.split("-")[1]) < 5000]
+            subjects, already_processed = get_subjects_to_process(output_folder, ses, cohort)
 
             print(f"Number of subjects already processed: {len(already_processed)}")
             print(f"Number of subjects to process: {len(subjects)}")
