@@ -1,71 +1,41 @@
 #!/usr/bin/env python3
-import re
 from pathlib import Path
-from bs4 import BeautifulSoup
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.transforms as transforms
 from matplotlib.image import imread
 from matplotlib.lines import Line2D
 import numpy as np
+import pandas as pd
 
 # Import function from plot_sfc_difference.py 
 from plot_sfc_difference import ATLAS, AVERAGE_OUTPUT_DIR, LABEL_TYPE, SESSIONS, average_session_differences
 
+LME_CSV = Path("/home/rachel/Desktop/data/lme_results.csv")  # Written by analyses.R
+OUTPUT_PATH = Path(__file__).parent / "figures" / f"em_sfc_cortex_plot_{ATLAS}.png"
 
-def load_forest_stats(html_path: Path, region_map: dict):
-    """Read sa_stats and em_stats from the LME rows of Table 3 in results.html.
 
-    Returns two dicts mapping network name (beta, ci_lo, ci_hi, p, p_fdr).
-    Parses the flextable HTML directly so the figure stays in sync with the
-    results document without manual copy-paste.
+def load_forest_stats(csv_path: Path, network_map: dict[str, str]) -> tuple[dict, dict]:
+    """Read superager status and episodic memory LME stats from lme_results.csv.
+
+    Args:
+        csv_path: lme_results.csv written by analyses.R.
+        network_map: Network name in analyses.R -> figure label (e.g. "control" -> "ECN").
+
+    Returns:
+        Superager status and episodic memory stats, each mapping figure label to
+        (beta, ci_lo, ci_hi, p, p_fdr).
     """
-    soup = BeautifulSoup(html_path.read_text(), "html.parser")
-    sa_stats, em_stats = {}, {}
-    section  = None   # "sa" superager | "em" episodic memory
-    in_slope = False
-
-    for row in soup.find_all("tr"):
-        cells = row.find_all("td")
-        if not cells:
-            continue
-
-        text = cells[0].get_text(strip=True)
-
-        # Merged header/type rows have colspan="6" on the single cell
-        if cells[0].get("colspan"):
-            if "annual change" in text.lower():
-                in_slope = True
-            elif text == "Repeated measures linear mixed effects analyses":
-                in_slope = False
-            elif text == "Superager status":
-                section = "sa"
-            elif text == "Episodic memory":
-                section = "em"
-            continue
-
-        # Data rows: skip if wrong section or in a slope / annual change results sub-section
-        if len(cells) < 4 or text not in region_map or in_slope or section is None:
-            continue
-
-        coef_ci  = cells[1].get_text(strip=True)    # 0.2224 (0.0053-0.4395)
-        p_raw    = cells[2].get_text(strip=True)    # 0.0449*
-        pfdr_raw = cells[3].get_text(strip=True)    # 0.0606
-
-        m = re.match(r"(-?[\d.]+)\s*\((-?[\d.]+)-(-?[\d.]+)\)", coef_ci)
-        if m is None:
-            raise ValueError(f"Could not parse coefficient cell: {coef_ci!r}")
-        beta, ci_lo, ci_hi = float(m.group(1)), float(m.group(2)), float(m.group(3))
-        p    = float(re.sub(r"\*+", "", p_raw))
-        pfdr = float(re.sub(r"\*+", "", pfdr_raw))
-
-        net = region_map[text]
-        if section == "sa":
-            sa_stats[net] = (beta, ci_lo, ci_hi, p, pfdr)
-        else:
-            em_stats[net] = (beta, ci_lo, ci_hi, p, pfdr)
-
-    return sa_stats, em_stats
+    df = pd.read_csv(csv_path)
+    df = df[(df["atlas"] == ATLAS) & df["network"].isin(network_map)]
+    stats = {
+        model: {
+            network_map[r.network]: (r.coef, r.ci_lo, r.ci_hi, r.p_value, r.p_fdr)
+            for r in df[df["model"] == model].itertuples()
+        }
+        for model in ("group", "memory")
+    }
+    return stats["group"], stats["memory"]
 
 
 # Forest plot for panel B and C
@@ -154,9 +124,6 @@ def main():
     forest plots (Panels B and C) into a single figure.
     """
     average_output_dir = AVERAGE_OUTPUT_DIR
-    output_path = Path(
-        f"/home/rachel/Desktop/superagers/analyses/figures/em_sfc_cortex_plot_{ATLAS}.png"
-    )
     vmin       = -0.03
     vmax       =  0.03
     subcortical_name_map = {
@@ -175,20 +142,19 @@ def main():
         "right accumbens":   "Right-Accumbens-area",
         "right thalamus":    "Right-Thalamus",
     }
-    results_html = Path(__file__).parent / "results.html"
     networks = ["Sensory", "SN", "ECN", "DMN", "Heteromodal", "Global"]
-    region_map = {
-        "Global SFC":      "Global",
-        "Heteromodal SFC": "Heteromodal",
-        "DMN SFC":         "DMN",
-        "ECN SFC":         "ECN",
-        "SN SFC":          "SN",
-        "Sensory SFC":     "Sensory",
+    network_map = {
+        "global":   "Global",
+        "hmod":     "Heteromodal",
+        "dmn":      "DMN",
+        "control":  "ECN",
+        "salience": "SN",
+        "sensory":  "Sensory",
     }
 
-    sa_stats, em_stats = load_forest_stats(results_html, region_map)
+    sa_stats, em_stats = load_forest_stats(LME_CSV, network_map)
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     # Panel A: generate brain surface map (colorbar added separately below)
     print("Generating brain surface map…")
@@ -298,8 +264,8 @@ def main():
         bbox_to_anchor=(0.5, -0.28),
     )
 
-    plt.savefig(output_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
-    print(f"Saved: {output_path}")
+    plt.savefig(OUTPUT_PATH, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    print(f"Saved: {OUTPUT_PATH}")
     plt.close()
 
 
