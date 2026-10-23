@@ -10,10 +10,84 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 library(flextable)
+library(ftExtra)
 library(dplyr)
 
 # Source all data prep and model results
 source("analyses.R")
+
+### Table helpers ###
+
+set_flextable_defaults(font.family = "Calibri", font.size = 9,
+                       padding.top = 3, padding.bottom = 3,
+                       border.color = "black")
+
+# Column alignment given as one letter per column (e.g. lrlr)
+align_columns <- function(ft, spec) {
+  key  <- c(l = "left", r = "right", c = "center")
+  cols <- strsplit(spec, "")[[1]]
+  for (a in unique(cols)) ft <- align(ft, j = which(cols == a), align = key[[a]], part = "all")
+  ft
+}
+
+# Journal-style table
+base_table <- function(df, spec) {
+  ft <- flextable(df)
+  ft <- theme_booktabs(ft)
+  ft <- colformat_md(ft)
+  ft <- align_columns(ft, spec)
+  ft <- valign(ft, valign = "bottom", part = "header")
+  set_table_properties(ft, layout = "autofit",
+                       width = if (knitr::is_html_output()) 0.6 else 1)
+}
+
+# Attach the numbered title and write the table into the document
+finish_table <- function(ft, title) {
+  flextable_to_rmd(set_caption(ft, caption = as_paragraph_md(title)))
+}
+
+# Order of tables and figures, numbered within each kind
+OUTPUTS <- c(
+  demographics = "Table",
+  sfc_em = "Figure",
+  lme = "Table",
+  lme_s400 = "Supplementary Table",
+  flow = "Supplementary Figure"
+)
+
+# Start figure numbering at 3
+FIRST_NUMBER <- c(Figure = 3)
+
+# Numbered label for text and captions
+ref <- function(key) {
+  kind <- OUTPUTS[[key]]
+  first <- if (kind %in% names(FIRST_NUMBER)) FIRST_NUMBER[[kind]] else 1
+  number <- match(key, names(OUTPUTS)[OUTPUTS == kind]) + first - 1
+  paste0(kind, " ", if (startsWith(kind, "Supplementary")) "S" else "", number)
+}
+
+# Title
+caption_title <- function(key, text) sprintf("**%s.** %s", ref(key), text)
+
+# Absolute path so images render in both HTML and Word
+FIG_DIR <- normalizePath("figures")
+
+# Numbered title above a figure
+fig_title <- function(key, text) {
+  cat("\n\n::: {.fig-title}\n", caption_title(key, text), "\n:::\n\n", sep = "")
+}
+
+# One centered image
+single_figure <- function(file, width) {
+  cat(sprintf("\n\n::: {.fig-single}\n![](%s){width=%s}\n:::\n\n", file.path(FIG_DIR, file), width))
+}
+
+# Italicize heading rows and indent the rest by level
+style_rows <- function(ft, labels, is_heading, level) {
+  ft <- compose(ft, i = which(is_heading), j = 1, value = as_paragraph(as_i(labels[is_heading])))
+  for (l in 1:2) ft <- padding(ft, i = which(level == l), j = 1, padding.left = 18 * l)
+  ft
+}
 
 ### Formatting helpers ###
 
@@ -56,138 +130,119 @@ fmt_p_star <- function(p) {
   else                base
 }
 
-# Look up FDR p-value (formatted) from a results tibble by model name
-get_fdr <- function(fdr_df, model_name) {
-  p <- fdr_df$p_fdr[fdr_df$model == model_name]
-  if (length(p) == 0) return("=NA")
-  fmt_p(p)
-}
+# FDR p-value for inline text
+fmt_p_fdr <- function(x) fmt_p(x$p_fdr)
 
-# Look up FDR p-value (raw numeric) — for table formatting
-get_fdr_raw <- function(fdr_df, model_name) {
-  p <- fdr_df$p_fdr[fdr_df$model == model_name]
-  if (length(p) == 0) return(NA_real_)
-  as.numeric(p)[1]
+# Inline stats for one LME model
+fmt_stats <- function(x) {
+  paste0("β=", fmt_b(x), ", 95% CI ", fmt_ci_text(x), ", p", fmt_p(x$p_value), ", pFDR", fmt_p_fdr(x),
+         ", marginal r²=", fmt_r2m(x), ", conditional r²=", fmt_r2c(x))
 }
 
 # Marginal / conditional R² from LME models
 fmt_r2m <- function(x) formatC(as.numeric(x$marginal_r2),    format = "f", digits = 4)
 fmt_r2c <- function(x) formatC(as.numeric(x$conditional_r2), format = "f", digits = 4)
 
-# Mean ± SD
-fmt_ms <- function(x) {
-  paste0(formatC(mean(x, na.rm = TRUE), format = "f", digits = 2),
-         " \u00b1 ",
-         formatC(sd(x,   na.rm = TRUE), format = "f", digits = 2))
-}
-
 ### Derived demographic stats ###
 
-n_total <- nrow(summary_df)
-n_sa    <- sum(summary_df$group == "Superager",     na.rm = TRUE)
-n_nsa   <- sum(summary_df$group == "Non-superager", na.rm = TRUE)
-pct_sa  <- round(n_sa / n_total * 100, 1)
+# Look up a cell from the demographics table (built by demographics_table.py)
+demo_cell <- function(variable, column, section = "") {
+  demographics_table[[column]][demographics_table$Variable == variable & demographics_table$Section == section]
+}
 
-is_female   <- function(x) tolower(as.character(x)) == "female"
-n_f_total   <- sum(is_female(summary_df$sex),                                              na.rm = TRUE)
-n_f_sa      <- sum(is_female(summary_df$sex[summary_df$group == "Superager"]),             na.rm = TRUE)
-n_f_nsa     <- sum(is_female(summary_df$sex[summary_df$group == "Non-superager"]),         na.rm = TRUE)
-pct_f_total <- round(n_f_total / n_total * 100, 1)
-pct_f_sa    <- round(n_f_sa    / n_sa    * 100, 1)
-pct_f_nsa   <- round(n_f_nsa   / n_nsa   * 100, 1)
+# Demographics table p-value formatted for inline text
+demo_p <- function(variable, section = "") {
+  p <- demo_cell(variable, "p_value", section)
+  if (startsWith(p, "<")) p else paste0("=", p)
+}
 
-mean_age <- formatC(mean(summary_df$age_1, na.rm = TRUE), format = "f", digits = 2)
-sd_age   <- formatC(sd(summary_df$age_1,   na.rm = TRUE), format = "f", digits = 2)
+pct_sa <- round(as.numeric(demo_cell("N", "Superager")) / as.numeric(demo_cell("N", "Whole cohort")) * 100, 1)
+### Derived model stats ###
 
-# Min p and pFDR across SFC change models, excluding SN (reported separately)
-min_sfc_slope_p <- min(
-  sapply(sfc_slope_model_stats[names(sfc_slope_model_stats) != "sfc_salience_slope"],
-         function(x) as.numeric(x$p_value)[1]), na.rm = TRUE)
-min_sfc_slope_p_fdr <- min(
-  sfc_slope_fdr_results$p_fdr[sfc_slope_fdr_results$model != "sfc_salience_slope"], na.rm = TRUE)
-min_ravlt_slope_p <- min(
-  sapply(ravlt_slope_model_stats[names(ravlt_slope_model_stats) != "ravlt_sfc_salience_slope"],
-         function(x) as.numeric(x$p_value)[1]), na.rm = TRUE)
-min_ravlt_slope_p_fdr <- min(
-  ravlt_slope_fdr_results$p_fdr[ravlt_slope_fdr_results$model != "ravlt_sfc_salience_slope"], na.rm = TRUE)
+# Main atlas results
+res <- lme_results[[MAIN_ATLAS]]
+
+# Min p-value or pFDR across networks, excluding any reported separately
+min_stat <- function(fits, stat, exclude = character(0)) {
+  min(sapply(fits[setdiff(names(fits), exclude)], `[[`, stat), na.rm = TRUE)
+}
+
+min_sfc_slope_p <- min_stat(res$group_change, "p_value")
+min_sfc_slope_p_fdr <- min_stat(res$group_change, "p_fdr")
+min_ravlt_slope_p <- min_stat(res$memory_change, "p_value", exclude = "salience")
+min_ravlt_slope_p_fdr <- min_stat(res$memory_change, "p_fdr", exclude = "salience")
 fmt_round2 <- function(p) formatC(round(p, 2), format = "f", digits = 2)
+
+# Supplementary atlas results
+res_s400 <- lme_results$schaefer400
 ```
 
-Our overall cohort included `r n_total` participants with `r pct_f_total`% female and a mean baseline age of `r mean_age` (SD `r sd_age`) years. `r pct_sa`% of the cohort met longitudinal superager criteria. Superagers and non-superagers did not vary on baseline age (p`r fmt_p(age_baseline_p)`), years of education (p`r fmt_p(yoe_p)`), baseline MMSE scores (p`r fmt_p(mmse_p)`), or follow-up duration (p`r fmt_p(followup_duration_p)`); however, superagers were more likely to be female (p`r fmt_p(sex_p)`). These demographic statistics are summarized in Table 1.
-
-**Table 1** Demographic characteristics
-
-```{r table2}
-tbl2 <- tibble(
-  Variable = c(
-    "Number of participants",
-    "Number female (percentage)",
-    "Age baseline \u00b1 SD",
-    "Follow-up duration (years) \u00b1 SD",
-    "Education (years) \u00b1 SD",
-    "MMSE baseline\u00b1 SD"
-  ),
-  `Whole cohort` = c(
-    as.character(n_total),
-    paste0(n_f_total, " (", pct_f_total, "%)"),
-    fmt_ms(summary_df$age_1),
-    fmt_ms(summary_df$followup_duration),
-    fmt_ms(summary_df$YoE),
-    fmt_ms(summary_df$mmse_1)
-  ),
-  `Non-superagers` = c(
-    as.character(n_nsa),
-    paste0(n_f_nsa, " (", pct_f_nsa, "%)"),
-    fmt_ms(summary_df$age_1[summary_df$group         == "Non-superager"]),
-    fmt_ms(summary_df$followup_duration[summary_df$group == "Non-superager"]),
-    fmt_ms(summary_df$YoE[summary_df$group           == "Non-superager"]),
-    fmt_ms(summary_df$mmse_1[summary_df$group        == "Non-superager"])
-  ),
-  `Superagers` = c(
-    as.character(n_sa),
-    paste0(n_f_sa, " (", pct_f_sa, "%)"),
-    fmt_ms(summary_df$age_1[summary_df$group         == "Superager"]),
-    fmt_ms(summary_df$followup_duration[summary_df$group == "Superager"]),
-    fmt_ms(summary_df$YoE[summary_df$group           == "Superager"]),
-    fmt_ms(summary_df$mmse_1[summary_df$group        == "Superager"])
-  ),
-  `p-value` = c(
-    "--",
-    fmt_p_star(sex_p),
-    fmt_p_star(age_baseline_p),
-    fmt_p_star(followup_duration_p),
-    fmt_p_star(yoe_p),
-    fmt_p_star(mmse_p)
-  )
-)
-
-flextable(tbl2) |>
-  bold(part = "header") |>
-  autofit()
+```{css, echo=FALSE, include=knitr::is_html_output()}
+.main-container { max-width: 1100px; }
+table caption { margin: 28px 0 8px; font-size: 1.05em; color: #000; }
+.note { font-size: 0.85em; color: #555; text-align: left; margin: 6px 0 28px; }
+.fig-title { margin: 28px 0 8px; font-size: 1.05em; }
+.fig-single { text-align: center; }
+.fig-single img { height: auto; }
 ```
 
-*Abbreviations: SD standard deviation, MMSE Mini Mental State Examination*
+Our overall cohort included `r demo_cell("N", "Whole cohort")` participants: `r demo_cell("Female, n (%)", "Whole cohort")` were female with a mean (range) baseline age of `r demo_cell("Age", "Whole cohort", "Baseline")` years. `r pct_sa`% of the cohort met longitudinal superager criteria (see `r ref("flow")` for more details). Superagers and non-superagers did not vary on age at baseline (p`r demo_p("Age", "Baseline")`) or follow-up (p`r demo_p("Age", "Follow-up")`), years of education (p`r demo_p("Education (years)")`), baseline MMSE scores (p`r demo_p("MMSE", "Baseline")`), follow-up duration (p`r demo_p("Follow-up duration (years)", "Follow-up")`), or mean framewise displacement at baseline (p`r demo_p("Mean framewise displacement (mm)", "Baseline")`) or follow-up (p`r demo_p("Mean framewise displacement (mm)", "Follow-up")`); however, superagers were more likely to be female (p`r demo_p("Female, n (%)")`) and had higher MMSE scores at follow-up (p`r demo_p("MMSE", "Follow-up")`). These demographic statistics are summarized in `r ref("demographics")`.
 
-**Structure-function coupling, superager status, and episodic memory:** We next used repeated-measures linear mixed-effects models to examine whether SFC varied longitudinally by superager status at the global and network levels. Superagers consistently showed higher SFC than non-superagers globally (β=`r fmt_b(sfc_superager_weighted)`, 95% CI `r fmt_ci_text(sfc_superager_weighted)`, p`r fmt_p(sfc_superager_weighted$p_value)`, pFDR`r get_fdr(sfc_fdr_results, "sfc_weighted_mean")`, marginal r²=`r fmt_r2m(sfc_superager_weighted)`, conditional r²=`r fmt_r2c(sfc_superager_weighted)`), in heteromodal regions (β=`r fmt_b(sfc_superager_hmod)`, 95% CI `r fmt_ci_text(sfc_superager_hmod)`, p`r fmt_p(sfc_superager_hmod$p_value)`, pFDR`r get_fdr(sfc_fdr_results, "sfc_hmod")`, marginal r²=`r fmt_r2m(sfc_superager_hmod)`, conditional r²=`r fmt_r2c(sfc_superager_hmod)`), and in memory-relevant networks including the DMN (β=`r fmt_b(sfc_superager_dmn)`, 95% CI `r fmt_ci_text(sfc_superager_dmn)`, p`r fmt_p(sfc_superager_dmn$p_value)`, pFDR`r get_fdr(sfc_fdr_results, "sfc_dmn")`, marginal r²=`r fmt_r2m(sfc_superager_dmn)`, conditional r²=`r fmt_r2c(sfc_superager_dmn)`) and ECN (β=`r fmt_b(sfc_superager_control)`, 95% CI `r fmt_ci_text(sfc_superager_control)`, p`r fmt_p(sfc_superager_control$p_value)`, pFDR`r get_fdr(sfc_fdr_results, "sfc_control")`, marginal r²=`r fmt_r2m(sfc_superager_control)`, conditional r²=`r fmt_r2c(sfc_superager_control)`), with a trend in the SN (β=`r fmt_b(sfc_superager_salience)`, 95% CI `r fmt_ci_text(sfc_superager_salience)`, p`r fmt_p(sfc_superager_salience$p_value)`, pFDR`r get_fdr(sfc_fdr_results, "sfc_salience")`, marginal r²=`r fmt_r2m(sfc_superager_salience)`, conditional r²=`r fmt_r2c(sfc_superager_salience)`); however, none of these results survived correction for multiple comparisons. By contrast, SFC in sensory regions did not differ by superager status (p`r fmt_p(sfc_superager_sensory$p_value)`, pFDR`r get_fdr(sfc_fdr_results, "sfc_sensory")`). Figure 3A presents the difference in global SFC between superagers and non-superagers averaged across baseline and follow-up, with warmer colors indicating higher SFC in superagers, and Figure 3B summarizes these results.
+```{r table1, results='asis'}
+n_row <- demographics_table[demographics_table$Variable == "N", ]
+demo <- demographics_table[demographics_table$Variable != "N", ]
 
-**Figure 3** Structure-function coupling, episodic memory, and superagers status analyses  
+# Headings are the only rows with no data
+is_heading <- demo$`Whole cohort` == ""
+is_section <- is_heading & demo$Variable == demo$Section
+# Rows below a subsection heading (e.g. Cognition) sit one level deeper
+in_subsection <- ave(as.integer(is_heading & !is_section), demo$Section, FUN = cumsum) > 0
+level <- ifelse(demo$Section == "" | is_section, 0, ifelse(is_heading | !in_subsection, 1, 2))
 
-Figure 3. Structure-function coupling differs by superager status and is associated with episodic memory. (A) Cortical surface and subcortical plot of the unthresholded mean difference in global structure-function coupling between superagers and non-superagers, averaged across both timepoints. Warm colors indicate higher coupling in superagers; cool colors indicate lower coupling. (B, C) Linear mixed-effects model coefficients and 95% confidence intervals for regional structure-function coupling as a function of superager status (B) and episodic memory (C). Filled circles: p < .05 (uncorrected), open circles: non-significant, * pFDR < .05. Abbreviations: FDR false discovery rate, SFC structure-function coupling, DMN default mode network, ECN executive control network, SN salience network, CI confidence interval. 
+tbl1 <- demo[c("Variable", "Whole cohort", "Non-superager", "Superager", "p_value")]
+names(tbl1) <- c("Variable",
+                 sprintf("Whole cohort (n=%s)", n_row$`Whole cohort`),
+                 sprintf("Non-superagers (n=%s)", n_row$`Non-superager`),
+                 sprintf("Superagers (n=%s)", n_row$Superager),
+                 "p-value")
 
-We next examined the relationship between global and network level SFC and episodic memory across the cohort longitudinally with linear mixed-effects models. Higher SFC was associated with better episodic memory globally (β=`r fmt_b(ravlt_sfc_weighted)`, 95% CI `r fmt_ci_text(ravlt_sfc_weighted)`, p`r fmt_p(ravlt_sfc_weighted$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_weighted_mean")`, marginal r²=`r fmt_r2m(ravlt_sfc_weighted)`, conditional r²=`r fmt_r2c(ravlt_sfc_weighted)`), in heteromodal regions (β=`r fmt_b(ravlt_sfc_hmod)`, 95% CI `r fmt_ci_text(ravlt_sfc_hmod)`, p`r fmt_p(ravlt_sfc_hmod$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_hmod")`, marginal r²=`r fmt_r2m(ravlt_sfc_hmod)`, conditional r²=`r fmt_r2c(ravlt_sfc_hmod)`), and in the DMN (β=`r fmt_b(ravlt_sfc_dmn)`, 95% CI `r fmt_ci_text(ravlt_sfc_dmn)`, p`r fmt_p(ravlt_sfc_dmn$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_dmn")`, marginal r²=`r fmt_r2m(ravlt_sfc_dmn)`, conditional r²=`r fmt_r2c(ravlt_sfc_dmn)`). Associations in the ECN (β=`r fmt_b(ravlt_sfc_control)`, 95% CI `r fmt_ci_text(ravlt_sfc_control)`, p`r fmt_p(ravlt_sfc_control$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_control")`) and SN (β=`r fmt_b(ravlt_sfc_salience)`, 95% CI `r fmt_ci_text(ravlt_sfc_salience)`, p`r fmt_p(ravlt_sfc_salience$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_salience")`) showed trends but did not reach significance. SFC in sensory regions was not associated with episodic memory (p`r fmt_p(ravlt_sfc_sensory$p_value)`, pFDR`r get_fdr(ravlt_fdr_results, "ravlt_sfc_sensory")`). Figure 3C displays these results.
+ft <- style_rows(base_table(tbl1, "lrrrr"), tbl1$Variable, is_heading, level)
+for (i in which(is_heading)) ft <- merge_h_range(ft, i = i, j1 = 1, j2 = ncol(tbl1))
+finish_table(ft, caption_title("demographics", "Participant characteristics"))
+```
 
-We next examined whether global and network level SFC change – modeled as an interaction with time in linear mixed-effects models – differed by superager status or was associated with episodic memory. A trend emerged in the SN for both superager status (β=`r fmt_b(sfc_superager_salience_slope)`, 95% CI `r fmt_ci_text(sfc_superager_salience_slope)`, p`r fmt_p(sfc_superager_salience_slope$p_value)`, pFDR`r get_fdr(sfc_slope_fdr_results, "sfc_salience_slope")`, marginal r²=`r fmt_r2m(sfc_superager_salience_slope)`, conditional r²=`r fmt_r2c(sfc_superager_salience_slope)`) and episodic memory (β=`r fmt_b(ravlt_sfc_salience_slope)`, 95% CI `r fmt_ci_text(ravlt_sfc_salience_slope)`, p`r fmt_p(ravlt_sfc_salience_slope$p_value)`, pFDR`r get_fdr(ravlt_slope_fdr_results, "ravlt_sfc_salience_slope")`, marginal r²=`r fmt_r2m(ravlt_sfc_salience_slope)`, conditional r²=`r fmt_r2c(ravlt_sfc_salience_slope)`). However, we found no evidence that superager status was associated with SFC change in any other network (ps ≥ `r fmt_round2(min_sfc_slope_p)`, pFDRs ≥ `r fmt_round2(min_sfc_slope_p_fdr)`), or that SFC change was associated with episodic memory (ps ≥ `r fmt_round2(min_ravlt_slope_p)`, pFDRs ≥ `r fmt_round2(min_ravlt_slope_p_fdr)`). Table 2 summarizes all structure-function coupling, superager status, and episodic memory results.
+::: {.note}
+Values are mean (SD) or n (%), except age and MMSE, which are mean (range).
+&dagger;Used to classify superagers; group differences on these measures are expected by design.
+Abbreviations: fMRI, functional magnetic resonance imaging; MMSE, Mini-Mental State Examination;
+RAVLT, Rey Auditory Verbal Learning Test.
+:::
 
-**Table 2** Associations between structure-function coupling, superager status, and episodic memory
+**Structure-function coupling, superager status, and episodic memory:** We next used repeated-measures linear mixed-effects models to examine whether SFC varied longitudinally by superager status at the global and network levels. Superagers consistently showed higher SFC than non-superagers globally (`r fmt_stats(res$group$global)`), in heteromodal regions (`r fmt_stats(res$group$hmod)`), and in memory-relevant networks including the DMN (`r fmt_stats(res$group$dmn)`), ECN (`r fmt_stats(res$group$control)`), and SN (`r fmt_stats(res$group$salience)`). By contrast, SFC in sensory regions did not differ by superager status (p`r fmt_p(res$group$sensory$p_value)`, pFDR`r fmt_p_fdr(res$group$sensory)`). `r ref("sfc_em")`A presents the difference in global SFC between superagers and non-superagers averaged across baseline and follow-up, with warmer colors indicating higher SFC in superagers, and `r ref("sfc_em")`B summarizes these results.
 
-```{r table3}
+```{r figure-sfc-em, results='asis'}
+fig_title("sfc_em", "Structure-function coupling, episodic memory, and superagers status analyses")
+single_figure(paste0("em_sfc_cortex_plot_", MAIN_ATLAS, ".png"), "100%")
+```
+
+::: {.note}
+Structure-function coupling differs by superager status and is associated with episodic memory. (A) Cortical surface and subcortical plot of the unthresholded mean difference in global structure-function coupling between superagers and non-superagers, averaged across both timepoints. Warm colors indicate higher coupling in superagers; cool colors indicate lower coupling. (B, C) Linear mixed-effects model coefficients and 95% confidence intervals for regional structure-function coupling as a function of superager status (B) and episodic memory (C). Filled circles: p < .05 (uncorrected), open circles: non-significant, * pFDR < .05. Abbreviations: FDR, false discovery rate; SFC, structure-function coupling; DMN, default mode network; ECN, executive control network; SN, salience network; CI, confidence interval.
+:::
+
+We next examined the relationship between global and network level SFC and episodic memory across the cohort longitudinally with linear mixed-effects models. Higher SFC was associated with better episodic memory globally (`r fmt_stats(res$memory$global)`), in heteromodal regions (`r fmt_stats(res$memory$hmod)`), and in the DMN (`r fmt_stats(res$memory$dmn)`). The association in the ECN was nominally significant (`r fmt_stats(res$memory$control)`), and the SN showed a trend (`r fmt_stats(res$memory$salience)`). SFC in sensory regions was not associated with episodic memory (p`r fmt_p(res$memory$sensory$p_value)`, pFDR`r fmt_p_fdr(res$memory$sensory)`). `r ref("sfc_em")`C displays these results.
+
+We next examined whether global and network level SFC change – modeled as an interaction with time in linear mixed-effects models – differed by superager status or was associated with episodic memory. We found no evidence that superager status was associated with SFC change in any network (ps ≥ `r fmt_round2(min_sfc_slope_p)`, pFDRs ≥ `r fmt_round2(min_sfc_slope_p_fdr)`). SFC change in the SN was weakly associated with episodic memory, but this did not survive correction for multiple comparisons (`r fmt_stats(res$memory_change$salience)`), and SFC change in other networks was not associated with episodic memory (ps ≥ `r fmt_round2(min_ravlt_slope_p)`, pFDRs ≥ `r fmt_round2(min_ravlt_slope_p_fdr)`). `r ref("lme")` summarizes all structure-function coupling, superager status, and episodic memory results.
+
+Results were similar using the higher-resolution Schaefer 400 parcellation (`r ref("lme_s400")`). Superagers showed higher SFC than non-superagers in the ECN, which survived correction for multiple comparisons, with nominally significant effects in heteromodal regions and the SN, and trends globally and in the DMN. Higher SFC was associated with better episodic memory globally, in heteromodal regions, the DMN, and the SN, with a nominally significant association in the ECN. As in the main analysis, SFC in sensory regions neither differed by superager status nor was associated with episodic memory, and SFC change was not associated with superager status or episodic memory.
+
+```{r table2, results='asis'}
 # Helpers to build data rows for LME models
-lme_row <- function(region, model, fdr_df, fdr_key) {
+lme_row <- function(region, model) {
   list(
     Region                 = region,
     `Coefficient (95% CI)` = fmt_coef_ci(model),
     `p-value`              = fmt_p_star(as.numeric(model$p_value)[1]),
-    pFDR                   = fmt_p_star(get_fdr_raw(fdr_df, fdr_key)),
+    pFDR                   = fmt_p_star(model$p_fdr),
     `Marginal r²`     = fmt_r2m(model),
     `Conditional r²`  = fmt_r2c(model)
   )
@@ -207,70 +262,72 @@ type_row <- function(label) {
        `Marginal r²` = "", `Conditional r²` = "")
 }
 
-tbl3 <- bind_rows(
-  # ── Superager status (LME) ──────────────────────────────────────────────
-  type_row("Repeated measures linear mixed-effects analyses"),
-  hdr_row("Superager status"),
-  lme_row("Global SFC",      sfc_superager_weighted, sfc_fdr_results, "sfc_weighted_mean"),
-  lme_row("Heteromodal SFC", sfc_superager_hmod,     sfc_fdr_results, "sfc_hmod"),
-  lme_row("DMN SFC",         sfc_superager_dmn,      sfc_fdr_results, "sfc_dmn"),
-  lme_row("ECN SFC",         sfc_superager_control,  sfc_fdr_results, "sfc_control"),
-  lme_row("SN SFC",          sfc_superager_salience, sfc_fdr_results, "sfc_salience"),
-  lme_row("Sensory SFC",     sfc_superager_sensory,  sfc_fdr_results, "sfc_sensory"),
-
-  # ── Superager status — change (LME interaction) ─────────────────────────
-  type_row("Repeated measures linear mixed-effects analyses — change"),
-  hdr_row("Superager status"),
-  lme_row("Global SFC × time",      sfc_superager_weighted_slope, sfc_slope_fdr_results, "sfc_weighted_mean_slope"),
-  lme_row("Heteromodal SFC × time", sfc_superager_hmod_slope,     sfc_slope_fdr_results, "sfc_hmod_slope"),
-  lme_row("DMN SFC × time",         sfc_superager_dmn_slope,      sfc_slope_fdr_results, "sfc_dmn_slope"),
-  lme_row("ECN SFC × time",         sfc_superager_control_slope,  sfc_slope_fdr_results, "sfc_control_slope"),
-  lme_row("SN SFC × time",          sfc_superager_salience_slope, sfc_slope_fdr_results, "sfc_salience_slope"),
-  lme_row("Sensory SFC × time",     sfc_superager_sensory_slope,  sfc_slope_fdr_results, "sfc_sensory_slope"),
-
-  # ── Episodic memory (LME) ───────────────────────────────────────────────
-  type_row("Repeated measures linear mixed-effects analyses"),
-  hdr_row("Episodic memory"),
-  lme_row("Global SFC",      ravlt_sfc_weighted, ravlt_fdr_results, "ravlt_sfc_weighted_mean"),
-  lme_row("Heteromodal SFC", ravlt_sfc_hmod,     ravlt_fdr_results, "ravlt_sfc_hmod"),
-  lme_row("DMN SFC",         ravlt_sfc_dmn,      ravlt_fdr_results, "ravlt_sfc_dmn"),
-  lme_row("ECN SFC",         ravlt_sfc_control,  ravlt_fdr_results, "ravlt_sfc_control"),
-  lme_row("SN SFC",          ravlt_sfc_salience, ravlt_fdr_results, "ravlt_sfc_salience"),
-  lme_row("Sensory SFC",     ravlt_sfc_sensory,  ravlt_fdr_results, "ravlt_sfc_sensory"),
-
-  # ── Episodic memory — change (LME interaction) ──────────────────────────
-  type_row("Repeated measures linear mixed-effects analyses — change"),
-  hdr_row("Episodic memory"),
-  lme_row("Global SFC × time",      ravlt_sfc_weighted_slope, ravlt_slope_fdr_results, "ravlt_sfc_weighted_mean_slope"),
-  lme_row("Heteromodal SFC × time", ravlt_sfc_hmod_slope,     ravlt_slope_fdr_results, "ravlt_sfc_hmod_slope"),
-  lme_row("DMN SFC × time",         ravlt_sfc_dmn_slope,      ravlt_slope_fdr_results, "ravlt_sfc_dmn_slope"),
-  lme_row("ECN SFC × time",         ravlt_sfc_control_slope,  ravlt_slope_fdr_results, "ravlt_sfc_control_slope"),
-  lme_row("SN SFC × time",          ravlt_sfc_salience_slope, ravlt_slope_fdr_results, "ravlt_sfc_salience_slope"),
-  lme_row("Sensory SFC × time",     ravlt_sfc_sensory_slope,  ravlt_slope_fdr_results, "ravlt_sfc_sensory_slope")
+NETWORK_LABELS <- c(
+  global = "Global SFC", hmod = "Heteromodal SFC", dmn = "DMN SFC",
+  control = "ECN SFC", salience = "SN SFC", sensory = "Sensory SFC"
 )
 
-# Identify type rows (model description) and section header rows
 type_labels <- c(
   "Repeated measures linear mixed-effects analyses",
   "Repeated measures linear mixed-effects analyses — change"
 )
-type_idx <- which(tbl3$Region %in% type_labels)
-hdr_idx  <- setdiff(which(tbl3$`Coefficient (95% CI)` == ""), type_idx)
 
-ft <- flextable(tbl3) |>
-  bold(part = "header") |>
-  bold(i = hdr_idx) |>
-  bg(i = hdr_idx, bg = "#F0F0F0") |>
-  italic(i = type_idx) |>
-  bg(i = type_idx, bg = "#E8EEF4") |>
-  autofit()
-
-# Merge both type and header rows across all columns so labels span the full width
-for (r in c(type_idx, hdr_idx)) {
-  ft <- merge_at(ft, i = r, j = 1:6)
+# Type and header rows, then one row per network
+lme_section <- function(fits, type_label, header, suffix = "") {
+  bind_rows(
+    type_row(type_label),
+    hdr_row(header),
+    bind_rows(Map(function(fit, net) lme_row(paste0(NETWORK_LABELS[[net]], suffix), fit), fits, names(fits)))
+  )
 }
 
-ft
+# All LME results for one atlas
+lme_table <- function(res) {
+  bind_rows(
+    lme_section(res$group, type_labels[1], "Superager status"),
+    lme_section(res$group_change, type_labels[2], "Superager status", " × time"),
+    lme_section(res$memory, type_labels[1], "Episodic memory"),
+    lme_section(res$memory_change, type_labels[2], "Episodic memory", " × time")
+  )
+}
+
+# Headings italic and full width, network rows indented below them
+render_lme_table <- function(tbl, title) {
+  is_heading <- tbl$`Coefficient (95% CI)` == ""
+  level <- ifelse(tbl$Region %in% type_labels, 0, ifelse(is_heading, 1, 2))
+  ft <- style_rows(base_table(tbl, "lrrrrr"), tbl$Region, is_heading, level)
+  for (i in which(is_heading)) ft <- merge_h_range(ft, i = i, j1 = 1, j2 = ncol(tbl))
+  finish_table(ft, title)
+}
+
+render_lme_table(lme_table(res), caption_title("lme", "Associations between structure-function coupling, superager status, and episodic memory"))
 ```
 
-*Abbreviations: CI confidence interval, FDR False Discovery Rate, SFC structure-function coupling, DMN default mode network, ECN executive control network, SN salience network*
+::: {.note}
+Models adjust for time, baseline age, sex, and years of education, with a random intercept per participant.
+\* p < 0.05, \*\* p < 0.01, \*\*\* p < 0.001.
+Abbreviations: CI, confidence interval; DMN, default mode network; ECN, executive control network;
+FDR, false discovery rate; SFC, structure-function coupling; SN, salience network.
+:::
+
+```{r table_s1, results='asis'}
+render_lme_table(lme_table(res_s400), caption_title("lme_s400", "Associations between structure-function coupling, superager status, and episodic memory using the Schaefer 400 parcellation"))
+```
+
+::: {.note}
+Models adjust for time, baseline age, sex, and years of education, with a random intercept per participant.
+\* p < 0.05, \*\* p < 0.01, \*\*\* p < 0.001.
+Abbreviations: CI, confidence interval; DMN, default mode network; ECN, executive control network;
+FDR, false discovery rate; SFC, structure-function coupling; SN, salience network.
+:::
+
+```{r figure-flow, results='asis'}
+fig_title("flow", "Superager classification at baseline and follow-up")
+single_figure("classification_flow_figure.png", "80%")
+```
+
+::: {.note}
+Participants were classified as superagers only if they met both the memory and non-memory criteria at
+baseline and at follow-up; all other participants were classified as non-superagers.
+Abbreviations: RAVLT, Rey Auditory Verbal Learning Test; TMT-B, Trail Making Test part B.
+:::
