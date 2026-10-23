@@ -1,54 +1,88 @@
-import numpy as np
-import time
+"""Classify superager status with nested-CV elastic net or linear SVM and a permutation test."""
+
+import hashlib
+import os
 import pickle
-from sklearn.inspection import permutation_importance
-import pandas as pd
+import re
+import time
 from pathlib import Path
-import os, re
-from sklearn.pipeline import Pipeline
+from typing import Literal
+
+import numpy as np
+import pandas as pd
+from joblib import Parallel, delayed
+from prep_data_for_en import ATLAS, DATA_DIR, FC_ROOT, SC_ROOT, SFC_ROOT, get_subjects_to_process
+from scipy.stats import norm
 from sklearn.base import clone
-from sklearn.preprocessing import StandardScaler
+from sklearn.inspection import permutation_importance
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import StratifiedKFold, GridSearchCV
 from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import LinearSVC
 from sklearn.utils import check_random_state
-from prep_data_for_en import get_subjects_to_process
+
+MODEL: Literal["elastic_net", "linear_svm"] = "elastic_net"
+CONNECTIVITY_TYPE: Literal["SFC", "FC", "SC"] = "FC"
+# Features used to predict superager status: baseline only or baseline plus annual change
+WHICH_FEATURES: Literal["t1", "t1_slope"] = "t1_slope"
+N_JOBS = 20  # Parallel jobs for the main model's grid search and for the permutations
+BC_H = 50 # Besag–Clifford sequential permutation test
+# Atlas and SVM prefixes so outputs from different atlases or models never mix
+MODEL_PREFIX = f"{ATLAS}_" + ("" if MODEL == "elastic_net" else "SVM_")
+RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
 
 
-def bootstrap_auc_ci(y_true, y_prob, n_boot=2000, alpha=0.05, random_state=7):
-    """Compute a bootstrap CI for AUC on out-of-fold predictions.
-    So can think of this as how stable is the AUC across different resampling of
-    the subjects in the outer folds (e.g., some subjects appear multiple times 
-    and some not at all in each resample).
-    
+def delong_auc_ci(y_true, y_score, alpha=0.05):
+    """Compute a DeLong CI for AUC on out-of-fold predictions.
+
+    This is analytic, so it needs no resampling or seed.
+
     Args:
         y_true (array-like): True binary labels (0/1).
-        y_prob (array-like): Predicted probabilities for the positive class.
-        n_boot (int): Number of bootstrap samples to draw.
+        y_score (array-like): Predicted probabilities or decision scores for the positive class.
         alpha (float): Significance level for the confidence interval (e.g., 0.05 for 95% CI).
-        random_state (int): Seed for reproducibility.
+
+    Returns:
+        tuple: Lower and upper bounds of the AUC confidence interval.
     """
-    rng = np.random.default_rng(random_state)
     y_true = np.asarray(y_true)
-    y_prob = np.asarray(y_prob)
-    n = y_true.shape[0]
-    aucs = []
-    for _ in range(n_boot):
-        idx = rng.integers(0, n, size=n)
-        if len(np.unique(y_true[idx])) < 2:
-            continue
-        aucs.append(roc_auc_score(y_true[idx], y_prob[idx]))
-    if not aucs:
-        return (np.nan, np.nan)
-    lo = np.percentile(aucs, 100 * (alpha / 2))
-    hi = np.percentile(aucs, 100 * (1 - alpha / 2))
-    return (float(lo), float(hi))
+    y_score = np.asarray(y_score)
+    pos = y_score[y_true == 1]
+    neg = y_score[y_true == 0]
+
+    # Compare every positive with every negative. Ties count as half
+    comparisons = (pos[:, None] > neg[None, :]) + 0.5 * (pos[:, None] == neg[None, :])
+    auc = comparisons.mean()
+    se = np.sqrt(
+        comparisons.mean(axis=1).var(ddof=1) / len(pos)
+        + comparisons.mean(axis=0).var(ddof=1) / len(neg)
+    )
+    z = norm.ppf(1 - alpha / 2)
+    return (float(auc - z * se), float(auc + z * se))
+
+
+def positive_scores(model, X):
+    """Get the positive class scores from a fitted model.
+
+    Elastic net returns probabilities and linear SVM returns decision scores. Both work for AUC.
+
+    Args:
+        model (Pipeline): Fitted scaling + classifier pipeline.
+        X (np.ndarray): Feature matrix to score.
+
+    Returns:
+        np.ndarray: Score for the positive class for each row of X.
+    """
+    if hasattr(model, "predict_proba"):
+        return model.predict_proba(X)[:, 1]
+    return model.decision_function(X)
 
 
 def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data, connectivity_type):
-    """Prepares the data for analysis by extracting features and superager status
-    from the specified directories.
+    """Extract features, superager status and covariates from the specified directories.
 
     Args:
         subjects (list): List of subject IDs to process.
@@ -63,6 +97,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
         X_slope (np.ndarray): Feature matrix representing annual change between timepoints.
         superager_vec_long (np.ndarray): Binary vector indicating longitudinal superager status.
         covariates (np.ndarray): Matrix of covariates (baseline age, years of education, sex).
+        subject_ids (np.ndarray): Subject IDs in the same row order as the arrays above.
     """
     # Prepare the data
     demographic_data = demographic_data.copy()
@@ -78,7 +113,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
             sub (str): Subject ID.
             mod (str): Modality ("SFC", "FC", or "SC").
         """
-        # Use ungrouped per-ROI features (214 ROIs) for both timepoints
+        # Use ungrouped per-ROI features for both timepoints (ROI count depends on ATLAS)
         if mod == "SFC":
             p1 = root_path / "ses-01" / "individual_coupling_matrices"
             p2 = root_path / "ses-02" / "individual_coupling_matrices"
@@ -94,6 +129,7 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
 
         def read_one(path, ses_name):
             """Reads a single CSV file for one subject, modality, and session.
+
             Checks that the ROI order matches across subjects and sessions.
 
             Args:
@@ -180,12 +216,13 @@ def prep_data(subjects, root_path, fc_root_path, sc_root_path, demographic_data,
     # 3) Longitudinal superager label
     superager_vec_long = pd.to_numeric(df['superager_long'], errors='coerce').values
 
-    return X_t1, X_slope, superager_vec_long, covariates
+    return X_t1, X_slope, superager_vec_long, covariates, df['id'].values
 
 
 
 def _perm_importance_on_train_cv(pipe, best_params, X_tr, y_tr, inner_cv, n_repeats, random_state):
     """Compute permutation importance on training data via inner CV splits.
+
     This avoids using the outer test fold for importance estimation.
 
     Args:
@@ -215,6 +252,66 @@ def _perm_importance_on_train_cv(pipe, best_params, X_tr, y_tr, inner_cv, n_repe
     return np.mean(np.vstack(per_fold_imps), axis=0)
 
 
+def _fit_outer_fold(pipe, param_grid, inner_cv, X_tr, y_tr, n_jobs):
+    """Run the inner CV grid search on one outer training set and refit the best model.
+
+    The main model and the permutations share this function so both use the same procedure.
+
+    Args:
+        pipe: The sklearn Pipeline with the model to fit.
+        param_grid: The hyperparameter grid for GridSearchCV.
+        inner_cv: The cross-validation splitter for the inner loop.
+        X_tr: The outer training features.
+        y_tr: The outer training labels.
+        n_jobs: Number of parallel jobs for the grid search.
+
+    Returns:
+        GridSearchCV: The fitted search, with best_estimator_ refit on all of X_tr.
+    """
+    # Inner CV: try all C/l1_ratio combos on X_tr via 5-fold CV, pick the best
+    # refit=True trains a final model on all of X_tr with the winning params
+    gs = GridSearchCV(
+        estimator=pipe,
+        param_grid=param_grid,
+        scoring="roc_auc",
+        cv=inner_cv,
+        refit=True,
+        n_jobs=n_jobs,
+    )
+    return gs.fit(X_tr, y_tr)
+
+
+def _permuted_auc(pipe, param_grid, inner_cv, outer_splits, X, y, y_perm):
+    """Run the full nested CV on permuted labels and return the null AUC.
+
+    Args:
+        pipe: The sklearn Pipeline with the model to fit.
+        param_grid: The hyperparameter grid for GridSearchCV.
+        inner_cv: The cross-validation splitter for the inner loop.
+        outer_splits: Cached (train, test) index pairs for the outer loop.
+        X: The feature matrix.
+        y: The original labels, used to score the out-of-fold predictions.
+        y_perm: The permuted labels used for training.
+
+    Returns:
+        float: The out-of-fold AUC for this permutation.
+    """
+    # Save the out-of-fold predictions for each permutation
+    perm_oof = np.zeros_like(y, dtype=float)
+    for tr_idx, te_idx in outer_splits:  # permuted labels for training
+        # Train and run on permuted labels
+        gs_perm = _fit_outer_fold(
+            pipe,
+            param_grid,
+            inner_cv,  # runs inner CV search grid to make the comparisons fair (e.g. 5-fold)
+            X[tr_idx],
+            y_perm[tr_idx],
+            n_jobs=1,  # parallelism is across permutations
+        )
+        perm_oof[te_idx] = positive_scores(gs_perm.best_estimator_, X[te_idx])
+    return roc_auc_score(y, perm_oof)
+
+
 def run_elastic_net(
     X: np.ndarray,
     y,
@@ -229,8 +326,10 @@ def run_elastic_net(
     which_features=None,
     label_type=None,
 ):
-    """Train and evaluate an elastic net logistic classifier with nested cross-validation,
-    out-of-fold predictions, permutation testing, and permutation-based feature importance.
+    """Train and evaluate the MODEL classifier (elastic net logistic or linear SVM).
+
+    Uses nested cross-validation, out-of-fold predictions, permutation testing, and
+    permutation-based feature importance.
 
     Args:
         X (np.ndarray): Feature matrix of shape (n_samples, n_features).
@@ -245,6 +344,7 @@ def run_elastic_net(
         connectivity_type (str): Type of connectivity data ("SFC", "FC", "SC") for naming outputs.
         group_level (str): Grouping level for ROI averaging (always "ROI") for naming outputs.
         checkpoint_n (int): Save progress every `checkpoint_n` permutations to a pickle file.
+            Also the parallel batch size; defaults to N_JOBS.
         which_features (str): Which features are being used ('t1' or 't1_slope') for naming outputs.
         label_type (str): Outcome timepoint (always "long") for naming outputs.
 
@@ -252,12 +352,12 @@ def run_elastic_net(
         dict containing:
             - "observed": with metrics {"auc"}.
             - "cv_fold_metrics": with per-fold AUC.
-            - "oof": with {"y_true", "y_prob", "test_index"} for out-of-fold predictions.
+            - "oof": with {"y_true", "y_prob", "test_index"} for out-of-fold predictions (y_prob holds decision scores for linear SVM).
             - "best_params_per_fold": with best hyperparameters per fold.
             - "coef_mean": with mean coefficients across folds.
             - "coef_std": with coefficient standard deviations across folds.
-            - "feat_importance": with feature-wise permutation importance, coefficients, and selection frequency.
-            - "permutation_test": with {"aucs": np.ndarray, "p_value": float}.
+            - "feat_importance": with feature-wise permutation importance, coefficients, and selection frequency (EN only).
+            - "permutation_test": with {"aucs": np.ndarray, "p_value": float, "n_perm_used": int}.
     """
     # Create reproducible splits
     rng = check_random_state(random_state)
@@ -265,37 +365,49 @@ def run_elastic_net(
     y = np.asarray(y).astype(int)
 
     # Make sure inputs are valid
-    assert set(np.unique(y)) <= {0, 1}, "y must be binary (0/1)."
-    assert X.shape[0] == y.shape[0], "X and y must have the same number of samples."
-    assert X.shape[1] == len(feature_names), "feature_names length must match n_features."
+    if not set(np.unique(y)) <= {0, 1}:
+        raise ValueError("y must be binary (0/1).")
+    if X.shape[0] != y.shape[0]:
+        raise ValueError("X and y must have the same number of samples.")
+    if X.shape[1] != len(feature_names):
+        raise ValueError("feature_names length must match n_features.")
+    # checkpoint_n is also the parallel batch size, so default to one permutation per worker
     if checkpoint_n is None or checkpoint_n <= 0:
-        checkpoint_n = n_permutations
+        checkpoint_n = N_JOBS
 
     # Fixed CV configuration for stability
     OUTER_SPLITS = 10
     INNER_SPLITS = 5
+    # Every outer test fold needs both classes to compute its AUC
+    if np.bincount(y, minlength=2).min() < OUTER_SPLITS:
+        raise ValueError(f"Need at least {OUTER_SPLITS} subjects per class for {OUTER_SPLITS}-fold CV.")
 
     # Stratified K-Folds keeps the same number of superagers/non-superagers in each fold
     outer_cv = StratifiedKFold(n_splits=OUTER_SPLITS, shuffle=True, random_state=random_state)
     inner_cv = StratifiedKFold(n_splits=INNER_SPLITS, shuffle=True, random_state=random_state + 1)
 
-    # Pipeline: scaling + Elastic-Net logistic 
-    pipe = Pipeline([
-        ("scaler", StandardScaler(with_mean=True, with_std=True)), # EN requires scaling
-        ("clf", LogisticRegression(
+    # Pipeline: scaling + Elastic-Net logistic or linear SVM
+    if MODEL == "elastic_net":
+        clf = LogisticRegression(
             penalty="elasticnet",
             solver="saga", # only solver in scikit-learn that supports EN
             max_iter=20000, # increased because of convergence warnings at 5,000
             random_state=random_state,
             n_jobs=1
-        )),
+        )
+    else:
+        clf = LinearSVC(max_iter=200000, random_state=random_state)
+    pipe = Pipeline([
+        ("scaler", StandardScaler(with_mean=True, with_std=True)), # EN and SVM require scaling
+        ("clf", clf),
     ])
 
-    # Hyperparameter grid 
+    # Hyperparameter grid
     param_grid = {
         "clf__C": np.logspace(-4, 3, 10), # higher c = less regularization, may be overfit
-        "clf__l1_ratio": [0.01, 0.1, 0.3, 0.5], # l1_ratio=1 is fully Lasso where some coeffs = 0
     }
+    if MODEL == "elastic_net":
+        param_grid["clf__l1_ratio"] = [0.01, 0.1, 0.3, 0.5] # l1_ratio=1 is fully Lasso where some coeffs = 0
 
     # Storage for outer-CV results
     y_prob_oof = np.zeros_like(y, dtype=float)
@@ -307,33 +419,30 @@ def run_elastic_net(
     coefs = []
     perm_importance_accumulator = []
 
-    # Precompute and cache outer splits 
+    # Precompute and cache outer splits
     outer_splits = list(outer_cv.split(X, y))
 
-    # Outer CV: each fold holds out ~10% of subjects (X_te/y_te) as a test set 
+    # Outer CV: each fold holds out ~10% of subjects (X_te/y_te) as a test set
     # This runs all 10 folds and every subject get exactly one OOF prediction
     for fold_id, (tr_idx, te_idx) in enumerate(outer_splits, start=1):
         X_tr, X_te = X[tr_idx], X[te_idx] # X_tr is the outer training set, X_te is the test set
         y_tr, y_te = y[tr_idx], y[te_idx]
 
-        # Inner CV: try all C/l1_ratio combos on X_tr via 5-fold CV, pick the best
-        # refit=True trains a final model on all of X_tr with the winning params
-        gs = GridSearchCV(
-            estimator=pipe,
-            param_grid=param_grid,
-            scoring="roc_auc",
-            cv=inner_cv,
-            refit=True,
-            n_jobs=20,
+        gs = _fit_outer_fold(
+            pipe,
+            param_grid,
+            inner_cv,
+            X_tr,
+            y_tr,
+            n_jobs=N_JOBS,
         )
-        gs.fit(X_tr, y_tr)
 
         best = gs.best_estimator_  # model refitted on full X_tr with best hyperparameters
         best_params = gs.best_params_
         best_params_per_fold.append(best_params)
 
-        # Use X_te and predict superager probability for held-out subjects
-        prob_te = best.predict_proba(X_te)[:, 1]
+        # Use X_te and predict superager probability (or SVM decision score) for held-out subjects
+        prob_te = positive_scores(best, X_te)
         y_prob_oof[te_idx] = prob_te
         y_true_oof[te_idx] = y_te
         test_index_oof[te_idx] = True
@@ -347,7 +456,7 @@ def run_elastic_net(
             "auc": auc,
         })
 
-        # Coefficients from the logistic regression step, averaged across folds after the loop
+        # Coefficients from the classifier step, averaged across folds after the loop
         coef = best.named_steps["clf"].coef_.ravel()
         assert coef.shape[0] == X.shape[1]
         coefs.append(coef)
@@ -358,7 +467,7 @@ def run_elastic_net(
         )
         perm_importance_accumulator.append(pi_mean)
 
-    # Metrics for how well the EN model did overall (on all out-of-fold predictions)
+    # Metrics for how well the model did overall (on all out-of-fold predictions)
     observed_auc = roc_auc_score(y_true_oof, y_prob_oof)
 
     # Metrics for how important each feature was overall
@@ -378,13 +487,24 @@ def run_elastic_net(
         "selected_freq": selection_freq,
         "abs_coef_mean": np.abs(coef_mean)
     }).sort_values(["abs_coef_mean"], ascending=False)
+    if MODEL == "linear_svm":
+        # L2 SVM never zeroes coefficients, so selection frequency is always 1
+        feature_df = feature_df.drop(columns="selected_freq")
 
     # Model-level permutation test - now build the null distribution training the models on shuffled labels
     # Start by adding a check point for if the server crashes while this is running, not all progress is lost
-    checkpoint_file = (
-        f"results/{connectivity_type}_{group_level}_{which_features}_"
+    RESULTS_DIR.mkdir(exist_ok=True)
+    checkpoint_file = RESULTS_DIR / (
+        f"{MODEL_PREFIX}{connectivity_type}_{group_level}_{which_features}_"
         f"{label_type}_include_perm_results.pkl"
     )
+    # Fingerprint data and settings so a checkpoint from a different run is never resumed
+    run_info = {
+        "data_sha256": hashlib.sha256(X.tobytes() + y.tobytes()).hexdigest(),
+        "model": MODEL,
+        "random_state": random_state,
+        "param_grid": repr(param_grid),
+    }
     start_p = 0
     completed = 0
 
@@ -393,13 +513,15 @@ def run_elastic_net(
         print(f"Checkpoint file found: {checkpoint_file}")
         with open(checkpoint_file, "rb") as f:
             saved = pickle.load(f)
+        if saved.get("run_info") != run_info:
+            raise ValueError(f"{checkpoint_file} is from different data or settings, delete it to start over.")
 
         completed = int(np.count_nonzero(~np.isnan(saved["perm_aucs"])))
         target_total = max(n_permutations, completed)
 
         if completed < target_total:
             # Expand arrays to the new total and copy old data
-            perm_aucs = np.empty(target_total, dtype=float); perm_aucs[:] = np.nan
+            perm_aucs = np.full(target_total, np.nan)
             valid_mask = ~np.isnan(saved["perm_aucs"])
             n_valid = valid_mask.sum()
             perm_aucs[:n_valid] = saved["perm_aucs"][valid_mask]
@@ -414,69 +536,74 @@ def run_elastic_net(
     else:
         print(f"Starting permutations from scratch, running {n_permutations} total.")
         target_total = n_permutations
-        perm_aucs = np.empty(target_total, dtype=float); perm_aucs[:] = np.nan
+        perm_aucs = np.full(target_total, np.nan)
         start_p = 0
 
     progress_every = max(1, target_total // 10) # report progress after every 10%
-    
+
     if completed >= target_total:
         print("All requested permutations already done.")
+    elif np.sum(perm_aucs >= observed_auc) >= BC_H:
+        print(f"Checkpoint already stopped early: {BC_H} null AUCs >= observed.")
     else:
-        for p in range(start_p, target_total):
-            # For each permutation, shuffle the labels randomly
-            y_perm = rng.permutation(y)
+        # Draw from permutation 0 so a resumed run continues the shuffle sequence instead of repeating it
+        y_perms = [rng.permutation(y) for _ in range(target_total)][start_p:] # rng.permutation shuffles the labels randomly
 
-            # Save the out-of-fold predictions for each permutation
-            perm_oof = np.zeros_like(y, dtype=float)
-
-            for (tr_idx, te_idx) in outer_splits:
-                X_tr, X_te = X[tr_idx], X[te_idx]
-                y_tr_perm = y_perm[tr_idx]       # permuted labels for training
-                # Train and run on permuted labels
-                gs_perm = GridSearchCV(
-                    estimator=pipe,
-                    param_grid=param_grid,
-                    scoring="roc_auc",
-                    cv=inner_cv, # runs inner CV search grid to make the comparisons fair (e.g. 5-fold)
-                    refit=True,
-                    n_jobs=20,
+        # Run each checkpoint batch in parallel with one permutation per worker
+        for b_start in range(start_p, target_total, checkpoint_n):
+            b_end = min(b_start + checkpoint_n, target_total)
+            perm_aucs[b_start:b_end] = Parallel(n_jobs=N_JOBS)(
+                delayed(_permuted_auc)(
+                    pipe, param_grid, inner_cv, outer_splits, X, y, y_perms[p - start_p]
                 )
-                gs_perm.fit(X_tr, y_tr_perm)
-                best_perm = gs_perm.best_estimator_
-                perm_oof[te_idx] = best_perm.predict_proba(X_te)[:, 1]
+                for p in range(b_start, b_end)
+            )
+            p = b_end - 1
 
-            perm_aucs[p] = roc_auc_score(y, perm_oof)
-        
-            # Save results at each checkpoint_n permutations
-            if (p + 1) % checkpoint_n == 0 or (p + 1) == target_total:
-                with open(checkpoint_file, "wb") as f:
-                    pickle.dump({
-                        "last_p": p,
-                        "perm_aucs": perm_aucs,
-                        "feature": feature_names,   # safe mid-run
-                    }, f)
-                print(f"Checkpoint saved at permutation {p+1}")
+            # Save results after each batch
+            with open(checkpoint_file, "wb") as f:
+                pickle.dump({
+                    "last_p": p,
+                    "perm_aucs": perm_aucs,
+                    "feature": feature_names,   # safe mid-run
+                    "run_info": run_info,
+                }, f)
+            print(f"Checkpoint saved at permutation {b_end}")
 
-            if verbose and ((p + 1) % progress_every == 0 or (p + 1) == target_total):
-                print(f"[Permutation {p+1}/{target_total}] Null AUC (mean so far): {np.nanmean(perm_aucs):.3f}")
+            if verbose and (b_end // progress_every > b_start // progress_every or b_end == target_total):
+                print(f"[Permutation {b_end}/{target_total}] Null AUC (mean so far): {np.nanmean(perm_aucs):.3f}")
 
-    # One-sided p-value (>= observed AUC), add 1 to numerator/denominator for stability
-    # Needs a sufficient number of permutations to get a good estimate of the p-value
-    p_value = (np.sum(perm_aucs >= observed_auc) + 1.0) / (target_total + 1.0)
+            # Besag-Clifford: stop once BC_H null AUCs reach the observed AUC
+            if np.sum(perm_aucs[:b_end] >= observed_auc) >= BC_H:
+                print(f"Stopping early: {BC_H} null AUCs >= observed by permutation {b_end}")
+                break
+
+    n_done = int(np.count_nonzero(~np.isnan(perm_aucs)))
+    exceed_idx = np.flatnonzero(perm_aucs >= observed_auc)
+    if n_done < target_total and len(exceed_idx) >= BC_H:
+        # Stopped early
+        n_perm_used = int(exceed_idx[BC_H - 1]) + 1
+        p_value = BC_H / n_perm_used
+    else:
+        # All permutations ran: one-sided p-value (>= observed AUC), add 1 to numerator/denominator for stability
+        n_perm_used = n_done
+        p_value = (len(exceed_idx) + 1.0) / (n_done + 1.0)
 
     feature_df.sort_values("perm_importance_mean", ascending=False, inplace=True)
 
     # Save final state including p-value
     with open(f"{checkpoint_file}", "wb") as f:
         pickle.dump({
-            "last_p": target_total - 1,
+            "last_p": n_done - 1,
             "perm_aucs": perm_aucs,
             "feature": feature_names,
             "p_value": p_value,   # model-level p
+            "n_perm_used": n_perm_used,
+            "run_info": run_info,
         }, f)
-         
-    if start_p < target_total:  
-        print(f"Final checkpoint saved at permutation {p+1}")
+
+    if start_p < target_total:
+        print(f"Final checkpoint saved at permutation {n_done}")
 
     results = {
         "observed": {
@@ -494,44 +621,40 @@ def run_elastic_net(
         "feat_importance": feature_df,
         "permutation_test": {
             "aucs": perm_aucs,
-            "p_value": float(p_value)
+            "p_value": float(p_value),
+            "n_perm_used": n_perm_used,
         }
     }
     return results
 
 def main():
-    connectivity_type = "SFC"  # Options: "SFC", "FC", "SC"
-    # These are the features used to predict superager status
-    which_features = 't1'  # Options: 't1' (baseline only), 't1_slope' (baseline + annual change)
-    root_path = Path("/home/rachel/Desktop/schaefer_analysis/structure_function_coupling")
-    fc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/functional_connectivity/native_space")
-    sc_root_path = Path("/home/rachel/Desktop/schaefer_analysis/structural_connectivity")
-    csv_path = Path("/home/rachel/Desktop/data/superager.csv")
+    """Load the data, run the classifier, then save and print the results."""
+    csv_path = DATA_DIR / "superager.csv"
     demographic_data = pd.read_csv(csv_path)
     demographic_data.columns = [re.sub(r"^w(\d+)_(.*)", r"\2_\1", c) for c in demographic_data.columns]
     required_cols = {"id", "age_1", "age_2", "YoE", "sex", "superager_long"}
     missing_cols = sorted(required_cols - set(demographic_data.columns))
     if missing_cols:
         raise ValueError(f"Missing required columns in {csv_path}: {missing_cols}")
-    age_dir = Path("/home/rachel/Desktop/data")
 
     # Longitudinal superager definition requires both sessions
-    subjects_tp1 = get_subjects_to_process(root_path / "ses-01" / "individual_coupling_matrices", "ses-01", age_dir)
-    subjects_tp2 = get_subjects_to_process(root_path / "ses-02" / "individual_coupling_matrices", "ses-02", age_dir)
+    subjects_tp1 = get_subjects_to_process(SFC_ROOT / "ses-01" / "individual_coupling_matrices", "ses-01", DATA_DIR)
+    subjects_tp2 = get_subjects_to_process(SFC_ROOT / "ses-02" / "individual_coupling_matrices", "ses-02", DATA_DIR)
     subjects = sorted(set(subjects_tp1) & set(subjects_tp2))
     print(f"Subjects: {len(subjects)}")
 
     # Prepare the data for analysis
-    X_t1, X_slope, superager_vec_long, covariates = prep_data(
-        subjects, root_path, fc_root_path, sc_root_path, demographic_data, connectivity_type)
+    X_t1, X_slope, superager_vec_long, covariates, subject_ids = prep_data(
+        subjects, SFC_ROOT, FC_ROOT, SC_ROOT, demographic_data, CONNECTIVITY_TYPE)
 
-    # Map feature indices back to ROI names 
-    if connectivity_type == "SFC":
-        roi_names_path = root_path / "ses-01" / "individual_coupling_matrices" / f"{subjects[0]}_ses-01_structure_function_coupling.csv"
-    elif connectivity_type == "FC":
-        roi_names_path = fc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{subjects[0]}_ses-01_functional_connectivity_flat.csv"
+    # Map feature indices back to ROI names, using a subject whose files loaded
+    first_sub = subject_ids[0]
+    if CONNECTIVITY_TYPE == "SFC":
+        roi_names_path = SFC_ROOT / "ses-01" / "individual_coupling_matrices" / f"{first_sub}_ses-01_structure_function_coupling.csv"
+    elif CONNECTIVITY_TYPE == "FC":
+        roi_names_path = FC_ROOT / f"ses-01/individual_connectivity_matrices/grouped_rois/{first_sub}_ses-01_functional_connectivity_flat.csv"
     else:  # SC
-        roi_names_path = sc_root_path / f"ses-01/individual_connectivity_matrices/grouped_rois/{subjects[0]}_ses-01_structural_connectivity_flat.csv"
+        roi_names_path = SC_ROOT / f"ses-01/individual_connectivity_matrices/grouped_rois/{first_sub}_ses-01_structural_connectivity_flat.csv"
     roi_names = pd.read_csv(roi_names_path)['ROI_name'].tolist()
 
     roi_names_tp1 = [f"{r}_1" for r in roi_names]
@@ -539,7 +662,7 @@ def main():
     X_t1_slope = np.hstack([X_t1, X_slope])
 
     # Select which features to use, matching them to ROI names
-    match which_features:
+    match WHICH_FEATURES:
         case 't1':
             X_use = X_t1
             feat_names_use = roi_names
@@ -547,7 +670,7 @@ def main():
             X_use = X_t1_slope
             feat_names_use = roi_names_tp1 + roi_names_slope
         case _:
-            raise ValueError("which_features must be one of: 't1', 't1_slope'")
+            raise ValueError("WHICH_FEATURES must be one of: 't1', 't1_slope'")
 
     y_use = superager_vec_long
 
@@ -556,15 +679,18 @@ def main():
     X_use = X_use[valid_rows]
     y_use = y_use[valid_rows].astype(int)
     covariates = covariates[valid_rows]
+    subject_ids = subject_ids[valid_rows]
 
     # Include covariates as model features
     X_use = np.hstack([X_use, covariates.astype(float)])
-    feat_names_use = feat_names_use + ["cov_age", "cov_YoE", "cov_sex"]
+    feat_names_use = [*feat_names_use, "cov_age", "cov_YoE", "cov_sex"]
 
+    # en_fdr.py finds EN models in the logs by "Training EN on"
+    model_label = "EN" if MODEL == "elastic_net" else "SVM"
     print(
-        f"Training EN on {which_features} features "
+        f"Training {model_label} on {WHICH_FEATURES} features "
         f"({X_use.shape[1]} predictors) for "
-        f"{connectivity_type=}..."
+        f"connectivity_type='{CONNECTIVITY_TYPE}'..."
     )
 
     t0 = time.time()
@@ -575,46 +701,53 @@ def main():
         n_repeats_importance=10,
         random_state=7,
         verbose=1,
-        checkpoint_n=10,
-        connectivity_type=connectivity_type,
+        checkpoint_n=20,
+        connectivity_type=CONNECTIVITY_TYPE,
         group_level="ROI",
-        which_features=which_features,
+        which_features=WHICH_FEATURES,
         label_type="long",
     )
 
-    feature_importance_csv = f"{connectivity_type}_ROI_{which_features}_long_include_feature_importance.csv"
+    feature_importance_csv = RESULTS_DIR / f"{MODEL_PREFIX}{CONNECTIVITY_TYPE}_ROI_{WHICH_FEATURES}_long_include_feature_importance.csv"
     results["feat_importance"].to_csv(feature_importance_csv, index=False)
     print(f"Saved feature importance table: {feature_importance_csv}")
+
+    # Save out-of-fold predictions so AUC CIs and paired DeLong tests can be run without refitting
+    oof_csv = RESULTS_DIR / f"{MODEL_PREFIX}{CONNECTIVITY_TYPE}_ROI_{WHICH_FEATURES}_long_include_oof_predictions.csv"
+    pd.DataFrame({
+        "subject": subject_ids,
+        "y_true": results["oof"]["y_true"],
+        "y_score": results["oof"]["y_prob"],
+    }).to_csv(oof_csv, index=False)
+    print(f"Saved out-of-fold predictions: {oof_csv}")
 
     print(results["observed"])
     fold_metrics = results["cv_fold_metrics"]
     print("Fold-wise AUCs:")
     for _, row in fold_metrics.iterrows():
         print(f"  fold {int(row['fold'])}: auc={row['auc']:.3f}")
-    auc_ci = bootstrap_auc_ci(
+    auc_ci = delong_auc_ci(
         results["oof"]["y_true"],
         results["oof"]["y_prob"],
-        n_boot=2000,
         alpha=0.05,
-        random_state=7,
     )
-    print(f"AUC 95% CI (bootstrap, oof): [{auc_ci[0]:.3f}, {auc_ci[1]:.3f}]")
-    print("Best params per fold (C, l1_ratio):")
+    print(f"AUC 95% CI (DeLong, oof): [{auc_ci[0]:.3f}, {auc_ci[1]:.3f}]")
+    print("Best params per fold:")
     for i, p in enumerate(results["best_params_per_fold"], start=1):
-        c_val = p.get("clf__C")
-        l1_val = p.get("clf__l1_ratio")
-        print(f"  fold {i}: C={c_val}, l1_ratio={l1_val}")
+        params = ", ".join(f"{k.removeprefix('clf__')}={v}" for k, v in p.items())
+        print(f"  fold {i}: {params}")
     print("Model-level p-value:", results["permutation_test"]["p_value"])
+    print("Permutations used:", results["permutation_test"]["n_perm_used"])
 
     feat = results["feat_importance"].copy()
     feat = feat[~feat["feature"].str.startswith("cov_", na=False)]
-    compact = feat[["feature", "perm_importance_mean", "selected_freq"]].head(15)
+    compact = feat[[c for c in ("feature", "perm_importance_mean", "selected_freq") if c in feat]].head(15)
     print("Top features by permutation importance:")
     with pd.option_context("display.max_columns", None):
         print(compact.to_string(index=False))
     dt = time.time() - t0
     print(f"Run took {dt:.2f}s")
-    
+
 
 if __name__ == "__main__":
     main()
