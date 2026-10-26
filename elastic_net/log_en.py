@@ -23,10 +23,11 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 from sklearn.utils import check_random_state
 
-MODEL: Literal["elastic_net", "linear_svm"] = "elastic_net"
-CONNECTIVITY_TYPE: Literal["SFC", "FC", "SC"] = "FC"
+# Env vars override these defaults so queued runs can use different settings
+MODEL: Literal["elastic_net", "linear_svm"] = os.environ.get("MODEL", "elastic_net")
+CONNECTIVITY_TYPE: Literal["SFC", "FC", "SC"] = os.environ.get("CONNECTIVITY_TYPE", "SC")
 # Features used to predict superager status: baseline only or baseline plus annual change
-WHICH_FEATURES: Literal["t1", "t1_slope"] = "t1_slope"
+WHICH_FEATURES: Literal["t1", "t1_slope"] = os.environ.get("WHICH_FEATURES", "t1")
 N_JOBS = 20  # Parallel jobs for the main model's grid search and for the permutations
 BC_H = 50 # Besag–Clifford sequential permutation test
 # Atlas and SVM prefixes so outputs from different atlases or models never mix
@@ -312,7 +313,7 @@ def _permuted_auc(pipe, param_grid, inner_cv, outer_splits, X, y, y_perm):
     return roc_auc_score(y, perm_oof)
 
 
-def run_elastic_net(
+def run_classifier(
     X: np.ndarray,
     y,
     feature_names: list,
@@ -695,7 +696,7 @@ def main():
 
     t0 = time.time()
     print("Starting time:", time.ctime(t0))
-    results = run_elastic_net(
+    results = run_classifier(
         X_use, y_use, feat_names_use,
         n_permutations=1000,
         n_repeats_importance=10,
