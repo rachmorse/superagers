@@ -84,38 +84,38 @@ def draw_flow(ns: dict) -> None:
         ax.annotate("", xy=(dst[0], y1), xytext=(dst[0], mid), arrowprops=arrow_kw)
 
     h = 0.75
-    xs = [1.0, 3.0, 5.0, 7.0]
+    xs = [1.75, 3.75]
     w = 1.9
     met, not_met = "met\nsuperager criteria", "did not meet\nsuperager criteria"
 
-    top = box(4.0, 7.5, 3.0, h, f"Final analysis sample\n$n$ = {ns['total']}")
-    bl_sa = box(2.0, 6.0, 2.6, h, f"Baseline: {met}\n$n$ = {ns['bl_sa']}")
+    top = box(4.375, 7.5, 3.0, h, f"Final analysis sample\n$n$ = {ns['total']}")
+    bl_sa = box(2.75, 6.0, 2.6, h, f"Baseline: {met}\n$n$ = {ns['bl_sa']}")
     bl_no = box(6.0, 6.0, 2.6, h, f"Baseline: {not_met}\n$n$ = {ns['bl_no']}")
     fu = [
         box(xs[0], 4.5, w, h, f"Follow-up: {met}\n$n$ = {ns['sa_sa']}"),
         box(xs[1], 4.5, w, h, f"Follow-up: {not_met}\n$n$ = {ns['sa_no']}"),
-        box(xs[2], 4.5, w, h, f"Follow-up: {met}\n$n$ = {ns['no_sa']}"),
-        box(xs[3], 4.5, w, h, f"Follow-up: {not_met}\n$n$ = {ns['no_no']}"),
     ]
     final_sa = box(xs[0], 3.0, w, h, f"Superagers\n$n$ = {ns['final_sa']}")
-    final_no = box(5.0, 3.0, 3.0, h, f"Non-superagers\n$n$ = {ns['final_no']}")
+    final_no = box((xs[1] + bl_no[0]) / 2, 3.0, 3.0, h, f"Non-superagers\n$n$ = {ns['final_no']}")
 
-    for parent, children in [(top, [bl_sa, bl_no]), (bl_sa, fu[:2]), (bl_no, fu[2:])]:
+    for parent, children in [(top, [bl_sa, bl_no]), (bl_sa, fu)]:
         for child in children:
             elbow(parent, child)
     elbow(fu[0], final_sa)
 
-    # Merge the three non-superager branches into one arrow
+    # Merge follow-up non-superagers and baseline non-superagers into one arrow
     y0, y1 = fu[1][1] - h / 2, final_no[1] + h / 2
     mid = (y0 + y1) / 2
-    for child in fu[1:]:
-        ax.plot([child[0], child[0]], [y0, mid], **line_kw)
-    ax.plot([fu[1][0], fu[3][0]], [mid, mid], **line_kw)
+    ax.plot([fu[1][0], fu[1][0]], [y0, mid], **line_kw)
+    ax.plot([bl_no[0], bl_no[0]], [bl_no[1] - h / 2, mid], **line_kw)
+    ax.plot([fu[1][0], bl_no[0]], [mid, mid], **line_kw)
     ax.annotate("", xy=(final_no[0], y1), xytext=(final_no[0], mid), arrowprops=arrow_kw)
 
-    # Criteria box spanning the figure width
-    ax.add_patch(mpatches.FancyBboxPatch((0.05, 1.25), 7.9, 1.1, boxstyle="square,pad=0", linestyle="--", **box_style))
-    ax.text(0.2, 1.8, CRITERIA_TEXT, ha="left", va="center", fontsize=fontsize)
+    # Criteria box sized to the text, centred under the diagram
+    crit_w = 6.5
+    crit_x = 4.05 - crit_w / 2
+    ax.add_patch(mpatches.FancyBboxPatch((crit_x, 1.25), crit_w, 1.1, boxstyle="square,pad=0", linestyle="--", **box_style))
+    ax.text(crit_x + 0.15, 1.8, CRITERIA_TEXT, ha="left", va="center", fontsize=fontsize)
 
     out = Path(__file__).resolve().parent / "figures" / "classification_flow_figure.png"
     plt.savefig(out, dpi=300, bbox_inches="tight", facecolor="white")
