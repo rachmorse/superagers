@@ -3,16 +3,17 @@
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal
+from typing import List, Literal
 
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from run_sfc_pipeline import ROOT, SESSIONS, SUBJECTS
+from run_sfc_pipeline import ROOT, SUBJECTS
 
 ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer200"
+SESSIONS: List[Literal["ses-01", "ses-02"]] = ["ses-01"]
 
 FC_ROOT = ROOT / f"functional_connectivity_{ATLAS}" / "native_space"
 STRUCT_ROOT = ROOT / f"structural_connectivity_{ATLAS}"
