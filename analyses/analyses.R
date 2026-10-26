@@ -35,6 +35,9 @@ clean_id <- function(x) sub("^sub-", "", as.character(x))
 raw_data <- read.csv(file.path(DATA_DIR, "superager_clean.csv"))
 raw_data$id <- clean_id(raw_data$id)
 demographics_table <- read.csv(file.path(DATA_DIR, "demographics_table.csv"), check.names = FALSE)  # From demographics_table.py
+motion_table <- read.csv(file.path(DATA_DIR, "motion_table.csv"), check.names = FALSE, colClasses = "character")  # From fmri_analysis/motion_table.py
+en_features_path <- file.path(DATA_DIR, paste0("en_features_table_", MAIN_ATLAS, ".csv"))  # From elastic_net/make_supplementary_table.py
+en_features_table <- if (file.exists(en_features_path)) read.csv(en_features_path, check.names = FALSE, colClasses = "character")  # NULL until generated
 
 # Calculate annual change for SFC variables
 calc_annual_change <- function(data, vars) {
