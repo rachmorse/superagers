@@ -1,6 +1,5 @@
 """Sample characteristics table at baseline and follow-up by superager group."""
 
-import json
 from pathlib import Path
 
 import numpy as np
@@ -10,10 +9,7 @@ from scipy import stats
 ATLAS = "schaefer200"  # Same sample for Schaefer 200 and 400
 DATA_DIR = Path("/home/rachel/Desktop/data")
 RAW_DIR = DATA_DIR / "raw"
-BBHI_MRI = Path("/pool/guttmann/institut/BBHI/MRI")
-SENIOR_MRI = Path("/pool/guttmann/institut/UB/Superagers/MRI")
 SESSIONS = {"1": "ses-01", "2": "ses-02"}
-BBHI_MIN_ID = 6000  # To separate BBHI IDs from BBHI senior
 P_FLOOR = 1e-4  # Smaller p-values are shown as <0.0001
 
 # Rows per timepoint, grouped by subsection: (label, column stem, format, run t-test)
@@ -22,13 +18,9 @@ TIMEPOINT_SUBSECTIONS = {
     "Cognition": [
         ("MMSE", "mmse", "range", True),
         ("RAVLT delayed recall†", "delayed_recall_raw", "sd", True),
-        ("Trail Making Test B (s)†", "tmt_b_raw", "sd", True),
+        ("Trail Making Test B (seconds)†", "tmt_b_raw", "sd", True),
         ("Semantic fluency†", "sem_fluency_raw", "sd", True),
         ("Backward digit span†", "inverse_digits_raw", "sd", True),
-    ],
-    "fMRI": [
-        ("Mean framewise displacement (mm)", "mean_fd", "sd", True),
-        ("Volumes scrubbed (%)", "pct_scrubbed", "sd", True),
     ],
 }
 
@@ -95,38 +87,6 @@ def load_mmse(path: str, id_col: str, mmse_col: str) -> pd.Series:
     return s.dropna().groupby(level=0).first()
 
 
-def native_t1_dir(sub: str, ses: str) -> Path:
-    """Return the resting-state native T1 folder for a subject/session.
-
-    Args:
-        sub: Cleaned subject ID.
-        ses: Session label (e.g. 'ses-01').
-
-    Returns:
-        Folder holding framewise_displ.txt and the scrubbing JSON.
-    """
-    if int(sub) > BBHI_MIN_ID:
-        preproc = "resting_preproc_fs6-recon" if ses == "ses-01" else "resting_preproc_fs6-recon_tp2"
-        return BBHI_MRI / "processed_data" / preproc / f"sub-{sub}" / "native_T1"
-    return SENIOR_MRI / "resting_preproc_fs6-recon" / f"sub-{sub}" / ses / "native_T1"
-
-
-def motion(sub: str, ses: str) -> tuple[float, float]:
-    """Get mean FD and percentage of scrubbed volumes (FD > 0.5 mm).
-
-    Args:
-        sub: Cleaned subject ID.
-        ses: Session label (e.g. 'ses-01').
-
-    Returns:
-        Mean FD (mm) and percentage of volumes scrubbed.
-    """
-    d = native_t1_dir(sub, ses)
-    fd = pd.read_csv(d / "framewise_displ.txt")["FramewiseDisplacement"]
-    scrub = json.loads(next(d.glob("*scrubbed*.json")).read_text())
-    return fd.mean(), scrub["NumFramesScrubbed"] / scrub["TotalFrames"] * 100
-
-
 def load_data() -> pd.DataFrame:
     """Build the per-subject table for the final analysis sample.
 
@@ -149,9 +109,6 @@ def load_data() -> pd.DataFrame:
     ])
     df["mmse_1"] = mmse_1.groupby(level=0).first().reindex(df.index)
     df["mmse_2"] = mmse_2.groupby(level=0).first().reindex(df.index)
-
-    for tp, ses in SESSIONS.items():
-        df[f"mean_fd_{tp}"], df[f"pct_scrubbed_{tp}"] = zip(*[motion(s, ses) for s in df.index])
     df["followup_duration"] = df["age_2"] - df["age_1"]
     df["group"] = np.where(df["superager_long"] == 1, "Superager", "Non-superager")
     return df
