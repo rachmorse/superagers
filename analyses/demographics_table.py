@@ -16,7 +16,7 @@ P_FLOOR = 1e-4  # Smaller p-values are shown as <0.0001
 # Stems get _1/_2 appended per timepoint
 TIMEPOINT_SUBSECTIONS = {
     "Cognition": [
-        ("MMSE", "mmse", "range", True),
+        ("MMSE", "mmse", "sd", True),
         ("RAVLT delayed recall†", "delayed_recall_raw", "sd", True),
         ("Trail Making Test B (seconds)†", "tmt_b_raw", "sd", True),
         ("Semantic fluency†", "sem_fluency_raw", "sd", True),
@@ -149,7 +149,9 @@ def summary_row(groups: dict[str, pd.DataFrame], label: str, col: str, style: st
         p = stats.ttest_ind(
             groups["Superager"][col].dropna(), groups["Non-superager"][col].dropna(), equal_var=False
         ).pvalue
-    return {"Variable": label, **{g: fmt(d[col], style) for g, d in groups.items()}, "p_value": p}
+    row = {"Variable": label, **{g: fmt(d[col], style) for g, d in groups.items()}, "p_value": p}
+    row["Whole cohort range"] = fmt(groups["Whole cohort"][col], "range")  # For in-text mean (range)
+    return row
 
 
 def build_table(df: pd.DataFrame) -> pd.DataFrame:
@@ -181,7 +183,7 @@ def build_table(df: pd.DataFrame) -> pd.DataFrame:
     ]
 
     for tp, section in [("1", "Baseline"), ("2", "Follow-up")]:
-        section_rows = [{"Variable": section}, summary_row(groups, "Age", f"age_{tp}", "range", True)]
+        section_rows = [{"Variable": section}, summary_row(groups, "Age", f"age_{tp}", "sd", True)]
         if tp == "2":
             section_rows.append(summary_row(groups, "Follow-up duration (years)", "followup_duration", "sd", True))
         for subsection, variables in TIMEPOINT_SUBSECTIONS.items():
@@ -191,7 +193,7 @@ def build_table(df: pd.DataFrame) -> pd.DataFrame:
         # Section column lets results.Rmd look up cells, e.g. baseline vs follow-up age
         rows += [{"Section": section, **row} for row in section_rows]
 
-    table = pd.DataFrame(rows)[["Section", "Variable", *groups, "p_value"]]
+    table = pd.DataFrame(rows)[["Section", "Variable", *groups, "Whole cohort range", "p_value"]]
     table["p_value"] = table["p_value"].map(lambda p: "" if pd.isna(p) else "<0.0001" if p < P_FLOOR else f"{p:.4f}")
     return table.fillna("")
 
