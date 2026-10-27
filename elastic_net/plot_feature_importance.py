@@ -17,7 +17,7 @@ RESULTS_DIR = Path("/home/rachel/Desktop/superagers/elastic_net/results")
 FEATURE_IMPORTANCE_T1_CSV = RESULTS_DIR / f"{ATLAS}_SFC_ROI_t1_long_include_feature_importance.csv"
 FEATURE_IMPORTANCE_SLOPE_CSV = RESULTS_DIR / f"{ATLAS}_SFC_ROI_t1_slope_long_include_feature_importance.csv"
 OUTPUT_PATH = Path(
-    f"/home/rachel/Desktop/superagers/elastic_net/figures_tables/feature_importance_brain_{ATLAS}.png"
+    f"/home/rachel/Desktop/superagers/analyses/figures/feature_importance_brain_{ATLAS}.png"
 )
 TEMP_PATH = Path(
     "/home/rachel/Desktop/superagers/elastic_net/figures_tables/_brain_temp"
