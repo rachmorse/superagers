@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""
-Generate a supplementary table in Word format, extracting the top SFC features
-from the baseline and slope elastic-net models, with their elastic net and SVM ranks.
+"""Build the supplementary table of top SFC features from the elastic net models.
+
+Lists the top features from the baseline and baseline + annual change models with their
+elastic net and SVM importance ranks, saved as a Word table and as a CSV for results.Rmd.
 """
 
 from pathlib import Path
@@ -38,7 +39,7 @@ def process_top_n(df, is_slope_model, n):
 
 
 def importance_csv(conn_type, which_features, model_prefix=""):
-    """Path to a feature importance CSV saved by log_en.py.
+    """Path to a feature importance CSV saved by run_classifier.py.
 
     Args:
         conn_type (str): Connectivity type ("SFC", "SC" or "FC").

@@ -686,7 +686,6 @@ def main():
     X_use = np.hstack([X_use, covariates.astype(float)])
     feat_names_use = [*feat_names_use, "cov_age", "cov_YoE", "cov_sex"]
 
-    # en_fdr.py finds EN models in the logs by "Training EN on"
     model_label = "EN" if MODEL == "elastic_net" else "SVM"
     print(
         f"Training {model_label} on {WHICH_FEATURES} features "

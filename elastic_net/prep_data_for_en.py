@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import Literal
 import os, re
 
-# Shared by log_en.py and prep_weighted_global_roi_averages.py
-ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer200"
+# Shared by run_classifier.py and prep_weighted_global_roi_averages.py
+ATLAS: Literal["schaefer200"] = "schaefer200"
 N_PARCELS = int(ATLAS.removeprefix("schaefer"))
 ROOT = Path("/home/rachel/Desktop/schaefer_analysis")
 SFC_ROOT = ROOT / f"structure_function_coupling_{ATLAS}"

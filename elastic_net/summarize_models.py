@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Summarize the elastic net and linear SVM models and compute Benjamini-Hochberg FDR-adjusted p-values.
 
-Reads the permutation results and out-of-fold predictions saved by log_en.py and
+Reads the permutation results and out-of-fold predictions saved by run_classifier.py and
 writes one row per model for results.Rmd.
 """
 
@@ -9,7 +9,7 @@ import pickle
 from typing import Iterable, List
 
 import pandas as pd
-from log_en import RESULTS_DIR, delong_auc_ci
+from run_classifier import RESULTS_DIR, delong_auc_ci
 from prep_data_for_en import ATLAS, DATA_DIR
 from sklearn.metrics import roc_auc_score
 
