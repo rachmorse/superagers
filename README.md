@@ -36,7 +36,7 @@ The code is available under the MIT License, allowing others to reuse and adapt 
     - `02_subcortical_to_t1.py`: Extracts subcortical regions from aseg.mgz files.
     - `03_combine_t1_atlases.py`: Stacks Schaefer cortical and subcortical masks into a single subject-specific atlas in T1 space.
     - `04_t1_to_dwi_bold.py`: Transforms the Schaefer/subcortical atlases from T1 space into native DWI and native-T1 BOLD space. 
-    - `run_pipeline.py`: Runs all scripts above, looping through each timepoint and cohort.  
+    - `run_masks_pipeline.py`: Runs all scripts above, looping through each timepoint and cohort.  
 
 ### fmri_analysis
 - **Purpose:** Extract timeseries data and compute functional connectivity correlations. 
@@ -45,6 +45,8 @@ The code is available under the MIT License, allowing others to reuse and adapt 
         - Uses functions in `extract_timeseries.py`.
     - `02_compute_subject_functional_connectivity.py`: Processes timeseries data and computes Fisher z-transformation.
         - Uses functions in `compute_functional_connectivity.py`.
+    - `run_fmri_pipeline.py`: Runs both scripts above, looping through each timepoint and cohort.
+    - `motion_table.py`: Generates supplementary table comparing scrubbing and framewise displacement between superagers and non-superagers at each timepoint.
 - **Notes:**
     - The scripts used to preprocesses fMRI data are available in another [repository](https://github.com/rachmorse/fmri_preprocessing).
 
@@ -64,22 +66,26 @@ The code is available under the MIT License, allowing others to reuse and adapt 
     - `01_convert_to_individual_matrix.py`: Converts functional and structural connectivity data into individual 214x214 matrices. 
     - `02_structural_functional_coupling.py`: Computes and visualizes SFC. 
     - `plot_group_connectivity_figure.py`: Plots a single subject's structural connectivity matrix, functional connectivity matrix, and SFC vector.
+    - `run_sfc_pipeline.py`: Runs the two numbered scripts above, looping through each timepoint.
 
 ### elastic_net
-- **Purpose:** Prepare and run logistic elastic net to classify participants as superagers or non-superagers.
+- **Purpose:** Prepare and run logistic elastic net and linear SVM models to classify participants as superagers or non-superagers.
 - **Scripts:**
     - `prep_data_for_en.py`: Prepares data for elastic net models. 
     - `prep_weighted_global_roi_averages.py`: Computes voxel-weighted global, sensory, heteromodal, and memory-relevant network averages for SFC.
-    - `log_en.py`: Runs logistic elastic net classification predicting superager status using cross-validation and permutation testing. 
-    - `en_fdr.py`: Reads elastic net nohup log files, extracts model-level p-values, and reports FDR-adjusted p-values for each model.
+    - `run_classifier.py`: Runs elastic net or linear SVM classification predicting superager status using nested cross-validation and permutation testing.
+    - `summarize_models.py`: Summarizes the AUC, confidence interval, and permutation p-value of each elastic net and SVM model with FDR-adjusted p-values.
     - `plot_feature_importance.py`: Plots the top 20 features from SFC elastic net models as bar charts. Includes a brain plot panel with cortical and subcortical regions. 
-    - `make_supplementary_table.py`: Generates supplementary table listing top 50 features from each SFC elastic net model.
+    - `plot_en_svm_importance.py`: Plots SFC feature importance from the elastic net vs SVM models and computes their Spearman correlation and top feature overlap.
+    - `make_top_features_table.py`: Generates supplementary table listing top 50 features from each SFC elastic net model with their elastic net and SVM ranks.
 
 ### analyses
 
-- **Purpose:** Conduct all non-elastic net related analyses.
+- **Purpose:** Run the mixed-effects analyses and compile all results, tables, and figures into the results section.
 - **Scripts:**  
     - `analyses.R`: Runs full results pipeline: mixed-effects models for episodic memory, superager status, and SFC with FDR correction.
     - `results.Rmd`: R Markdown document that sources `analyses.R` and auto-fills the results section with model outputs.
     - `plot_sfc_difference.py`: Averages superager vs. non-superager SFC difference maps and saves a cortical/subcortical figure.
-    - `plot_sfc_em_cortex.py`: Combines the figure from `plot_sfc_difference.py` with forest plots of stats from `results.html`.
+    - `plot_sfc_em_cortex.py`: Combines the figure from `plot_sfc_difference.py` with forest plots of the mixed-effects results saved by `analyses.R`.
+    - `demographics_table.py`: Generates the participant characteristics table comparing superagers and non-superagers at each timepoint.
+    - `classification_flow_figure.py`: Plots the flow of participants through superager classification at baseline and follow-up.
