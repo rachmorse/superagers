@@ -6,7 +6,7 @@ import subprocess
 import logging
 from pathlib import Path
 from joblib import Parallel, delayed
-from run_pipeline import ATLAS, COHORTS, N_JOBS, N_PARCELS, OUTPUT_ROOT, RECONALL_DIRS, SESSIONS, SUBJECTS, record_summary
+from run_masks_pipeline import ATLAS, COHORTS, N_JOBS, N_PARCELS, OUTPUT_ROOT, RECONALL_DIRS, SESSIONS, SUBJECTS, record_summary
 
 # Set up logging
 logging.basicConfig(

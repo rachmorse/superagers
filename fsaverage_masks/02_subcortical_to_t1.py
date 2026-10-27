@@ -5,7 +5,7 @@ import subprocess
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from run_pipeline import COHORTS, FSL_DIR, RECONALL_DIRS, SESSIONS, SHARED_ROOT, SUBJECTS, record_summary
+from run_masks_pipeline import COHORTS, FSL_DIR, RECONALL_DIRS, SESSIONS, SHARED_ROOT, SUBJECTS, record_summary
 
 
 # Set up logging

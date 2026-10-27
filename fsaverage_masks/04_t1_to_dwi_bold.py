@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 import nibabel as nib
 import numpy as np
-from run_pipeline import ATLAS, COHORTS, FSL_DIR, N_JOBS, OUTPUT_ROOT, RECONALL_DIRS, SESSIONS, SHARED_ROOT, SUBJECTS, record_summary
+from run_masks_pipeline import ATLAS, COHORTS, FSL_DIR, N_JOBS, OUTPUT_ROOT, RECONALL_DIRS, SESSIONS, SHARED_ROOT, SUBJECTS, record_summary
 
 @dataclass
 class SubjectPaths:

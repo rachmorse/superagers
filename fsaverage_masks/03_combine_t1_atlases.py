@@ -5,7 +5,7 @@ import nibabel as nib
 import numpy as np
 import logging
 from pathlib import Path
-from run_pipeline import ATLAS, COHORTS, N_PARCELS, OUTPUT_ROOT, SESSIONS, SHARED_ROOT, SUBJECTS, record_summary
+from run_masks_pipeline import ATLAS, COHORTS, N_PARCELS, OUTPUT_ROOT, SESSIONS, SHARED_ROOT, SUBJECTS, record_summary
 
 # Set up logging
 logging.basicConfig(
