@@ -24,7 +24,7 @@ from sklearn.svm import LinearSVC
 from sklearn.utils import check_random_state
 
 # Env vars override these defaults so queued runs can use different settings
-MODEL: Literal["elastic_net", "linear_svm"] = os.environ.get("MODEL", "elastic_net")
+MODEL: Literal["elastic_net", "linear_svm"] = os.environ.get("MODEL", "linear_svm")
 CONNECTIVITY_TYPE: Literal["SFC", "FC", "SC"] = os.environ.get("CONNECTIVITY_TYPE", "SC")
 # Features used to predict superager status: baseline only or baseline plus annual change
 WHICH_FEATURES: Literal["t1", "t1_slope"] = os.environ.get("WHICH_FEATURES", "t1")
@@ -581,8 +581,8 @@ def run_classifier(
 
     n_done = int(np.count_nonzero(~np.isnan(perm_aucs)))
     exceed_idx = np.flatnonzero(perm_aucs >= observed_auc)
-    if n_done < target_total and len(exceed_idx) >= BC_H:
-        # Stopped early
+    if len(exceed_idx) >= BC_H:
+        # Reached BC_H exceedances even on the last permutation (Besag-Clifford h/L)
         n_perm_used = int(exceed_idx[BC_H - 1]) + 1
         p_value = BC_H / n_perm_used
     else:
