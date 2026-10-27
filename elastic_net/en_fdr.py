@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""
-Read model-level p-values from elastic net nohup logs and compute
-Benjamini-Hochberg FDR-adjusted p-values.
+"""Summarize the elastic net and linear SVM models and compute Benjamini-Hochberg FDR-adjusted p-values.
+
+Reads the permutation results and out-of-fold predictions saved by log_en.py and
+writes one row per model for results.Rmd.
 """
 
-from pathlib import Path
-import re
+import pickle
 from typing import Iterable, List
 
+import pandas as pd
+from log_en import RESULTS_DIR, delong_auc_ci
+from prep_data_for_en import ATLAS, DATA_DIR
+from sklearn.metrics import roc_auc_score
 
-LOG_GLOB_PATTERNS = ["nohup_*_t1.out", "nohup_*_t1_slope.out"]
-TRAINING_PATTERN = re.compile(
-    r"Training EN on (?P<feature_set>[^ ]+) features .* connectivity_type='(?P<connectivity_type>[^']+)'"
-)
-P_VALUE_PATTERN = re.compile(r"Model-level p-value:\s*(?P<p_value>[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)")
+MODELS = {"elastic_net": "", "linear_svm": "SVM_"}  # File prefix after the atlas
+CONNECTIVITY_TYPES = ["SFC", "FC", "SC"]
+FEATURE_SETS = ["t1", "t1_slope"]
+OUTPUT_CSV = DATA_DIR / f"en_model_results_{ATLAS}.csv"  # For results.Rmd
 
 
 def bh_fdr(pvals: Iterable[float]) -> List[float]:
@@ -43,52 +46,44 @@ def bh_fdr(pvals: Iterable[float]) -> List[float]:
     return adjusted
 
 
-def collect_p_values(log_dir: Path):
-    """Collect model-level p-values and labels from elastic net nohup logs.
-
-    Args:
-        log_dir: Directory containing the nohup log files.
+def collect_results() -> pd.DataFrame:
+    """Collect AUC, DeLong CI, p-value and permutations run for each model.
 
     Returns:
-        A list of dictionaries with the parsed label, p-value, and source file.
+        pd.DataFrame: One row per model, connectivity type and feature set.
     """
     rows = []
-    for pattern in LOG_GLOB_PATTERNS:
-        for path in sorted(log_dir.glob(pattern)):
-            text = path.read_text()
-            training_match = TRAINING_PATTERN.search(text)
-            p_value_match = P_VALUE_PATTERN.search(text)
-            if training_match is None or p_value_match is None:
-                continue
+    for model, file_prefix in MODELS.items():
+        for conn_type in CONNECTIVITY_TYPES:
+            for features in FEATURE_SETS:
+                prefix = RESULTS_DIR / f"{ATLAS}_{file_prefix}{conn_type}_ROI_{features}_long_include"
+                with open(f"{prefix}_perm_results.pkl", "rb") as f:
+                    perm = pickle.load(f)
+                oof = pd.read_csv(f"{prefix}_oof_predictions.csv")
+                ci_low, ci_high = delong_auc_ci(oof["y_true"], oof["y_score"])
 
-            connectivity_type = training_match.group("connectivity_type")
-            feature_set = training_match.group("feature_set")
-            label = f"{connectivity_type} {feature_set}"
+                rows.append({
+                    "model": model,
+                    "connectivity_type": conn_type,
+                    "features": features,
+                    "auc": roc_auc_score(oof["y_true"], oof["y_score"]),
+                    "ci_low": ci_low,
+                    "ci_high": ci_high,
+                    "p_value": perm["p_value"],
+                    "n_perm": perm["n_perm_used"],  # Fewer than 1000 if stopped early
+                })
 
-            rows.append({
-                "label": label,
-                "p_value": float(p_value_match.group("p_value")),
-                "file": path.name,
-            })
-
-    return rows
+    return pd.DataFrame(rows)
 
 
 def main() -> None:
-    """Parse nohup logs and print raw and FDR-adjusted model p-values."""
-    log_dir = Path(__file__).resolve().parent / "results"
-    rows = collect_p_values(log_dir)
-    if not rows:
-        raise SystemExit("No matching nohup logs with model-level p-values were found.")
-
-    qvals = bh_fdr([row["p_value"] for row in rows])
-
-    print(f"{'Index':>5}  {'Label':<12}  {'Raw p-value':>12}  {'FDR-adjusted':>12}  File")
-    print("-" * 78)
-    for i, (row, qval) in enumerate(zip(rows, qvals), start=1):
-        print(
-            f"{i:>5}  {row['label']:<12}  {row['p_value']:>12.6g}  {qval:>12.6g}  {row['file']}"
-        )
+    """Save and print each model's results with FDR-adjusted p-values."""
+    df = collect_results()
+    # Correct within each model type (e.g. SVM or elastic net)
+    df["p_fdr"] = df.groupby("model")["p_value"].transform(bh_fdr)
+    df.to_csv(OUTPUT_CSV, index=False)
+    print(df.to_string(index=False))
+    print(f"Saved model results to: {OUTPUT_CSV}")
 
 
 if __name__ == "__main__":
