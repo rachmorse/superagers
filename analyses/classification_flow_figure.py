@@ -96,7 +96,7 @@ def draw_flow(ns: dict) -> None:
         box(xs[1], 4.5, w, h, f"Follow-up: {not_met}\n$n$ = {ns['sa_no']}"),
     ]
     final_sa = box(xs[0], 3.0, w, h, f"Superagers\n$n$ = {ns['final_sa']}")
-    final_no = box((xs[1] + bl_no[0]) / 2, 3.0, 3.0, h, f"Non-superagers\n$n$ = {ns['final_no']}")
+    final_no = box((xs[1] + bl_no[0]) / 2, 3.0, 3.0, h, f"Typical older adults\n$n$ = {ns['final_no']}")
 
     for parent, children in [(top, [bl_sa, bl_no]), (bl_sa, fu)]:
         for child in children:

@@ -211,7 +211,7 @@ def main():
     ax_a.set_aspect("equal", anchor="W")
     ax_a.axis("off")
     ax_a.set_title(
-        "A)  Structure-function coupling difference between superagers and non-superagers",
+        "A)  Structure-function coupling difference between superagers and typical\n      older adults",
         fontsize=16, pad=8, loc="left",
     )
 
