@@ -233,7 +233,7 @@ def main():
         ax_b, sa_stats,
         title="B)  Superager status",
         xlabel="Standardised β (95% CI)",
-        xlim=(-0.15, 0.53),
+        xlim=(-0.15, 0.55),
         color="#2E6FA3",
         networks=networks,
     )
