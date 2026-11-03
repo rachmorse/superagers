@@ -22,15 +22,15 @@ The code is available under the MIT License, allowing others to reuse and adapt 
 ## Folders
 
 ### superager_classification
-- **Purpose:** Clean data from our cohort to merge the relevant files and classify participants as superagers or non-superagers. 
+- **Purpose:** Clean data from our cohort to merge the relevant files and classify participants as superagers or typical older adults. 
 - **Scripts:**
     - `check_invalid_nps.R`: Saves comments about participants' neuropsychological data, to be read manually and remove invalid data. 
     - `cleaning_bbhi_data.ipynb`: Cleans BBHI data for merge.
     - `cleaning_bbhi_senior_data.ipynb`: Cleans BBHI senior data for merge.
-    - `superager_classification.ipynb`: Classifies participants as superagers or non-superagers. 
+    - `superager_classification.ipynb`: Classifies participants as superagers or typical older adults. 
 
 ### fsaverage_masks
-- **Purpose:** Transform the fsaverage Schaefer-200 atlas and recon-all aseg parcellation to combined atlases in native DWI and native-T1 BOLD space.
+- **Purpose:** Transform the fsaverage Schaefer-200 or Schaefer-400 atlas and recon-all aseg parcellation to combined atlases in native DWI and native-T1 BOLD space.
 - **Scripts:**
     - `01_fsaverage_to_t1.py`: Transforms Schaefer atlas from fsaverage to each subject’s T1 space. 
     - `02_subcortical_to_t1.py`: Extracts subcortical regions from aseg.mgz files.
@@ -46,9 +46,9 @@ The code is available under the MIT License, allowing others to reuse and adapt 
     - `02_compute_subject_functional_connectivity.py`: Processes timeseries data and computes Fisher z-transformation.
         - Uses functions in `compute_functional_connectivity.py`.
     - `run_fmri_pipeline.py`: Runs both scripts above, looping through each timepoint and cohort.
-    - `motion_table.py`: Generates supplementary table comparing scrubbing and framewise displacement between superagers and non-superagers at each timepoint.
+    - `motion_table.py`: Generates supplementary table comparing scrubbing and framewise displacement between superagers and typical older adults at each timepoint.
 - **Notes:**
-    - The scripts used to preprocesses fMRI data are available in another [repository](https://github.com/rachmorse/fmri_preprocessing).
+    - The scripts used to preprocess fMRI data are available in another [repository](https://github.com/rachmorse/fmri_preprocessing).
 
 ### structural_analysis
 - **Purpose:** Uses Multi-Shell Multi-Tissue Constrained Spherical Deconvolution (MSMT-CSD) to calculate white matter tracts and extract structural connectivity matrices. 
@@ -63,13 +63,13 @@ The code is available under the MIT License, allowing others to reuse and adapt 
 ### structure_function_coupling
 - **Purpose:** Prepare and calculate structure-function coupling (SFC) metrics. 
 - **Scripts:**
-    - `01_convert_to_individual_matrix.py`: Converts functional and structural connectivity data into individual 214x214 matrices. 
+    - `01_convert_to_individual_matrix.py`: Converts functional and structural connectivity data into individual 214x214 (Schaefer-200) or 414x414 (Schaefer-400) matrices. 
     - `02_structural_functional_coupling.py`: Computes and visualizes SFC. 
     - `plot_group_connectivity_figure.py`: Plots a single subject's structural connectivity matrix, functional connectivity matrix, and SFC vector.
     - `run_sfc_pipeline.py`: Runs the two numbered scripts above, looping through each timepoint.
 
 ### elastic_net
-- **Purpose:** Prepare and run logistic elastic net and linear SVM models to classify participants as superagers or non-superagers.
+- **Purpose:** Prepare and run logistic elastic net and linear SVM models to classify participants as superagers or typical older adults.
 - **Scripts:**
     - `prep_data_for_en.py`: Prepares data for elastic net models. 
     - `prep_weighted_global_roi_averages.py`: Computes voxel-weighted global, sensory, heteromodal, and memory-relevant network averages for SFC.
@@ -85,7 +85,7 @@ The code is available under the MIT License, allowing others to reuse and adapt 
 - **Scripts:**  
     - `analyses.R`: Runs full results pipeline: mixed-effects models for episodic memory, superager status, and SFC with FDR correction.
     - `results.Rmd`: R Markdown document that sources `analyses.R` and auto-fills the results section with model outputs.
-    - `plot_sfc_difference.py`: Averages superager vs. non-superager SFC difference maps and saves a cortical/subcortical figure.
+    - `plot_sfc_difference.py`: Averages superager vs. typical older adult SFC difference maps and saves a cortical/subcortical figure.
     - `plot_sfc_em_cortex.py`: Combines the figure from `plot_sfc_difference.py` with forest plots of the mixed-effects results saved by `analyses.R`.
-    - `demographics_table.py`: Generates the participant characteristics table comparing superagers and non-superagers at each timepoint.
+    - `demographics_table.py`: Generates the participant characteristics table comparing superagers and typical older adults at each timepoint.
     - `classification_flow_figure.py`: Plots the flow of participants through superager classification at baseline and follow-up.
