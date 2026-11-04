@@ -232,7 +232,7 @@ def main():
     plot_forest(
         ax_b, sa_stats,
         title="B)  Superager status",
-        xlabel="Standardised β (95% CI)",
+        xlabel="Standardized β (95% CI)",
         xlim=(-0.15, 0.55),
         color="#2E6FA3",
         networks=networks,
@@ -240,7 +240,7 @@ def main():
     plot_forest(
         ax_c, em_stats,
         title="C)  Episodic memory",
-        xlabel="Standardised β (95% CI)",
+        xlabel="Standardized β (95% CI)",
         xlim=(-0.05, 0.18),
         color="#C1440E",
         networks=networks,
