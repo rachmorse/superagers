@@ -68,7 +68,7 @@ The code is available under the MIT License, allowing others to reuse and adapt 
     - `plot_group_connectivity_figure.py`: Plots a single subject's structural connectivity matrix, functional connectivity matrix, and SFC vector.
     - `run_sfc_pipeline.py`: Runs the two numbered scripts above, looping through each timepoint.
 
-### elastic_net
+### en_svm_models
 - **Purpose:** Prepare and run logistic elastic net and linear SVM models to classify participants as superagers or typical older adults.
 - **Scripts:**
     - `prep_data_for_en.py`: Prepares data for elastic net models. 
