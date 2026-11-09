@@ -266,14 +266,22 @@ MODEL_SPECS <- list(
   )
 )
 
-# Fit every model type x network for one atlas, with FDR across networks within each model type
+# FDR families: regional divisions and memory-relevant networks
+FDR_FAMILIES <- list(
+  regional = c("global", "hmod", "sensory"),
+  network = c("dmn", "control", "salience")
+)
+
+# Fit every model type x network for one atlas, with FDR within each family per model type
 fit_lme_models <- function(data_long) {
   lapply(MODEL_SPECS, function(spec) {
     fits <- lapply(NETWORKS, function(sfc) {
       fill <- function(x) gsub("{sfc}", sfc, x, fixed = TRUE)
       get_mixed_effects_stats(as.formula(fill(spec$formula)), data_long, fill(spec$term))
     })
-    p_fdr <- p.adjust(sapply(fits, `[[`, "p_value"), method = "fdr")
+    p_values <- sapply(fits, `[[`, "p_value")
+    p_fdr <- setNames(rep(NA_real_, length(fits)), names(fits))
+    for (fam in FDR_FAMILIES) p_fdr[fam] <- p.adjust(p_values[fam], method = "fdr")
     Map(function(fit, p) c(fit, p_fdr = p), fits, p_fdr)
   })
 }
