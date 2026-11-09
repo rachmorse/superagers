@@ -85,7 +85,8 @@ The code is available under the MIT License, allowing others to reuse and adapt 
 - **Scripts:**  
     - `analyses.R`: Runs full results pipeline: mixed-effects models for episodic memory, superager status, and SFC with FDR correction.
     - `results.Rmd`: R Markdown document that sources `analyses.R` and auto-fills the results section with model outputs.
-    - `plot_sfc_difference.py`: Averages superager vs. typical older adult SFC difference maps and saves a cortical/subcortical figure.
+    - `plot_sfc_difference.py`: Averages superager vs. typical older adult SFC difference maps for each atlas and renders cortical/subcortical views.
     - `plot_sfc_em_cortex.py`: Combines the figure from `plot_sfc_difference.py` with forest plots of the mixed-effects results saved by `analyses.R`.
+    - `plot_sfc_atlas_maps.py`: Plots the Schaefer 200 and 400 SFC difference maps for the supplement.
     - `demographics_table.py`: Generates the participant characteristics table comparing superagers and typical older adults at each timepoint.
     - `classification_flow_figure.py`: Plots the flow of participants through superager classification at baseline and follow-up.
