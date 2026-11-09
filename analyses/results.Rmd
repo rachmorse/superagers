@@ -55,11 +55,13 @@ OUTPUTS <- c(
   sfc_em = "Figure",
   lme = "Table",
   motion = "Supplementary Table",
+  criteria = "Supplementary Table",  # Comparison of superaging criteria (not in this file but used for table numbering)
   flow = "Supplementary Figure",
   en_features = "Supplementary Table",
   en_svm = "Supplementary Table",
   en_svm_importance = "Supplementary Figure",
-  lme_s400 = "Supplementary Table"
+  lme_change = "Supplementary Table",
+  atlas_comparison = "Supplementary Figure"
 )
 
 # Start figure numbering at 2 and supplementary tables at 2
@@ -93,7 +95,7 @@ single_figure <- function(file, width) {
 # Italicize heading rows and indent the rest by level
 style_rows <- function(ft, labels, is_heading, level) {
   ft <- compose(ft, i = which(is_heading), j = 1, value = as_paragraph(as_i(labels[is_heading])))
-  for (l in 1:2) ft <- padding(ft, i = which(level == l), j = 1, padding.left = 18 * l)
+  for (l in 1:3) ft <- padding(ft, i = which(level == l), j = 1, padding.left = 18 * l)
   ft
 }
 
@@ -120,7 +122,8 @@ fmt_ci_text <- function(x) {
 # 95% CI as "lo-hi" for table cells
 fmt_ci_dash <- function(x) {
   ci <- as.numeric(x$ci)
-  paste0(formatC(ci[1], format = "f", digits = 4), "-",
+  sep <- if (ci[2] < 0) "- " else "-"  # Space stops markdown turning "--" into an en dash
+  paste0(formatC(ci[1], format = "f", digits = 4), sep,
          formatC(ci[2], format = "f", digits = 4))
 }
 
@@ -171,7 +174,7 @@ agreement <- function(features) en_svm_agreement[en_svm_agreement$features == fe
 fmt_auc <- function(x) {
   f3 <- function(v) formatC(v, format = "f", digits = 3)
   paste0("AUC=", f3(x$auc), ", 95% CI ", f3(x$ci_low), " to ", f3(x$ci_high),
-         ", p", fmt_p(x$p_value, 3), ", pFDR", fmt_p(x$p_fdr, 3), ", ", x$n_perm, " permutations")
+         ", p", fmt_p(x$p_value, 3), ", pFDR", fmt_p(x$p_fdr, 3))
 }
 
 ### Derived demographic stats ###
@@ -193,19 +196,21 @@ pct_sa <- round(as.numeric(demo_cell("N", "Superager")) / as.numeric(demo_cell("
 # Main atlas results
 res <- lme_results[[MAIN_ATLAS]]
 
+# Schaefer 400 results
+res_s400 <- lme_results$schaefer400
+
 # Min p-value or pFDR across networks, excluding any reported separately
 min_stat <- function(fits, stat, exclude = character(0)) {
   min(sapply(fits[setdiff(names(fits), exclude)], `[[`, stat), na.rm = TRUE)
 }
 
-min_sfc_slope_p <- min_stat(res$group_change, "p_value")
-min_sfc_slope_p_fdr <- min_stat(res$group_change, "p_fdr")
-min_ravlt_slope_p <- min_stat(res$memory_change, "p_value", exclude = "salience")
-min_ravlt_slope_p_fdr <- min_stat(res$memory_change, "p_fdr", exclude = "salience")
-fmt_round2 <- function(p) formatC(round(p, 2), format = "f", digits = 2)
+# SFC change minimums across both atlases (Schaefer 200 SN reported separately as nominally significant)
+min_sfc_slope_p <- min(min_stat(res$group_change, "p_value"), min_stat(res_s400$group_change, "p_value"))
+min_sfc_slope_p_fdr <- min(min_stat(res$group_change, "p_fdr"), min_stat(res_s400$group_change, "p_fdr"))
+min_ravlt_slope_p <- min(min_stat(res$memory_change, "p_value", exclude = "salience"), min_stat(res_s400$memory_change, "p_value"))
+min_ravlt_slope_p_fdr <- min(min_stat(res$memory_change, "p_fdr", exclude = "salience"), min_stat(res_s400$memory_change, "p_fdr"))
 
-# Supplementary atlas results
-res_s400 <- lme_results$schaefer400
+fmt_round2 <- function(p) formatC(round(p, 2), format = "f", digits = 2)
 ```
 
 ```{css, echo=FALSE, include=knitr::is_html_output()}
@@ -217,7 +222,7 @@ table caption { margin: 28px 0 8px; font-size: 1.05em; color: #000; }
 .fig-single img { height: auto; }
 ```
 
-Our overall cohort included `r demo_cell("N", "Whole cohort")` participants: `r demo_cell("Female, n (%)", "Whole cohort")` were female with a mean (range) baseline age of `r demo_cell("Age", "Whole cohort range", "Baseline")` years. `r pct_sa`% of the cohort met longitudinal superager criteria (see `r ref("flow")` for more details). Superagers and typical older adults did not vary on age at baseline (p`r demo_p("Age", "Baseline")`) or follow-up (p`r demo_p("Age", "Follow-up")`), years of education (p`r demo_p("Education (years)")`), baseline MMSE scores (p`r demo_p("MMSE", "Baseline")`), or follow-up duration (p`r demo_p("Follow-up duration (years)", "Follow-up")`); however, superagers were more likely to be female (p`r demo_p("Female, n (%)")`) and had higher MMSE scores at follow-up (p`r demo_p("MMSE", "Follow-up")`). These demographic statistics are summarized in `r ref("demographics")`.
+Our overall cohort included `r demo_cell("N", "Whole cohort")` participants: `r demo_cell("Female, n (%)", "Whole cohort")` female participants with a mean (range) baseline age of `r demo_cell("Age", "Whole cohort range", "Baseline")` years. `r pct_sa`% of the cohort met longitudinal superager criteria (see `r ref("flow")` for further details). Superagers and typical older adults did not vary on age at baseline (p`r demo_p("Age", "Baseline")`) or follow-up (p`r demo_p("Age", "Follow-up")`), years of education (p`r demo_p("Education (years)")`), baseline MMSE scores (p`r demo_p("MMSE", "Baseline")`), or follow-up duration (p`r demo_p("Follow-up duration (years)", "Follow-up")`). However, superagers were more likely to be female (p`r demo_p("Female, n (%)")`) and had higher MMSE scores at follow-up (p`r demo_p("MMSE", "Follow-up")`). These demographic statistics as well as statistics regarding the tests used to define superagers are summarized in `r ref("demographics")`.
 
 ```{r table1, results='asis'}
 n_row <- demographics_table[demographics_table$Variable == "N", ]
@@ -243,13 +248,13 @@ finish_table(ft, caption_title("demographics", "Participant characteristics"))
 ```
 
 ::: {.note}
-Values are mean (SD) or n (%), except age and MMSE, which are mean (range).
+Values are mean (SD) or n (%).
 &dagger;Used to classify superagers; group differences on these measures are expected by design.
 Abbreviations: MMSE, Mini-Mental State Examination;
 RAVLT, Rey Auditory Verbal Learning Test; SD, standard deviation.
 :::
 
-**Machine learning elastic net models:** We calculated SFC as the correlation between each region's structural connectivity – measured through whole-brain tractography – and functional connectivity – measured as resting-state timeseries correlations (Figure 1; details in Methods). We used SFC, structural connectivity, and functional connectivity as features in separate elastic net classification models predicting superager status. Only SFC significantly predicted superager status in both the baseline (`r fmt_auc(en("SFC", "t1"))`) and baseline plus annual change (`r fmt_auc(en("SFC", "t1_slope"))`) models. Neither the functional connectivity baseline (`r fmt_auc(en("FC", "t1"))`) nor baseline plus annual change (`r fmt_auc(en("FC", "t1_slope"))`) models were significant, nor were the structural connectivity baseline (`r fmt_auc(en("SC", "t1"))`) or baseline plus annual change (`r fmt_auc(en("SC", "t1_slope"))`) models (`r ref("en_models")`). Permutation counts show how many shuffled-label models we ran before 50 matched or exceeded the model's AUC, indicating non-significance. The maximum number of possible permutations was 1,000. The top SFC features selected by permutation-based feature importance were broadly distributed across networks in both the baseline and baseline plus annual change models (`r ref("en_importance")`; `r ref("en_features")`). We repeated the analyses with a second machine learning model, a linear support vector machine, and found the same pattern: only SFC significantly predicted superager status in both the baseline and baseline plus annual change models (`r ref("en_svm")`). SFC feature importance was also strongly correlated between the two models (`r ref("en_svm_importance")`).
+**Machine learning models:** We calculated SFC as the correlation between each region's structural connectivity – measured through whole-brain tractography – and functional connectivity – measured as resting-state timeseries correlations (Figure 1; details in Methods). We used SFC, structural connectivity, and functional connectivity as features in separate elastic net classification models predicting superager status. Only SFC significantly predicted superager status in both the baseline (`r fmt_auc(en("SFC", "t1"))`) and baseline plus annual change (`r fmt_auc(en("SFC", "t1_slope"))`) models. Neither the functional connectivity baseline (`r fmt_auc(en("FC", "t1"))`) nor baseline plus annual change (`r fmt_auc(en("FC", "t1_slope"))`) models were significant, nor were the structural connectivity baseline (`r fmt_auc(en("SC", "t1"))`) or baseline plus annual change (`r fmt_auc(en("SC", "t1_slope"))`) models (`r ref("en_models")`). The top SFC features selected by permutation-based feature importance were broadly distributed across networks in both the baseline and baseline plus annual change models (`r ref("en_importance")`; `r ref("en_features")`). We repeated the analyses with a second machine learning model, a linear support vector machine, and found the same pattern: only SFC significantly predicted superager status in both the baseline and baseline plus annual change models (`r ref("en_svm")`). SFC feature importance was also strongly correlated between the two models (`r ref("en_svm_importance")`).
 
 ```{r table_en, results='asis'}
 CONNECTIVITY_LABELS <- c(SFC = "Structure-function coupling", FC = "Functional connectivity", SC = "Structural connectivity")
@@ -294,22 +299,24 @@ The 20 most important structure-function coupling features in the baseline (A) a
 Abbreviations: LH, left hemisphere; PCC, posterior cingulate cortex; PFC, prefrontal cortex; R, right; RH, right hemisphere.
 :::
 
-**Structure-function coupling, superager status, and episodic memory:** We next used repeated-measures linear mixed-effects models to examine whether SFC varied longitudinally by superager status at the global and network levels. Superagers showed higher SFC than typical older adults globally (`r fmt_stats(res$group$global)`), in heteromodal regions (`r fmt_stats(res$group$hmod)`), and in memory-relevant networks including the DMN (`r fmt_stats(res$group$dmn)`), ECN (`r fmt_stats(res$group$control)`), and SN (`r fmt_stats(res$group$salience)`). By contrast, SFC in sensory regions did not differ by superager status (p`r fmt_p(res$group$sensory$p_value)`, pFDR`r fmt_p_fdr(res$group$sensory)`). `r ref("sfc_em")`A presents the difference in global SFC between superagers and typical older adults averaged across baseline and follow-up, with warmer colors indicating higher SFC in superagers, and `r ref("sfc_em")`B summarizes these results.
+**Structure-function coupling, superager status, and episodic memory:** We next used repeated-measures linear mixed-effects models to examine whether SFC varied longitudinally by superager status at the global and network levels across two brain parcellations: the Schaefer 200 and Schaefer 400, both with added subcortical regions. With the Schaefer 200 parcellation, superagers showed higher SFC than typical older adults globally (`r fmt_stats(res$group$global)`), in heteromodal regions (`r fmt_stats(res$group$hmod)`), and in memory-relevant networks including the DMN (`r fmt_stats(res$group$dmn)`), ECN (`r fmt_stats(res$group$control)`), and SN (`r fmt_stats(res$group$salience)`). By contrast, SFC in sensory regions did not differ by superager status (p`r fmt_p(res$group$sensory$p_value)`, pFDR`r fmt_p_fdr(res$group$sensory)`).
+
+We found similar results using the Schaefer 400 parcellation. Superagers showed higher SFC than typical older adults in the ECN (`r fmt_stats(res_s400$group$control)`) and SN (`r fmt_stats(res_s400$group$salience)`). We found nominally significant results in heteromodal regions (`r fmt_stats(res_s400$group$hmod)`) and trends globally (`r fmt_stats(res_s400$group$global)`) and in the DMN (`r fmt_stats(res_s400$group$dmn)`). As in the Schaefer 200 parcellation, SFC in sensory regions did not differ by superager status (p`r fmt_p(res_s400$group$sensory$p_value)`, pFDR`r fmt_p_fdr(res_s400$group$sensory)`).
 
 ```{r figure-sfc-em, results='asis'}
-fig_title("sfc_em", "Structure-function coupling, episodic memory, and superagers status analyses")
+fig_title("sfc_em", "Structure-function coupling, episodic memory, and superager status analyses")
 single_figure(paste0("em_sfc_cortex_plot_", MAIN_ATLAS, ".png"), "100%")
 ```
 
 ::: {.note}
-(A) Cortical surface and subcortical plot of the unthresholded mean difference in global structure-function coupling between superagers and typical older adults, averaged across both timepoints. Warm colors indicate higher coupling in superagers; cool colors indicate lower coupling. (B, C) Linear mixed-effects model coefficients and 95% confidence intervals for regional structure-function coupling as a function of superager status (B) and episodic memory (C). Filled circles: p < .05 (uncorrected), open circles: non-significant, * pFDR < .05. Abbreviations: FDR, false discovery rate; SFC, structure-function coupling; DMN, default mode network; ECN, executive control network; SN, salience network; CI, confidence interval.
+(A) Cortical surface and subcortical plot of the unthresholded mean difference in regional structure-function coupling between superagers and typical older adults in the Schaefer 200 parcellation, averaged across both timepoints. Warm colors indicate higher coupling in superagers; cool colors indicate lower coupling. (B, C) Linear mixed-effects model coefficients and 95% confidence intervals for regional structure-function coupling as a function of superager status (B) and episodic memory (C) in the Schaefer 200 (solid lines) and Schaefer 400 (dotted lines) parcellations. Boxes show pFDR for each parcellation. Filled boxes are significant after FDR correction, outlined boxes are nominally significant (p < 0.05, uncorrected), and gray boxes are not significant. Abbreviations: FDR, false discovery rate; SFC, structure-function coupling; DMN, default mode network; ECN, executive control network; SN, salience network; CI, confidence interval.
 :::
 
-We next examined the relationship between global and network level SFC and episodic memory across the cohort longitudinally with linear mixed-effects models. Higher SFC was associated with better episodic memory globally (`r fmt_stats(res$memory$global)`), in heteromodal regions (`r fmt_stats(res$memory$hmod)`), and in the DMN (`r fmt_stats(res$memory$dmn)`). The association in the ECN was nominally significant (`r fmt_stats(res$memory$control)`), and the SN showed a trend (`r fmt_stats(res$memory$salience)`). SFC in sensory regions was not associated with episodic memory (p`r fmt_p(res$memory$sensory$p_value)`, pFDR`r fmt_p_fdr(res$memory$sensory)`). `r ref("sfc_em")`C displays these results.
+We next examined the relationship between global and network level SFC and episodic memory across the cohort longitudinally with linear mixed-effects models. With the Schaefer 200 parcellation, higher SFC was associated with better episodic memory globally (`r fmt_stats(res$memory$global)`) and in heteromodal regions (`r fmt_stats(res$memory$hmod)`). We found nominally significant results in the DMN (`r fmt_stats(res$memory$dmn)`) and the ECN (`r fmt_stats(res$memory$control)`). The SN showed a trend (`r fmt_stats(res$memory$salience)`). SFC in sensory regions was not associated with episodic memory (p`r fmt_p(res$memory$sensory$p_value)`, pFDR`r fmt_p_fdr(res$memory$sensory)`).
 
-We next examined whether global and network level SFC change – modeled as an interaction with time in linear mixed-effects models – differed by superager status or was associated with episodic memory. We found no evidence that superager status was associated with SFC change in any network (ps ≥ `r fmt_round2(min_sfc_slope_p)`, pFDRs ≥ `r fmt_round2(min_sfc_slope_p_fdr)`). SFC change in the SN was weakly associated with episodic memory, but this did not survive correction for multiple comparisons (`r fmt_stats(res$memory_change$salience)`), and SFC change in other networks was not associated with episodic memory (ps ≥ `r fmt_round2(min_ravlt_slope_p)`, pFDRs ≥ `r fmt_round2(min_ravlt_slope_p_fdr)`). `r ref("lme")` summarizes all structure-function coupling, superager status, and episodic memory results.
+With the Schaefer 400 parcellation, we found that higher SFC was associated with better episodic memory globally (`r fmt_stats(res_s400$memory$global)`), in heteromodal regions (`r fmt_stats(res_s400$memory$hmod)`), the DMN (`r fmt_stats(res_s400$memory$dmn)`), the SN (`r fmt_stats(res_s400$memory$salience)`), and the ECN (`r fmt_stats(res_s400$memory$control)`). SFC in sensory regions was not associated with episodic memory (p`r fmt_p(res_s400$memory$sensory$p_value)`, pFDR`r fmt_p_fdr(res_s400$memory$sensory)`). `r ref("lme")` summarizes these results. `r ref("sfc_em")`A presents the difference in regional SFC between superagers and typical older adults averaged across baseline and follow-up, with warmer colors indicating higher SFC in superagers (see `r ref("atlas_comparison")` for a comparison with both parcellations). `r ref("sfc_em")`B and `r sub("Figure ", "", ref("sfc_em"))`C display these results by parcellation.
 
-We found similar results using the higher-resolution Schaefer 400 parcellation (`r ref("lme_s400")`). Superagers showed higher SFC than typical older adults in the ECN, which survived correction for multiple comparisons, with nominally significant effects in heteromodal regions and the SN, and trends globally and in the DMN. Higher SFC was associated with better episodic memory globally, in heteromodal regions, the DMN, and the SN, with a nominally significant association in the ECN. As in the main analysis, SFC in sensory regions neither differed by superager status nor was associated with episodic memory, and SFC change was not associated with superager status or episodic memory.
+We next examined whether global and network level SFC change – modeled as an interaction with time in linear mixed-effects models – differed by superager status or was associated with episodic memory. We found no evidence that superager status was associated with SFC change in any network across either parcellation (ps ≥ `r fmt_round2(min_sfc_slope_p)`, pFDRs ≥ `r fmt_round2(min_sfc_slope_p_fdr)`). In the Schaefer 200 parcellation, SFC change in the SN was associated with episodic memory, but this did not survive correction for multiple comparisons (`r fmt_stats(res$memory_change$salience)`). SFC change in other networks was not associated with episodic memory in either parcellation (ps ≥ `r fmt_round2(min_ravlt_slope_p)`, pFDRs ≥ `r fmt_round2(min_ravlt_slope_p_fdr)`). `r ref("lme_change")` summarizes these results.
 
 ```{r table2, results='asis'}
 # Helpers to build data rows for LME models
@@ -348,35 +355,51 @@ type_labels <- c(
   "Repeated measures linear mixed-effects analyses — change"
 )
 
-# Type and header rows, then one row per network
-lme_section <- function(fits, type_label, header, suffix = "") {
+ATLAS_LABELS <- c(schaefer200 = "Schaefer 200", schaefer400 = "Schaefer 400")
+
+# Outcome header, then one block of network rows per atlas
+lme_section <- function(res_by_atlas, model, header, suffix = "") {
   bind_rows(
-    type_row(type_label),
     hdr_row(header),
-    bind_rows(Map(function(fit, net) lme_row(paste0(NETWORK_LABELS[[net]], suffix), fit), fits, names(fits)))
+    bind_rows(Map(function(res, atlas) {
+      fits <- res[[model]]
+      bind_rows(
+        hdr_row(ATLAS_LABELS[[atlas]]),
+        bind_rows(Map(function(fit, net) lme_row(paste0(NETWORK_LABELS[[net]], suffix), fit), fits, names(fits)))
+      )
+    }, res_by_atlas, names(res_by_atlas)))
   )
 }
 
-# All LME results for one atlas
-lme_table <- function(res) {
-  bind_rows(
-    lme_section(res$group, type_labels[1], "Superager status"),
-    lme_section(res$group_change, type_labels[2], "Superager status", " × time"),
-    lme_section(res$memory, type_labels[1], "Episodic memory"),
-    lme_section(res$memory_change, type_labels[2], "Episodic memory", " × time")
-  )
+# Main effects (change = FALSE) or SFC change (change = TRUE) for both atlases
+lme_table <- function(res_by_atlas, change = FALSE) {
+  if (change) {
+    bind_rows(
+      type_row(type_labels[2]),
+      lme_section(res_by_atlas, "group_change", "Superager status", " × time"),
+      lme_section(res_by_atlas, "memory_change", "Episodic memory", " × time")
+    )
+  } else {
+    bind_rows(
+      type_row(type_labels[1]),
+      lme_section(res_by_atlas, "group", "Superager status"),
+      lme_section(res_by_atlas, "memory", "Episodic memory")
+    )
+  }
 }
 
-# Headings italic and full width, network rows indented below them
+# Headings italic and full width: outcome, then atlas, then indented network rows
 render_lme_table <- function(tbl, title) {
   is_heading <- tbl$`Coefficient (95% CI)` == ""
-  level <- ifelse(tbl$Region %in% type_labels, 0, ifelse(is_heading, 1, 2))
+  level <- ifelse(tbl$Region %in% type_labels, 0,
+           ifelse(tbl$Region %in% ATLAS_LABELS, 2,
+           ifelse(is_heading, 1, 3)))
   ft <- style_rows(base_table(tbl, "lrrrrr"), tbl$Region, is_heading, level)
   for (i in which(is_heading)) ft <- merge_h_range(ft, i = i, j1 = 1, j2 = ncol(tbl))
   finish_table(ft, title)
 }
 
-render_lme_table(lme_table(res), caption_title("lme", "Associations between structure-function coupling, superager status, and episodic memory"))
+render_lme_table(lme_table(lme_results[ATLASES]), caption_title("lme", "Associations between structure-function coupling, superager status, and episodic memory"))
 ```
 
 ::: {.note}
@@ -390,14 +413,14 @@ FDR, false discovery rate; SFC, structure-function coupling; SN, salience networ
 
 ### Functional magnetic resonance imaging motion
 
-We excluded 33 participants for excessive head motion (more than 30% of volumes exceeding 0.5 mm framewise displacement): 21 at baseline and 22 at follow-up, with 10 excluded at both. Superagers and typical older adults did not differ significantly in mean framewise displacement or volumes scrubbed at baseline or follow-up (`r ref("motion")`).
+We excluded 33 participants for excessive head motion (more than 30% of volumes exceeding 0.5 mm framewise displacement). Superagers and typical older adults did not differ significantly in mean framewise displacement or volumes scrubbed at baseline or follow-up (`r ref("motion")`).
 
 ```{r table_motion, results='asis'}
-render_sectioned_table(motion_table, "lrrrr", caption_title("motion", "Head motion during resting-state fMRI at baseline and follow-up"))
+render_sectioned_table(motion_table, "lrrrr", caption_title("motion", "Motion during functional magnetic resonance imaging"))
 ```
 
 ::: {.note}
-Values are mean (SD). P-values are from Welch t-tests.
+Values are mean (SD). p-values are from Welch t-tests.
 Abbreviations: fMRI, functional magnetic resonance imaging; SD, standard deviation.
 :::
 
@@ -415,6 +438,8 @@ Abbreviations: RAVLT, Rey Auditory Verbal Learning Test; TMT-B, Trail Making Tes
 :::
 
 ### Elastic net feature importance
+
+`r ref("en_features")` lists the top-ranked SFC features from the elastic net models alongside their ranks in the elastic net and linear support vector machine models.
 
 ```{r table_en_features, results='asis'}
 en_title <- caption_title("en_features", "Top structure-function coupling features from the elastic net models")
@@ -444,7 +469,7 @@ Permutations show how many shuffled-label models were run before 50 matched or e
 Abbreviations: AUC, area under the curve; CI, confidence interval; FDR, false discovery rate.
 :::
 
-SFC feature importance was strongly correlated between the elastic net and linear support vector machine models in both the baseline (Spearman ρ=`r fmt_round2(agreement("t1")$spearman_rho)`) and baseline plus annual change (ρ=`r fmt_round2(agreement("t1_slope")$spearman_rho)`) models (`r ref("en_svm_importance")`). Of the `r agreement("t1")$top_n` most important SFC features in each model, `r agreement("t1")$top_n_shared` were shared in the baseline model and `r agreement("t1_slope")$top_n_shared` in the baseline plus annual change model.
+SFC feature importance was strongly correlated between the elastic net and linear support vector machine models in both the baseline (Spearman ρ=`r fmt_round2(agreement("t1")$spearman_rho)`) and baseline plus annual change (Spearman ρ=`r fmt_round2(agreement("t1_slope")$spearman_rho)`) models (`r ref("en_svm_importance")`). Of the `r agreement("t1")$top_n` most important SFC features in each model, `r agreement("t1")$top_n_shared` were shared in the baseline model and `r agreement("t1_slope")$top_n_shared` in the baseline plus annual change model.
 
 ```{r figure-en-svm-importance, results='asis'}
 fig_title("en_svm_importance", "SFC feature importance in the elastic net and linear support vector machine models")
@@ -456,10 +481,10 @@ Each point is one SFC feature, colored by network. Filled points are baseline fe
 Abbreviations: AUC, area under the curve; LH, left hemisphere; RH, right hemisphere; SFC, structure-function coupling; SVM, support vector machine.
 :::
 
-### Schaefer 400 parcellation
+### Structure-function coupling change
 
 ```{r table_s1, results='asis'}
-render_lme_table(lme_table(res_s400), caption_title("lme_s400", "Associations between structure-function coupling, superager status, and episodic memory using the Schaefer 400 parcellation"))
+render_lme_table(lme_table(lme_results[ATLASES], change = TRUE), caption_title("lme_change", "Associations between structure-function coupling change, superager status, and episodic memory"))
 ```
 
 ::: {.note}
@@ -467,4 +492,15 @@ Models adjust for time, baseline age, sex, and years of education, with a random
 \* p < 0.05, \*\* p < 0.01, \*\*\* p < 0.001.
 Abbreviations: CI, confidence interval; DMN, default mode network; ECN, executive control network;
 FDR, false discovery rate; SFC, structure-function coupling; SN, salience network.
+:::
+
+### Schaefer parcellations
+
+```{r figure-atlas-comparison, results='asis'}
+fig_title("atlas_comparison", "Structure-function coupling difference between superagers and typical older adults in the Schaefer 200 and 400 parcellations")
+single_figure("sfc_diff_atlas_maps.png", "100%")
+```
+
+::: {.note}
+Cortical surface and subcortical plots of the unthresholded mean difference in structure-function coupling between superagers and typical older adults, averaged across both timepoints, in the Schaefer 200 (top) and Schaefer 400 (bottom) parcellations. Warm colors indicate higher coupling in superagers; cool colors indicate lower coupling.
 :::
