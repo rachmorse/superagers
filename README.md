@@ -5,6 +5,9 @@ This repository contains the analysis scripts from our study on superagers, whic
 ## Usage
 This repository provides details on the analyses for transparency. The dataset is not included, though it can be requested with appropriate ethical approval.
 
+## Installation
+Install the dependencies with `poetry install`, then activate the environment with `poetry shell`.
+
 ## License
 The code is available under the MIT License, allowing others to reuse and adapt it with appropriate credit.
 
@@ -16,7 +19,7 @@ The code is available under the MIT License, allowing others to reuse and adapt 
   - [fmri_analysis](#fmri_analysis)
   - [structural_analysis](#structural_analysis)
   - [structure_function_coupling](#structure_function_coupling)
-  - [elastic_net](#elastic_net)
+  - [en_svm_models](#en_svm_models)
   - [analyses](#analyses)
 
 ## Folders
