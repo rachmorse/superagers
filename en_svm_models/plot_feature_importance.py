@@ -13,7 +13,7 @@ from prep_data_for_en import ATLAS
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "analyses"))
 from plot_sfc_difference import crop_colorbar, trim_whitespace
 
-RESULTS_DIR = Path("/home/rachel/Desktop/superagers/elastic_net/results")
+RESULTS_DIR = Path("/home/rachel/Desktop/superagers/en_svm_models/results")
 FEATURE_IMPORTANCE_T1_CSV = RESULTS_DIR / f"{ATLAS}_SFC_ROI_t1_long_include_feature_importance.csv"
 FEATURE_IMPORTANCE_SLOPE_CSV = RESULTS_DIR / f"{ATLAS}_SFC_ROI_t1_slope_long_include_feature_importance.csv"
 OUTPUT_PATH = Path(
