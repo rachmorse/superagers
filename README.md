@@ -93,3 +93,4 @@ The code is available under the MIT License, allowing others to reuse and adapt 
     - `plot_sfc_atlas_maps.py`: Plots the Schaefer 200 and 400 SFC difference maps for the supplement.
     - `demographics_table.py`: Generates the participant characteristics table comparing superagers and typical older adults at each timepoint.
     - `classification_flow_figure.py`: Plots the flow of participants through superager classification at baseline and follow-up.
+    - `make_source_data.py`: Generates the source data file for the main figures.
