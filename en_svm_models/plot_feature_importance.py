@@ -22,6 +22,11 @@ OUTPUT_PATH = Path(
 TEMP_PATH = Path(
     "/home/rachel/Desktop/superagers/elastic_net/figures_tables/_brain_temp"
 )
+TOP_N = 20  # Bars per panel
+MODEL_TITLES = {  # Feature set -> panel title
+    "t1": "Baseline model",
+    "t1_slope": "Baseline + annual change model",
+}
 
 # Sub-region abbreviation to full name from Schaefer 200 atlas
 ROI_ABBREV = {
@@ -271,7 +276,7 @@ def plot_roi_panel(ax: plt.Axes, df: pd.DataFrame, panel_label: str,
     top20 = (
         df[df["perm_importance_mean"] > 0]
         .sort_values("perm_importance_mean", ascending=True)
-        .tail(20)
+        .tail(TOP_N)
         .reset_index(drop=True)
     )
 
@@ -407,8 +412,8 @@ def main():
     fig, (ax_a, ax_b) = plt.subplots(2, 1, figsize=(fig_w, fig_h))
     plot_roi_panel(ax_a, df_t1,    "A", is_slope_model=False)
     plot_roi_panel(ax_b, df_slope, "B", is_slope_model=True)
-    ax_a.set_title("Baseline model",                 fontsize=11, fontweight="bold", pad=8)
-    ax_b.set_title("Baseline + annual change model", fontsize=11, fontweight="bold", pad=8)
+    ax_a.set_title(MODEL_TITLES["t1"],       fontsize=11, fontweight="bold", pad=8)
+    ax_b.set_title(MODEL_TITLES["t1_slope"], fontsize=11, fontweight="bold", pad=8)
     plt.tight_layout(pad=0.5, rect=[0, brain_frac, 1, top_frac])
     plt.subplots_adjust(left=0.42, bottom=brain_frac, top=top_frac)
 
