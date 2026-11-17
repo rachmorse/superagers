@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite it as below."
+type: software
+title: "Structure Function Coupling Classifies Superagers and is Associated with Episodic Memory in Aging"
+authors:
+  - family-names: Morse
+    given-names: Rachel M.
+    affiliation: "University of Barcelona"
+repository-code: "https://github.com/rachmorse/superagers"
+license: MIT
