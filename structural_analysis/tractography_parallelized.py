@@ -3,6 +3,7 @@
 Requires the MATLAB script 'spm_coregister_parcellation.m' in the same directory as this script.
 """
 
+import getpass
 import json
 import logging
 import multiprocessing
@@ -34,7 +35,7 @@ RECON_ALL_DIRS: Dict[str, Path] = {
     "bbhi senior": Path("/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6"),
 }
 
-GIT_DIR = Path("/home/rachel/Desktop/superagers/structural_analysis")
+SCRIPT_DIR = Path(__file__).resolve().parent  # holds spm_coregister_parcellation.m and logs/
 WORKING_DIR_ROOT = Path("/home/rachel/Desktop/schaefer_analysis/tracto_wd")
 SPM_PATH = Path("/home/rachel/spm12")
 MATLAB_CMD = "/usr/local/bin/matlab -nodesktop -nosplash"
@@ -73,11 +74,8 @@ def setup_logging(output_dir: Path) -> logging.Logger:
 
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ]
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
     )
     return logging.getLogger()
 
@@ -116,6 +114,31 @@ def run_command(cmd: Union[str, List[str]], shell: bool = True) -> None:
         logging.error(f"STDOUT: {e.stdout}")
         logging.error(f"STDERR: {e.stderr}")
         raise
+
+
+def run_mrtrix_step(cmd: List[str], outputs: List[str]) -> None:
+    """Runs an MRtrix command unless all its outputs already exist.
+
+    Outputs are written under "_partial" names and renamed once the command finishes,
+    so an interrupted run never leaves a file that looks complete.
+
+    Args:
+        cmd: Command to run, using the final output paths.
+        outputs: Output paths written by the command.
+    """
+    if all(Path(output).exists() for output in outputs):
+        return
+
+    partial_paths = {}
+    for output in outputs:
+        path = Path(output)
+        partial_paths[output] = str(path.with_name(f"{path.stem}_partial{path.suffix}"))
+        Path(partial_paths[output]).unlink(missing_ok=True)  # left by an earlier interrupted run
+
+    run_command([partial_paths.get(arg, arg) for arg in cmd])
+
+    for output, partial_path in partial_paths.items():
+        Path(partial_path).rename(output)
 
 
 def find_recon_all_dir(subject_id: str, cohort: str) -> Optional[Path]:
@@ -204,7 +227,7 @@ def run_coregistration(
     *,
     input_corr_dwi: Path,
     fs_dir: Path,
-    git_dir: Path,
+    script_dir: Path,
     spm_path: Path,
     matlab_cmd: str,
 ) -> str:
@@ -219,7 +242,7 @@ def run_coregistration(
         wd: Working directory file prefix.
         input_corr_dwi: Path to the eddy corrected DWI data.
         fs_dir: Path to the subject's recon-all directory.
-        git_dir: Directory containing the MATLAB script.
+        script_dir: Directory containing the MATLAB script.
         spm_path: Path to the SPM installation.
         matlab_cmd: Command to execute MATLAB.
 
@@ -242,7 +265,7 @@ def run_coregistration(
 
     # MATLAB Coregistration
     matlab_cmd_full = (
-        f"{matlab_cmd} -r \"addpath(genpath('{spm_path}')); addpath('{git_dir}'); "
+        f"{matlab_cmd} -r \"addpath(genpath('{spm_path}')); addpath('{script_dir}'); "
         f"spm_coregister_parcellation('{wd}_b0.nii', '{wd}_fs2diff_coords_T1w.nii', "
         f"'{wd}_fs2diff_coords_aparc+aseg.nii'); exit;\""
     )
@@ -287,18 +310,16 @@ def run_dwi2response(
         threads: Number of threads to use.
     """
     logging.info(f"{subject}: Response Function Estimation")
-    if not Path(f"{wd}_desc-csf_response.txt").exists():
-        # fmt: off
-        run_command([
-            "dwi2response", "dhollander", str(dwi_file),
-            "-fslgrad", str(input_corr_vec), str(input_corr_val),
-            f"{wd}_desc-wm_response.txt",
-            f"{wd}_desc-gm_response.txt",
-            f"{wd}_desc-csf_response.txt",
-            "-mask", f"{wd}_mask.nii.gz",
-            "-nthreads", str(threads),
-        ])
-        # fmt: on
+    responses = [f"{wd}_desc-{tissue}_response.txt" for tissue in ("wm", "gm", "csf")]
+    # fmt: off
+    run_mrtrix_step([
+        "dwi2response", "dhollander", str(dwi_file),
+        "-fslgrad", str(input_corr_vec), str(input_corr_val),
+        *responses,
+        "-mask", f"{wd}_mask.nii.gz",
+        "-nthreads", str(threads),
+    ], outputs=responses)
+    # fmt: on
 
 
 def run_dwi2fod(
@@ -315,18 +336,18 @@ def run_dwi2fod(
         threads: Number of threads to use.
     """
     logging.info(f"{subject}: FOD Estimation")
-    if not Path(f"{wd}_desc-wm_fod.mif").exists():
-        # fmt: off
-        run_command([
-            "dwi2fod", "msmt_csd", str(dwi_file),
-            "-fslgrad", str(input_corr_vec), str(input_corr_val),
-            f"{wd}_desc-wm_response.txt", f"{wd}_desc-wm_fod.mif",
-            f"{wd}_desc-gm_response.txt", f"{wd}_desc-gm_fod.mif",
-            f"{wd}_desc-csf_response.txt", f"{wd}_desc-csf_fod.mif",
-            "-mask", f"{wd}_mask.nii.gz",
-            "-nthreads", str(threads),
-        ])
-        # fmt: on
+    fods = [f"{wd}_desc-{tissue}_fod.mif" for tissue in ("wm", "gm", "csf")]
+    # fmt: off
+    run_mrtrix_step([
+        "dwi2fod", "msmt_csd", str(dwi_file),
+        "-fslgrad", str(input_corr_vec), str(input_corr_val),
+        f"{wd}_desc-wm_response.txt", fods[0],
+        f"{wd}_desc-gm_response.txt", fods[1],
+        f"{wd}_desc-csf_response.txt", fods[2],
+        "-mask", f"{wd}_mask.nii.gz",
+        "-nthreads", str(threads),
+    ], outputs=fods)
+    # fmt: on
 
 
 def run_5ttgen(subject: str, wd: Path) -> None:
@@ -337,14 +358,14 @@ def run_5ttgen(subject: str, wd: Path) -> None:
         wd: Working directory file prefix.
     """
     logging.info(f"{subject}: 5 Tissues")
-    if not Path(f"{wd}_fs2diff_coords_aparc+aseg_5TT.nii").exists():
-        # fmt: off
-        run_command([
-            "5ttgen", "freesurfer",
-            f"{wd}_fs2diff_coords_aparc+aseg.nii",
-            f"{wd}_fs2diff_coords_aparc+aseg_5TT.nii",
-        ])
-        # fmt: on
+    five_tt = f"{wd}_fs2diff_coords_aparc+aseg_5TT.nii"
+    # fmt: off
+    run_mrtrix_step([
+        "5ttgen", "freesurfer",
+        f"{wd}_fs2diff_coords_aparc+aseg.nii",
+        five_tt,
+    ], outputs=[five_tt])
+    # fmt: on
 
 
 def run_tractography(subject: str, wd: Path, threads: int) -> None:
@@ -359,31 +380,31 @@ def run_tractography(subject: str, wd: Path, threads: int) -> None:
         threads: Number of threads to use.
     """
     logging.info(f"{subject}: Tractogram calculation")
-    if not Path(f"{wd}_tractogram_10M.tck").exists():
-        # fmt: off
-        run_command([
-            "tckgen", f"{wd}_desc-wm_fod.mif",
-            f"{wd}_tractogram_10M.tck",
-            "-act", f"{wd}_fs2diff_coords_aparc+aseg_5TT.nii",
-            "-backtrack", "-crop_at_gmwmi",
-            "-seed_dynamic", f"{wd}_desc-wm_fod.mif",
-            "-maxlength", "250", "-select", "10M",
-            "-mask", f"{wd}_mask.nii.gz",
-            "-nthreads", str(threads),
-        ])
-        # fmt: on
+    tractogram = f"{wd}_tractogram_10M.tck"
+    # fmt: off
+    run_mrtrix_step([
+        "tckgen", f"{wd}_desc-wm_fod.mif",
+        tractogram,
+        "-act", f"{wd}_fs2diff_coords_aparc+aseg_5TT.nii",
+        "-backtrack", "-crop_at_gmwmi",
+        "-seed_dynamic", f"{wd}_desc-wm_fod.mif",
+        "-maxlength", "250", "-select", "10M",
+        "-mask", f"{wd}_mask.nii.gz",
+        "-nthreads", str(threads),
+    ], outputs=[tractogram])
+    # fmt: on
 
     logging.info(f"{subject}: SIFT2 filtering")
-    if not Path(f"{wd}_tractogram_10M_SIFT2_weights.txt").exists():
-        # fmt: off
-        run_command([
-            "tcksift2", f"{wd}_tractogram_10M.tck",
-            f"{wd}_desc-wm_fod.mif",
-            f"{wd}_tractogram_10M_SIFT2_weights.txt",
-            "-act", f"{wd}_fs2diff_coords_aparc+aseg_5TT.nii",
-            "-nthreads", str(threads),
-        ])
-        # fmt: on
+    weights = f"{wd}_tractogram_10M_SIFT2_weights.txt"
+    # fmt: off
+    run_mrtrix_step([
+        "tcksift2", tractogram,
+        f"{wd}_desc-wm_fod.mif",
+        weights,
+        "-act", f"{wd}_fs2diff_coords_aparc+aseg_5TT.nii",
+        "-nthreads", str(threads),
+    ], outputs=[weights])
+    # fmt: on
 
 
 def cleanup_files(wd: Path) -> None:
@@ -393,21 +414,21 @@ def cleanup_files(wd: Path) -> None:
         wd: Working directory file prefix.
     """
     files_to_remove = [
-            f"{wd}_b0.nii",
-            f"{wd}_b0.nii.gz",
-            f"{wd}_eddy_corrected_data.nii",
-            f"{wd}_eddy_corrected_data.nii.gz",
-            f"{wd}_fs2diff_coords_aparc+aseg.nii",
-            # f"{wd}_fs2diff_coords_aparc+aseg_5TT.nii",        # not deleting while switching to SIFT2
-            f"{wd}_fs2diff_coords_aparc+aseg_nodes.nii.gz",
-            f"{wd}_fs2diff_coords_T1w.nii",
-            f"{wd}_mask.nii.gz",
-            f"{wd}_desc-csf_response.txt",
-            f"{wd}_desc-gm_response.txt",
-            f"{wd}_desc-wm_response.txt",
-            f"{wd}_desc-csf_fod.mif",
-            f"{wd}_desc-gm_fod.mif",
-            # f"{wd}_desc-wm_fod.mif",                           # not deleting while switching to SIFT2
+        f"{wd}_b0.nii",
+        f"{wd}_b0.nii.gz",
+        f"{wd}_eddy_corrected_data.nii",
+        f"{wd}_eddy_corrected_data.nii.gz",
+        f"{wd}_fs2diff_coords_aparc+aseg.nii",
+        f"{wd}_fs2diff_coords_aparc+aseg_5TT.nii",
+        f"{wd}_fs2diff_coords_aparc+aseg_nodes.nii.gz",
+        f"{wd}_fs2diff_coords_T1w.nii",
+        f"{wd}_mask.nii.gz",
+        f"{wd}_desc-csf_response.txt",
+        f"{wd}_desc-gm_response.txt",
+        f"{wd}_desc-wm_response.txt",
+        f"{wd}_desc-csf_fod.mif",
+        f"{wd}_desc-gm_fod.mif",
+        f"{wd}_desc-wm_fod.mif",
     ]
 
     logging.info(f"Cleaning up intermediate files for {wd.name}")
@@ -452,23 +473,20 @@ def process_subject(subject_info: SubjectInfo) -> Tuple[str, bool]:
         logging.info(f"Working on {subject}...")
 
         # 1. Coregistration
-        print(f"Running coregistration for {subject}")
         input_corr_dwi_temp = run_coregistration(
             subject,
             wd,
             input_corr_dwi=input_corr_dwi,
             fs_dir=fs_dir,
-            git_dir=GIT_DIR,
+            script_dir=SCRIPT_DIR,
             spm_path=SPM_PATH,
             matlab_cmd=MATLAB_CMD,
         )
 
         # 2. Masking
-        print(f"Running masking (copying T1 mask) for {subject}")
         prepare_brain_mask(subject, wd, input_corr_dwi_brain_mask)
 
         # 3. Response Function
-        print(f"Running dwi2response for {subject}")
         run_dwi2response(
             subject,
             wd,
@@ -479,7 +497,6 @@ def process_subject(subject_info: SubjectInfo) -> Tuple[str, bool]:
         )
 
         # 4. FOD Estimation
-        print(f"Running dwi2fod for {subject}")
         run_dwi2fod(
             subject,
             wd,
@@ -490,11 +507,9 @@ def process_subject(subject_info: SubjectInfo) -> Tuple[str, bool]:
         )
 
         # 5. 5TT Generation
-        print(f"Running 5ttgen for {subject}")
         run_5ttgen(subject, wd)
 
         # 6. Tractography
-        print(f"Running tractography for {subject}")
         run_tractography(subject, wd, THREADS)
 
         # 7. Cleanup
@@ -534,15 +549,13 @@ def create_dataset_description(output_path: str, spm_path: Path, final_subjects:
         with open(spm_path / "Contents.m") as f:
             for line in f:
                 if "Version" in line and "SPM" in line:
-                    spm_version = line.strip().lstrip('% ').strip()
+                    spm_version = line.strip().lstrip("% ").strip()
                     break
     except OSError:
         spm_version = "unknown"
 
     try:
-        mrtrix_version = subprocess.check_output(
-            ["mrconvert", "-version"], text=True
-        ).splitlines()[0]
+        mrtrix_version = subprocess.check_output(["mrconvert", "-version"], text=True).splitlines()[0]
     except Exception:
         mrtrix_version = "unknown"
 
@@ -553,7 +566,7 @@ def create_dataset_description(output_path: str, spm_path: Path, final_subjects:
     hostname = socket.gethostname()
 
     # Get the current user
-    user = os.getlogin()
+    user = getpass.getuser()  # os.getlogin() fails without a terminal (e.g. nohup after logout)
 
     description = {
         "Name": "Tractography Output " + current_date,
@@ -564,24 +577,12 @@ def create_dataset_description(output_path: str, spm_path: Path, final_subjects:
             "RunOnMachine": hostname,
             "RunByUser": user,
             "Software": [
-                {
-                    "Name": "FSL",
-                    "Version": fsl_version
-                },
-                {
-                    "Name": "SPM",
-                    "Version": spm_version
-                },
-                {
-                    "Name": "FreeSurfer",
-                    "Version": freesurfer_version
-                },
-                {
-                    "Name": "MRTrix",
-                    "Version": mrtrix_version
-                }
+                {"Name": "FSL", "Version": fsl_version},
+                {"Name": "SPM", "Version": spm_version},
+                {"Name": "FreeSurfer", "Version": freesurfer_version},
+                {"Name": "MRTrix", "Version": mrtrix_version},
             ],
-            "SubjectsProcessed": final_subjects
+            "SubjectsProcessed": final_subjects,
         },
     }
 
@@ -591,7 +592,7 @@ def create_dataset_description(output_path: str, spm_path: Path, final_subjects:
     os.makedirs(output_path, exist_ok=True)
 
     try:
-        with open(output_file, 'w') as f:
+        with open(output_file, "w") as f:
             json.dump(description, f, indent=2)
         print(f"Successfully created {output_file}")
     except Exception as e:
@@ -647,7 +648,7 @@ def main() -> None:
     # 1. Environment and logging
     setup_environment()
     WORKING_DIR_ROOT.mkdir(parents=True, exist_ok=True)
-    setup_logging(Path.cwd())
+    setup_logging(SCRIPT_DIR)
 
     # 2. Find subjects (test subjects must also pass get_subjects_to_process)
     subjects = get_subjects_to_process()
