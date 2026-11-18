@@ -54,14 +54,14 @@ OUTPUTS <- c(
   en_importance = "Figure",
   sfc_em = "Figure",
   lme = "Table",
-  motion = "Supplementary Table",
-  criteria = "Supplementary Table",  # Comparison of superaging criteria (not in this file but used for table numbering)
   flow = "Supplementary Figure",
   en_features = "Supplementary Table",
   en_svm = "Supplementary Table",
   en_svm_importance = "Supplementary Figure",
   lme_change = "Supplementary Table",
-  atlas_comparison = "Supplementary Figure"
+  atlas_comparison = "Supplementary Figure",
+  motion = "Supplementary Table",
+  criteria = "Supplementary Table"  # Comparison of superaging criteria (not in this file but used for table numbering)
 )
 
 # Start figure numbering at 2
@@ -416,19 +416,6 @@ FDR, false discovery rate; SFC, structure-function coupling; SN, salience networ
 
 ## Supplementary material
 
-### Functional magnetic resonance imaging motion
-
-We excluded 33 participants for excessive head motion (more than 30% of volumes exceeding 0.5 mm framewise displacement). Superagers and typical older adults did not differ significantly in mean framewise displacement or volumes scrubbed at baseline or follow-up (`r ref("motion")`).
-
-```{r table_motion, results='asis'}
-render_sectioned_table(motion_table, "lrrrr", caption_title("motion", "Motion during functional magnetic resonance imaging"))
-```
-
-::: {.note}
-Mean framewise displacement and volumes scrubbed in resting-state fMRI images for superagers and typical older adults at baseline and follow-up. Values are mean (SD). p-values are from two-sided Welch t-tests without correction for multiple comparisons.
-Abbreviations: fMRI, functional magnetic resonance imaging; SD, standard deviation.
-:::
-
 ### Superager classification
 
 ```{r figure-flow, results='asis'}
@@ -514,3 +501,18 @@ single_figure("sfc_diff_atlas_maps.png", "100%")
 ::: {.note}
 Cortical surface and subcortical plots of the unthresholded mean difference in structure-function coupling between superagers and typical older adults, averaged across both timepoints, in the Schaefer 200 (top) and Schaefer 400 (bottom) parcellations. Warm colors indicate higher coupling in superagers; cool colors indicate lower coupling. Plots include `r cohort_n`.
 :::
+
+### Functional magnetic resonance imaging motion
+
+We excluded 33 participants for excessive head motion (more than 30% of volumes exceeding 0.5mm framewise displacement). Superagers and typical older adults did not differ significantly in mean framewise displacement or volumes scrubbed at baseline or follow-up (`r ref("motion")`).
+
+```{r table_motion, results='asis'}
+render_sectioned_table(motion_table, "lrrrr", caption_title("motion", "Motion during functional magnetic resonance imaging"))
+```
+
+::: {.note}
+Mean framewise displacement and volumes scrubbed in resting-state fMRI images for superagers and typical older adults at baseline and follow-up. Values are mean (SD). p-values are from two-sided Welch t-tests without correction for multiple comparisons.
+Abbreviations: fMRI, functional magnetic resonance imaging; SD, standard deviation.
+:::
+
+### Superager criteria
