@@ -1,67 +1,158 @@
-import os
+"""Extract ROI timeseries from each subject's preprocessed resting-state BOLD image using their native space atlas."""
+
 import warnings
 from multiprocessing import Pool
 from pathlib import Path
-from typing import List, Union
+from typing import Dict, Optional, Tuple
+
 import numpy as np
 import pandas as pd
 from extract_timeseries import extract_timeseries, visualize_timeseries
 from run_fmri_pipeline import ATLAS, COHORTS, MASK_ROOT, N_JOBS, SESSIONS, SUBJECTS, TIMESERIES_ROOT
 
+FD_THRESHOLD_MM = 0.5  # Frames with framewise displacement (FD) above this many mm are high motion and get scrubbed
+MAX_HIGH_MOTION_PERCENT = 30  # Subjects with more than this percentage of frames above FD_THRESHOLD_MM are excluded
+VISUALIZE = False  # Set to True to plot the timeseries of VISUALIZE_ROIS for each subject
+VISUALIZE_ROIS = [0]  # Timeseries columns to plot, one per ROI in combined_labels order (0 = first ROI)
 
-def process_subject_extract(args):
+RESTING_DIRS: Dict[Tuple[str, str], Path] = {
+    ("bbhi", "ses-01"): Path("/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon"),
+    ("bbhi", "ses-02"): Path("/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon_tp2"),
+    ("bbhi senior", "ses-01"): Path("/pool/guttmann/institut/UB/Superagers/MRI/resting_preproc_fs6-recon"),
+    ("bbhi senior", "ses-02"): Path("/pool/guttmann/institut/UB/Superagers/MRI/resting_preproc_fs6-recon"),
+}
+
+
+def get_native_dir(subject: str, ses: str, cohort: str) -> Path:
+    """Get the folder holding a subject's T1-space BOLD images and FD file.
+
+    BBHI has a separate root directory per session, BBHI senior has session subfolders.
+
+    Args:
+        subject: Subject ID.
+        ses: Session label (e.g. 'ses-01').
+        cohort: Cohort name (e.g., 'bbhi', 'bbhi senior').
+
+    Returns:
+        Path to the subject's native_T1 folder.
+    """
+    root_directory = RESTING_DIRS[(cohort, ses)]
+    if cohort == "bbhi":
+        return root_directory / subject / "native_T1"
+    return root_directory / subject / ses / "native_T1"
+
+
+def get_atlas_file(subject: str, ses: str) -> Path:
+    """Get the path to a subject's atlas in native BOLD space.
+
+    Args:
+        subject: Subject ID.
+        ses: Session label (e.g. 'ses-01').
+
+    Returns:
+        Path to the atlas file.
+    """
+    return MASK_ROOT / ses / subject / "bold_space_masks" / f"{subject}_{ses}_{ATLAS}_subcortical14_bold_space.nii.gz"
+
+
+def read_framewise_displ(subject: str, fd_file: Path) -> Optional[pd.Series]:
+    """Read a subject's FD values.
+
+    Args:
+        subject: Subject ID.
+        fd_file: Path to the FD file.
+
+    Returns:
+        FD per frame, or None if the file is missing or unreadable,
+        since motion cannot be checked without it.
+    """
+    if not fd_file.exists():
+        print(f"FD file not found for {subject} at {fd_file}. Skipping this subject.")
+        return None
+    try:
+        fd_values = pd.read_csv(fd_file, header=None).iloc[:, 0]
+        return pd.to_numeric(fd_values, errors="coerce").fillna(0)
+    except Exception as e:
+        print(f"Error reading FD file for {subject}: {e!s}. Skipping this subject.")
+        return None
+
+
+def exclude_subjects_framewise_displ(subject: str, fd_values: pd.Series) -> bool:
+    """Check if the subject has excessive motion (>30% of frames exceeding 0.5 mm).
+
+    Args:
+        subject: Subject ID.
+        fd_values: FD per frame.
+
+    Returns:
+        True if the subject should be excluded due to excessive motion, False otherwise.
+    """
+    high_motion_percentage = (fd_values > FD_THRESHOLD_MM).mean() * 100
+    if high_motion_percentage > MAX_HIGH_MOTION_PERCENT:
+        print(f"Excluding {subject} due to excessive motion: {high_motion_percentage:.2f}% of frames > 0.5mm")
+        return True
+    return False
+
+
+def select_bold_file(subject: str, ses: str, native_dir: Path, needs_scrubbing: bool) -> Optional[Path]:
+    """Select the BOLD image to extract the timeseries from.
+
+    Subjects with any frame above the FD threshold must have exactly one scrubbed image.
+    Subjects with none were not scrubbed, so the original image is used.
+
+    Args:
+        subject: Subject ID.
+        ses: Session label (e.g. 'ses-01').
+        native_dir: Folder holding the subject's T1-space BOLD images.
+        needs_scrubbing: Whether any frame is above the FD threshold.
+
+    Returns:
+        Path to the BOLD image, or None if the expected image is missing or there is more than one scrubbed image.
+    """
+    prefix = f"{subject}_{ses}_run-01_rest_bold_ap_T1-space"
+
+    if not needs_scrubbing:
+        original_file = native_dir / f"{prefix}.nii.gz"
+        if original_file.exists():
+            return original_file
+        print(f"Original BOLD file not found for {subject}: {original_file}. Skipping this subject.")
+        return None
+
+    # Naming differs by cohort (e.g. scrubbed-interp-05, scrubbed_0.5), so match any scrubbed suffix
+    scrubbed_files = sorted(native_dir.glob(f"{prefix}_scrubbed*.nii.gz"))
+    if len(scrubbed_files) == 1:
+        return scrubbed_files[0]
+    print(
+        f"{subject} has frames above {FD_THRESHOLD_MM} mm but {len(scrubbed_files)} scrubbed BOLD files "
+        f"(expected 1): {[f.name for f in scrubbed_files]}. Skipping this subject."
+    )
+    return None
+
+
+def process_subject_extract(subject: str, ses: str, bold_file: Path, atlas_file: Path, output_dir: Path) -> None:
     """Processes a single subject. Extracts timeseries and saves it.
+
     Optionally, visualizes the timeseries data.
 
     Args:
-        subject (str): Subject ID.
-        ses (str): Session label (e.g. 'ses-01').
-        atlas_file (str): File path for the atlases used for extracting timeseries.
-        output_dir (str): Directory where processed data and any outputs are saved.
-        error_log_path (str): File path where error logs should be written.
+        subject: Subject ID.
+        ses: Session label (e.g. 'ses-01').
+        bold_file: Preprocessed BOLD image to extract the timeseries from.
+        atlas_file: File path for the atlases used for extracting timeseries.
+        output_dir: Directory where processed data and any outputs are saved.
     """
-    (
-        subject,
-        ses,
-        atlas_file,
-        output_dir,
-        error_log_path,
-    ) = args
-
-    if cohort == "bbhi":
-        bold_template = Path(f"{root_directory}/{subject}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
-        # This is because subjects who did not need any scrubbing do not have a seperate scrubbed file
-        if not bold_template.exists():
-            bold_template = Path(f"{root_directory}/{subject}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
-    else:
-        if ses == "ses-01":
-            bold_template = Path(f"{root_directory}/{subject}/{ses}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
-            if not bold_template.exists():
-                bold_template = Path(f"{root_directory}/{subject}/{ses}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
-        else:
-            bold_template = Path(f"{root_directory}/{subject}/{ses}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
-            if not bold_template.exists():
-                bold_template = Path(f"{root_directory}/{subject}/{ses}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
-
     print(f"--- Processing subject: {subject} ---")
-
-    bold_path_template = str(bold_template).format(subject=subject, ses=ses)
-
-    if isinstance(atlas_file, Path):
-        atlas_path = str(atlas_file).format(subject=subject, ses=ses)
-        atlas_file = Path(atlas_path)
-    else:
-        atlas_file = Path(atlas_file.format(subject=subject, ses=ses))
-
-    fmri_file = Path(bold_path_template)
+    error_log_path = output_dir / "error_log.txt"
 
     # Adding a warning filter to catch issues that likely indicate the wrong atlas or BOLD file is being used
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always", UserWarning)
-        timeseries = extract_timeseries(atlas_file, fmri_file, error_log_path)
+        timeseries = extract_timeseries(atlas_file, bold_file, error_log_path)
 
         for captured_warning in w:
-            if "After resampling the label image to the data image, the following labels were removed" in str(captured_warning.message):
+            if "After resampling the label image to the data image, the following labels were removed" in str(
+                captured_warning.message
+            ):
                 print(f"Error in processing {subject}: some ROIs were unable to be identified.")
                 return
 
@@ -71,65 +162,43 @@ def process_subject_extract(args):
         return
 
     # Ensure the directory exists
-    output_subdir = os.path.join(output_dir, ses)
-    os.makedirs(output_subdir, exist_ok=True)
+    output_subdir = output_dir / ses
+    output_subdir.mkdir(parents=True, exist_ok=True)
 
     # Save the extracted timeseries
-    timeseries_output_path = output_dir / f"{ses}/{subject}_{ses}_subcortical_{ATLAS}_timeseries.csv"
+    timeseries_output_path = output_subdir / f"{subject}_{ses}_subcortical_{ATLAS}_timeseries.csv"
     print(f"Saving extracted timeseries to {timeseries_output_path}")
     np.savetxt(timeseries_output_path, timeseries, delimiter=",")
 
-    # Run this to visualize the data
-    # visualize_timeseries(subject, timeseries, roi_indices)
+    # Visualize data if VISUALIZE is set to True at the top of the script
+    if VISUALIZE:
+        visualize_timeseries(subject, timeseries, VISUALIZE_ROIS)
 
     print(f"Processing completed for subject: {subject}")
 
 
-def exclude_subjects_framewise_displ(subject, fd_file):
-    """Check if the subject has excessive motion (>30% of frames exceeding 0.5 mm).
+def get_subjects_to_process(output_directory: Path, ses: str, cohort: str) -> Dict[str, Path]:
+    """Generate a list of subjects to process, with the BOLD image to use for each.
+
+    Subjects are included if they have BOLD data, an FD file and an atlas file, and no
+    timeseries file already generated. Subjects with excessive motion (>30% of frames
+    exceeding 0.5 mm) are excluded.
 
     Args:
-        subject (str): Subject ID.
-        fd_file (Path): Path to the framewise displacement file.
+        output_directory: Path to the output directory where timeseries data is saved.
+        ses: Session label (e.g. 'ses-01').
+        cohort: Cohort name (e.g., 'bbhi', 'bbhi senior').
 
     Returns:
-        bool: True if the subject should be excluded due to excessive motion, False otherwise.
+        Subject IDs to process, mapped to the BOLD image to extract from.
     """
-    if fd_file.exists():
-        try:
-            fd_values = pd.read_csv(fd_file, header=None).iloc[:, 0]
-            fd_values = pd.to_numeric(fd_values, errors='coerce').fillna(0)
-            high_motion_percentage = (fd_values > 0.5).mean() * 100
-
-            if high_motion_percentage > 30:
-                print(f"Excluding {subject} due to excessive motion: {high_motion_percentage:.2f}% of frames > 0.5mm")
-                return True
-        except Exception as e:
-            print(f"Error reading FD file for {subject}: {str(e)}")
-    else:
-        print(f"FWD file not found for {subject} at {fd_file}.")
-
-    return False
-
-
-def get_subjects_to_process(root_directory, atlas_file_template, output_directory, ses, cohort):
-    """Generate a list of subjects to process based on whether they have
-    scrubbed data and a timeseries file already generated. Then exclude subjects
-    with excessive motion (>30% of frames exceeding 0.5 mm).
-
-    Args:
-        root_directory (Path): Path to the root directory containing the scrubbed data.
-        atlas_file_template (Path): Path to the Schaefer atlas mask.
-        output_directory (Path): Path to the output directory where timeseries data is saved.
-        ses (str): Session label (e.g. 'ses-01').
-        cohort (str): Cohort name (e.g., 'bbhi', 'bbhi senior').
-    """
-    subjects_to_process = []
+    subjects_to_process = {}
     subjects_excluded_motion = []
     subjects_excluded_no_bold = []
+    subjects_excluded_no_fd = []
+    subjects_excluded_bold_selection = []
     subjects_excluded_no_atlas_file = []
 
-    # Now process each subject with seperate handling for each cohort and session
     for subject in SUBJECTS:
         # Only keep subjects that belong to the current cohort by ID convention
         try:
@@ -141,182 +210,82 @@ def get_subjects_to_process(root_directory, atlas_file_template, output_director
         if subject_cohort != cohort:
             continue
 
-        scrubbed_data = None
+        native_dir = get_native_dir(subject, ses, cohort)
 
-        if cohort == "bbhi":
-            # Check for either scrubbed or original data
-            scrubbed_data = Path(f"{root_directory}/{subject}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
-            unscrubbed_file = Path(f"{root_directory}/{subject}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
-            fd_file = Path(f"{root_directory}/{subject}/native_T1/framewise_displ.txt")
+        # Track subjects with no bold file (scrubbed or original)
+        if not any(native_dir.glob(f"{subject}_{ses}_run-01_rest_bold_ap_T1-space*.nii.gz")):
+            subjects_excluded_no_bold.append(subject)
+            continue
 
-            # Check if either scrubbed or original data exists
-            bold_file_exists = scrubbed_data.exists() or unscrubbed_file.exists()
+        # Motion cannot be checked without an FD file
+        fd_values = read_framewise_displ(subject, native_dir / "framewise_displ.txt")
+        if fd_values is None:
+            subjects_excluded_no_fd.append(subject)
+            continue
 
-            # Track subjects with no bold file
-            if not bold_file_exists:
-                subjects_excluded_no_bold.append(subject)
-                continue
+        if exclude_subjects_framewise_displ(subject, fd_values):
+            subjects_excluded_motion.append(subject)
+            continue
 
-            # If FWD file exists, check motion criteria
-            if fd_file.exists() and bold_file_exists:
-                if exclude_subjects_framewise_displ(subject, fd_file):
-                    subjects_excluded_motion.append(subject)
-                    continue
-        else:
-            unscrubbed_file = Path(f"{root_directory}/{subject}/{ses}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz")
-            fd_file = Path(f"{root_directory}/{subject}/{ses}/native_T1/framewise_displ.txt")
+        bold_file = select_bold_file(subject, ses, native_dir, needs_scrubbing=(fd_values > FD_THRESHOLD_MM).any())
+        if bold_file is None:
+            subjects_excluded_bold_selection.append(subject)
+            continue
 
-            # For BBHI senior cohorts
-            if ses == "ses-01":
-                scrubbed_data = Path(f"{root_directory}/{subject}/{ses}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space_scrubbed-interp-05.nii.gz")
+        # Track subjects with no atlas file
+        atlas_file = get_atlas_file(subject, ses)
+        if not atlas_file.exists():
+            print(f"Atlas file not found for {subject}: {atlas_file}")
+            subjects_excluded_no_atlas_file.append(subject)
+            continue
 
-                # Check if either scrubbed or original data exists
-                bold_file_exists = scrubbed_data.exists() or unscrubbed_file.exists()
-
-                # Track subjects with no bold file
-                if not bold_file_exists:
-                    subjects_excluded_no_bold.append(subject)
-                    continue
-
-                if fd_file.exists() and bold_file_exists:
-                    if exclude_subjects_framewise_displ(subject, fd_file):
-                        subjects_excluded_motion.append(subject)
-                        continue
-            else:
-                scrubbed_data = Path(f"{root_directory}/{subject}/{ses}/native_T1/{subject}_{ses}_run-01_rest_bold_ap_T1-space_scrubbed_0.5.nii.gz")
-
-                # Check if either scrubbed or unscrubbed data exists
-                bold_file_exists = scrubbed_data.exists() or unscrubbed_file.exists()
-
-                # Track subjects with no bold file
-                if not bold_file_exists:
-                    subjects_excluded_no_bold.append(subject)
-                    continue
-
-                if fd_file.exists() and bold_file_exists:
-                    if exclude_subjects_framewise_displ(subject, fd_file):
-                        subjects_excluded_motion.append(subject)
-                        continue
-                else:
-                    # If scrubbed data is not found,
-                    print(f"Scrubbed data not found for {subject}. Skipping this subject.")
-                    continue
-
-        output_data = Path(f"{output_directory}/{ses}")
-
-        # Format the atlas file path for the specific subject
-        if isinstance(atlas_file_template, Path):
-            atlas_path = str(atlas_file_template).format(subject=subject, ses=ses)
-            subject_atlas_file = Path(atlas_path)
-        else:
-            subject_atlas_file = Path(atlas_file_template.format(subject=subject, ses=ses))
-
-        # Check if either scrubbed or original data exists and the atlas file exists
-        bold_file_exists = scrubbed_data.exists() or (unscrubbed_file is not None and unscrubbed_file.exists())
-        atlas_file_exists = subject_atlas_file.exists()
-
-        if bold_file_exists:
-            if not atlas_file_exists:
-                # Track subjects with no atlas file
-                print(f"Atlas file not found for {subject}: {subject_atlas_file}")
-                subjects_excluded_no_atlas_file.append(subject)
-                continue
-
-            # Now create the output directory and check if output file exists
-            output_data.mkdir(parents=True, exist_ok=True)
-            expected_output_filename = f"{subject}_{ses}_subcortical_{ATLAS}_timeseries.csv"
-            output_file_path = output_data / expected_output_filename
-
-            if not output_file_path.exists():
-                subjects_to_process.append(subject)
+        output_file_path = output_directory / ses / f"{subject}_{ses}_subcortical_{ATLAS}_timeseries.csv"
+        if not output_file_path.exists():
+            subjects_to_process[subject] = bold_file
 
     print(f"Number of subjects to process: {len(subjects_to_process)}")
     print(f"Number of subjects excluded due to no bold file: {len(subjects_excluded_no_bold)}")
+    print(f"Number of subjects excluded due to no FD file: {len(subjects_excluded_no_fd)}")
     print(f"Number of subjects excluded due to excessive motion: {len(subjects_excluded_motion)}")
+    print(f"Number of subjects excluded due to missing or extra scrubbed file: {len(subjects_excluded_bold_selection)}")
     print(f"Number of subjects excluded due to no atlas file: {len(subjects_excluded_no_atlas_file)}")
     return subjects_to_process
 
 
-def main(
-    ses: str,
-    error_log_path: Union[str, Path],
-    output_dir: Union[str, Path],
-    roi_indices: List[int],
-    atlas_file_template: str,
-    multi: bool = False,
-):
-    """This function defines session timepoints, data directories, and processes
-    subjects' timeseries data either sequentially or in parallel based on the multi flag.
+def main(ses: str, subjects: Dict[str, Path], output_dir: Path, multi: bool = False) -> None:
+    """Extracts the timeseries for each subject, either sequentially or in parallel based on the multi flag.
 
     Args:
-        ses (str): Session label (e.g. 'ses-01').
-        error_log_path (Union[str, Path]): Path to log the error file.
-        output_dir (Union[str, Path]): Path where processed data will be output.
-        roi_indices (List[int]): ROI indices for timeseries visualization (e.g. add the index for the ROI/s you want to visualize).
-        multi (bool): If True, enables parallel processing using multiprocessing. Defaults to False.
-        atlas_file_template (str): Template string for the atlas file path.
+        ses: Session label (e.g. 'ses-01').
+        subjects: Subject IDs to process, mapped to the BOLD image to extract from.
+        output_dir: Path where processed data will be output.
+        multi: If True, enables parallel processing using multiprocessing. Defaults to False.
     """
-    output_dir = Path(output_dir)
-    error_log_path = Path(f"{output_dir}/error_log.txt")
-
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Pass atlas template and labels to the processing function
-    args = [
-        (
-            subject,
-            ses,
-            atlas_file_template,
-            output_dir,
-            error_log_path,
-        )
-        for subject in subjects
+    jobs = [
+        (subject, ses, bold_file, get_atlas_file(subject, ses), output_dir) for subject, bold_file in subjects.items()
     ]
 
     if multi:
         with Pool(N_JOBS) as pool:
-            pool.map(process_subject_extract, args)
+            pool.starmap(process_subject_extract, jobs)
     else:
-        for arg in args:
-            process_subject_extract(arg)
+        for job in jobs:
+            process_subject_extract(*job)
 
     print("Done.")
 
 
 if __name__ == "__main__":
-    output_directory = TIMESERIES_ROOT
-
     for ses in SESSIONS:
         for cohort in COHORTS:
             print("-------------------------")
             print(f"Processing {cohort} {ses}")
             print("-------------------------")
 
-            if cohort == "bbhi":
-                if ses == "ses-01":
-                    root_directory = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon")
-                else:
-                    root_directory = Path(f"/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon_tp2")
-            else:
-                root_directory = Path("/pool/guttmann/institut/UB/Superagers/MRI/resting_preproc_fs6-recon")
-            error_log_path = output_directory / "error_log.txt"
-
-            # Create the output directory if it does not exist
-            output_directory.mkdir(parents=True, exist_ok=True)
-
-            roi_indices = [0]  # ROIs to visualize
-
-            atlas_file_template = Path(f"{MASK_ROOT}/{ses}/{{subject}}/bold_space_masks/{{subject}}_{ses}_{ATLAS}_subcortical14_bold_space.nii.gz")
-
             # Generate a list of subjects to process
-            subjects = get_subjects_to_process(root_directory, atlas_file_template, output_directory, ses, cohort)
+            subjects = get_subjects_to_process(TIMESERIES_ROOT, ses, cohort)
 
-            main(
-                ses=ses,
-                error_log_path=error_log_path,
-                output_dir=output_directory,
-                roi_indices=roi_indices,
-                atlas_file_template=atlas_file_template,
-                multi=True,
-            )
+            main(ses=ses, subjects=subjects, output_dir=TIMESERIES_ROOT, multi=True)
