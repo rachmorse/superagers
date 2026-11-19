@@ -1,4 +1,5 @@
-import os
+"""Functions to extract and plot ROI timeseries from a BOLD image using an atlas mask."""
+
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -6,29 +7,28 @@ from typing import List, Optional
 import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
-from nilearn.input_data import NiftiLabelsMasker
+from nilearn.maskers import NiftiLabelsMasker
 
 
-def extract_timeseries(atlas_file: str, fmri_file: str, error_log_path: Path) -> Optional[np.ndarray]:
+def extract_timeseries(atlas_file: Path, fmri_file: Path, error_log_path: Path) -> Optional[np.ndarray]:
     """Extracts timeseries data from a BOLD image using an atlas mask.
 
+    Errors are written to the error log rather than raised, so one failed subject does not stop the run.
+
     Args:
-        atlas_file (str): Path to the atlas file (mask).
-        fmri_file (str): Path to the fMRI preprocessed BOLD image file.
-        error_log_path (Path): Path to the error log file.
+        atlas_file: Path to the atlas file (mask).
+        fmri_file: Path to the fMRI preprocessed BOLD image file.
+        error_log_path: Path to the error log file.
 
     Returns:
-        np.ndarray: Extracted timeseries data, or None if an error occurred.
-
-    Raises:
-        FileNotFoundError: If the fMRI or atlas file is not found.
-        ValueError: If the mask type is not recognized.
+        Extracted timeseries data, or None if an error occurred (e.g. a missing file or
+        atlas and BOLD images with different spatial dimensions).
     """
     try:
-        if not os.path.exists(fmri_file):
+        if not Path(fmri_file).exists():
             raise FileNotFoundError(f"BOLD file {fmri_file} not found.")
 
-        if not os.path.exists(atlas_file):
+        if not Path(atlas_file).exists():
             raise FileNotFoundError(f"Schaefer atlas file {atlas_file} not found.")
 
         # Load the atlas and BOLD file
@@ -37,12 +37,14 @@ def extract_timeseries(atlas_file: str, fmri_file: str, error_log_path: Path) ->
 
         # Check whether the atlas and BOLD files have the same shape
         if atlas_img.shape[:3] != fmri_img.shape[:3]:
-            raise ValueError(f"Atlas and fMRI images must have the same spatial dimensions. "
-                           f"Atlas shape: {atlas_img.shape}, fMRI shape: {fmri_img.shape}")
+            raise ValueError(
+                f"Atlas and fMRI images must have the same spatial dimensions. "
+                f"Atlas shape: {atlas_img.shape}, fMRI shape: {fmri_img.shape}"
+            )
 
         # Use NiftiLabelsMasker to extract the timeseries
         masker = NiftiLabelsMasker(labels_img=atlas_img, standardize=False)
-        
+
         print("Extracting timeseries...")
         timeseries = masker.fit_transform(fmri_file)
 
@@ -61,13 +63,13 @@ def visualize_timeseries(
     subject_id: str,
     timeseries: np.ndarray,
     roi_indices: List[int],
-):
+) -> None:
     """Visualize the timeseries for specified ROIs.
 
     Args:
-        subject_id (str): Subject ID.
-        timeseries (np.ndarray): The timeseries data to be visualized.
-        roi_indices (List[int]): List of ROI indices to visualize.
+        subject_id: Subject ID.
+        timeseries: The timeseries data to be visualized.
+        roi_indices: List of ROI indices to visualize.
     """
     # Visualize Timeseries for specified ROIs
     for idx in roi_indices:

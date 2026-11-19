@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
+"""Run the fMRI pipeline: extract ROI timeseries, then compute functional connectivity.
 
+Also holds the settings and paths shared by the fMRI scripts.
+"""
+
+import datetime
 import subprocess
 import sys
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple
-import datetime
-
 
 ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer400"
 TEST_SUBJECT: Optional[str] = None  # e.g. "sub-1014" to run only that subject
@@ -37,6 +40,9 @@ def run_script(script_path: Path, log_path: Path) -> Tuple[int, str]:
     Args:
         script_path: Path to the script to run.
         log_path: Path to the log file to append output.
+
+    Returns:
+        The script's exit code (1 if the script was not found) and its name or error message.
     """
     if not script_path.exists():
         msg = f"Script not found: {script_path}"
@@ -64,6 +70,7 @@ def run_script(script_path: Path, log_path: Path) -> Tuple[int, str]:
 
 
 def main() -> None:
+    """Run each fMRI script in order, stopping at the first failure."""
     base_dir = Path(__file__).resolve().parent
     log_path = base_dir / f"nohup_fmri_{ATLAS}_{datetime.date.today():%Y%m%d}.out"
 
