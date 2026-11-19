@@ -6,12 +6,11 @@ from pathlib import Path
 
 import pandas as pd
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "analyses"))
 from demographics_table import DATA_DIR, P_FLOOR, SESSIONS, load_data, summary_row
 
-BBHI_MRI = Path("/pool/guttmann/institut/BBHI/MRI")
-SENIOR_MRI = Path("/pool/guttmann/institut/UB/Superagers/MRI")
-BBHI_MIN_ID = 6000  # To separate BBHI IDs from BBHI senior
+from config import RESTING_DIRS, cohort_from_id
 
 # Rows per timepoint: (label, column stem)
 MOTION_ROWS = [
@@ -31,10 +30,10 @@ def native_t1_dir(sub: str, ses: str) -> Path:
     Returns:
         Folder holding framewise_displ.txt and the scrubbing JSON.
     """
-    if int(sub) > BBHI_MIN_ID:
-        preproc = "resting_preproc_fs6-recon" if ses == "ses-01" else "resting_preproc_fs6-recon_tp2"
-        return BBHI_MRI / "processed_data" / preproc / f"sub-{sub}" / "native_T1"
-    return SENIOR_MRI / "resting_preproc_fs6-recon" / f"sub-{sub}" / ses / "native_T1"
+    cohort = cohort_from_id(sub)
+    subject_dir = RESTING_DIRS[(cohort, ses)] / f"sub-{sub}"
+    # BBHI has a separate root directory per session, BBHI senior has session subfolders
+    return subject_dir / "native_T1" if cohort == "bbhi" else subject_dir / ses / "native_T1"
 
 
 def motion(sub: str, ses: str) -> tuple[float, float]:

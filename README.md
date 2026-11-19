@@ -8,6 +8,11 @@ This repository provides details on the analyses for transparency. The dataset i
 ## Installation
 Install the dependencies with `poetry install`, then activate the environment with `poetry shell`.
 
+## Configuration
+`config.py` defines the data and software paths, the cohort, and other settings shared across the pipeline. Update its paths to your own data before running.
+
+Set the atlas (`ATLAS`, Schaefer 200 or 400) and an optional single subject (`TEST_SUBJECT`) at the top of each `run_*_pipeline.py` script or at the top of standalone scripts such as `generate_structural_matrices.py`.
+
 ## License
 The code is available under the MIT License, allowing others to reuse and adapt it with appropriate credit.
 

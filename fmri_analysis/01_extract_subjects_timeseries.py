@@ -1,26 +1,23 @@
 """Extract ROI timeseries from each subject's preprocessed resting-state BOLD image using their native space atlas."""
 
+import sys
 import warnings
 from multiprocessing import Pool
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
 from extract_timeseries import extract_timeseries, visualize_timeseries
-from run_fmri_pipeline import ATLAS, COHORTS, MASK_ROOT, N_JOBS, SESSIONS, SUBJECTS, TIMESERIES_ROOT
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import ATLAS, COHORTS, MASK_ROOT, RESTING_DIRS, SESSIONS, SUBJECTS, TIMESERIES_ROOT, cohort_from_id
+
+N_JOBS = 3  # Subjects extracted in parallel
 FD_THRESHOLD_MM = 0.5  # Frames with framewise displacement (FD) above this many mm are high motion and get scrubbed
 MAX_HIGH_MOTION_PERCENT = 30  # Subjects with more than this percentage of frames above FD_THRESHOLD_MM are excluded
 VISUALIZE = False  # Set to True to plot the timeseries of VISUALIZE_ROIS for each subject
 VISUALIZE_ROIS = [0]  # Timeseries columns to plot, one per ROI in combined_labels order (0 = first ROI)
-
-RESTING_DIRS: Dict[Tuple[str, str], Path] = {
-    ("bbhi", "ses-01"): Path("/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon"),
-    ("bbhi", "ses-02"): Path("/pool/guttmann/institut/BBHI/MRI/processed_data/resting_preproc_fs6-recon_tp2"),
-    ("bbhi senior", "ses-01"): Path("/pool/guttmann/institut/UB/Superagers/MRI/resting_preproc_fs6-recon"),
-    ("bbhi senior", "ses-02"): Path("/pool/guttmann/institut/UB/Superagers/MRI/resting_preproc_fs6-recon"),
-}
 
 
 def get_native_dir(subject: str, ses: str, cohort: str) -> Path:
@@ -202,11 +199,10 @@ def get_subjects_to_process(output_directory: Path, ses: str, cohort: str) -> Di
     for subject in SUBJECTS:
         # Only keep subjects that belong to the current cohort by ID convention
         try:
-            subject_num = int(subject.split("-")[1])
-        except (IndexError, ValueError):
+            subject_cohort = cohort_from_id(subject)
+        except ValueError:
             print(f"Skipping {subject}: could not parse numeric ID")
             continue
-        subject_cohort = "bbhi" if subject_num > 6000 else "bbhi senior"
         if subject_cohort != cohort:
             continue
 

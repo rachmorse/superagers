@@ -12,7 +12,7 @@ import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Literal, Optional
+from typing import List, Literal, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -25,26 +25,24 @@ from compute_functional_connectivity import (
     prepare_directories,
 )
 
-ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer400"
+ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer200"
 TEST_SUBJECT: Optional[str] = None  # e.g. "sub-1014" to run only that subject
-SUBJECTS_FILE = Path("/home/rachel/Desktop/data/final_cohort_ids.txt")  # final longitudinal cohort
-SUBJECTS: List[str] = [TEST_SUBJECT] if TEST_SUBJECT else SUBJECTS_FILE.read_text().split()
-COHORTS: List[Literal["bbhi", "bbhi senior"]] = ["bbhi", "bbhi senior"]
-SESSIONS: List[Literal["ses-01", "ses-02"]] = ["ses-01", "ses-02"]
-
-TRACTOGRAM_DIRS: Dict[str, Path] = {
-    "bbhi": Path("/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_SIFT2"),
-    "bbhi senior": Path("/pool/guttmann/institut/UB/Superagers/MRI/tracto_SIFT2"),
-}
-MRTRIX_BIN = Path("/home/rachel/miniconda3/bin")
 N_THREADS = 2  # MRtrix uses all cores otherwise
 
-# Unsuffixed output folders are the original run, each atlas writes to its own suffixed folders
-# Schaefer 200 masks are the exception and live in fsaverage
-ROOT = Path("/home/rachel/Desktop/schaefer_analysis")
-MASK_ROOT = ROOT / ("fsaverage" if ATLAS == "schaefer200" else f"fsaverage_{ATLAS}")
-OUTPUT_ROOT = ROOT / f"structural_connectivity_{ATLAS}"
-LABELS_CSV = ROOT / f"timeseries_data_{ATLAS}" / "native_space" / "combined_labels.csv"
+# Pass ATLAS and TEST_SUBJECT to config.py, so config must be imported after this
+os.environ["ATLAS"] = ATLAS
+os.environ["TEST_SUBJECT"] = TEST_SUBJECT or ""
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import (  # noqa: E402
+    COHORTS,
+    LABELS_CSV,
+    MASK_ROOT,
+    MRTRIX_BIN,
+    SC_ROOT,
+    SESSIONS,
+    SUBJECTS,
+    TRACTOGRAM_DIRS,
+)
 
 
 def setup_logging(output_dir: Path) -> logging.Logger:
@@ -441,10 +439,10 @@ def process_network_matrices(
 def main() -> None:
     """Main function to process structural connectivity for subjects."""
     # Create output directory if it does not exist
-    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    SC_ROOT.mkdir(parents=True, exist_ok=True)
 
     # Setup logging
-    setup_logging(OUTPUT_ROOT)
+    setup_logging(SC_ROOT)
 
     # Setup MRTrix
     os.environ["PATH"] = f"{MRTRIX_BIN}:{os.environ['PATH']}"
@@ -464,13 +462,13 @@ def main() -> None:
 
             # Create output directories if they do not exist
             prepare_directories(
-                OUTPUT_ROOT,
+                SC_ROOT,
                 ses,
                 ["all_to_all_roi_matrices", "within_network_matrices", "subcortical_matrices", "visualization"],
             )
 
             # Get subjects to process
-            subjects = get_subjects_to_process(tractogram_dir, MASK_ROOT, OUTPUT_ROOT, ses)
+            subjects = get_subjects_to_process(tractogram_dir, MASK_ROOT, SC_ROOT, ses)
             all_subjects.extend(subjects)
 
             # For testing with a single subject
@@ -485,7 +483,7 @@ def main() -> None:
                         subject=subject,
                         tractogram_dir=tractogram_dir,
                         mask_dir=MASK_ROOT,
-                        output_dir=OUTPUT_ROOT,
+                        output_dir=SC_ROOT,
                         ses=ses,
                         labels_csv_path=LABELS_CSV,
                         run_visualization=False,

@@ -14,33 +14,27 @@ import sys
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Literal, NamedTuple, Optional, Set, Tuple, Union
+from typing import List, NamedTuple, Optional, Set, Tuple, Union
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import (
+    COHORTS,
+    DTI_DIRS,
+    FREESURFER_HOME,
+    FSL_DIR,
+    MATLAB_CMD,
+    RECONALL_DIRS,
+    SESSIONS,
+    SPM_PATH,
+    TRACTOGRAM_DIRS,
+    TRACTOGRAPHY_WD,
+)
 
 JOBS = 1  # Subjects run at the same time
 THREADS = 20  # CPU threads per subject for MRtrix (total cores used = JOBS * THREADS)
 TEST_SUBJECTS: Optional[Set[str]] = None  # e.g. {"sub-1014_ses-01"} to run only those
-COHORTS: List[Literal["bbhi", "bbhi senior"]] = ["bbhi", "bbhi senior"]
-SESSIONS: List[Literal["ses-01", "ses-02"]] = ["ses-01", "ses-02"]
-
-DTI_DIRS: Dict[str, str] = {
-    "bbhi": "/pool/guttmann/institut/BBHI/MRI/processed_data/dtifit_{ses}_fsl-604",
-    "bbhi senior": "/pool/guttmann/institut/UB/Superagers/MRI/dtifit_{ses}_fsl-604",
-}
-TRACTOGRAM_DIRS: Dict[str, Path] = {
-    "bbhi": Path("/pool/guttmann/institut/BBHI/MRI/processed_data/tracto_SIFT2"),
-    "bbhi senior": Path("/pool/guttmann/institut/UB/Superagers/MRI/tracto_SIFT2"),
-}
-RECON_ALL_DIRS: Dict[str, Path] = {
-    "bbhi": Path("/pool/guttmann/institut/BBHI/MRI/derivatives/reconall_fs6"),
-    "bbhi senior": Path("/pool/guttmann/institut/UB/Superagers/MRI/derivatives/reconall_fs6"),
-}
 
 SCRIPT_DIR = Path(__file__).resolve().parent  # holds spm_coregister_parcellation.m and logs/
-WORKING_DIR_ROOT = Path("/home/rachel/Desktop/schaefer_analysis/tracto_wd")
-SPM_PATH = Path("/home/rachel/spm12")
-MATLAB_CMD = "/usr/local/bin/matlab -nodesktop -nosplash"
-FSL_DIR = "/vol/software/fsl_6_0_4"
-FREESURFER_HOME = "/vol/software/freesurfer-6.0"
 
 
 class SubjectInfo(NamedTuple):
@@ -83,13 +77,13 @@ def setup_logging(output_dir: Path) -> logging.Logger:
 def setup_environment() -> None:
     """Sets up environment variables for FSL and FreeSurfer."""
     # Set up FSL
-    os.environ["FSLDIR"] = FSL_DIR
+    os.environ["FSLDIR"] = str(FSL_DIR)
     os.environ["PATH"] = f"{os.environ['FSLDIR']}/bin:" + os.environ["PATH"]
     # Set FSL to output uncompressed NIFTI files
     os.environ["FSLOUTPUTTYPE"] = "NIFTI"
 
     # Set up FreeSurfer
-    os.environ["FREESURFER_HOME"] = FREESURFER_HOME
+    os.environ["FREESURFER_HOME"] = str(FREESURFER_HOME)
     os.environ["PATH"] = f"{os.environ['FREESURFER_HOME']}/bin:" + os.environ["PATH"]
 
 
@@ -148,12 +142,12 @@ def find_recon_all_dir(subject_id: str, cohort: str) -> Optional[Path]:
 
     Args:
         subject_id: Subject-session ID, e.g. "sub-1014_ses-01".
-        cohort: Cohort key in RECON_ALL_DIRS.
+        cohort: Cohort key in RECONALL_DIRS.
 
     Returns:
         The recon-all directory, or None if not found.
     """
-    recon_root = RECON_ALL_DIRS[cohort]
+    recon_root = RECONALL_DIRS[cohort]
     for candidate in (recon_root / f"{subject_id}_run-01", recon_root / subject_id):
         if candidate.exists():
             return candidate
@@ -170,7 +164,7 @@ def is_processed(subject: SubjectInfo) -> bool:
         True if the subject's SIFT2 weights already exist.
     """
     weights_name = f"{subject.subject_id}_dwi_tractogram_10M_SIFT2_weights.txt"
-    local_file = WORKING_DIR_ROOT / subject.subject_id / weights_name
+    local_file = TRACTOGRAPHY_WD / subject.subject_id / weights_name
     shared_file = TRACTOGRAM_DIRS[subject.cohort] / subject.subject_id / weights_name
     return local_file.exists() or shared_file.exists()
 
@@ -184,7 +178,7 @@ def get_subjects_to_process() -> List[SubjectInfo]:
     subjects = []
     for cohort in COHORTS:
         for ses in SESSIONS:
-            dti_dir = Path(DTI_DIRS[cohort].format(ses=ses))
+            dti_dir = DTI_DIRS[(cohort, ses)]
             if not dti_dir.exists():
                 logging.warning(f"DTI directory not found: {dti_dir}")
                 continue
@@ -451,7 +445,7 @@ def process_subject(subject_info: SubjectInfo) -> Tuple[str, bool]:
     id_dir = subject_info.dti_dir / subject
 
     # Create output directory for this subject
-    subject_dir = WORKING_DIR_ROOT / subject
+    subject_dir = TRACTOGRAPHY_WD / subject
     subject_dir.mkdir(parents=True, exist_ok=True)
 
     # File prefix for outputs (e.g. /path/to/sub-01/sub-01_dwi_...)
@@ -647,7 +641,7 @@ def main() -> None:
     """Runs tractography for all subjects that still need it."""
     # 1. Environment and logging
     setup_environment()
-    WORKING_DIR_ROOT.mkdir(parents=True, exist_ok=True)
+    TRACTOGRAPHY_WD.mkdir(parents=True, exist_ok=True)
     setup_logging(SCRIPT_DIR)
 
     # 2. Find subjects (test subjects must also pass get_subjects_to_process)
@@ -666,7 +660,7 @@ def main() -> None:
 
     # 4. Summary and dataset description
     successful_subjects = log_summary(results)
-    create_dataset_description(str(WORKING_DIR_ROOT), SPM_PATH, ", ".join(successful_subjects))
+    create_dataset_description(str(TRACTOGRAPHY_WD), SPM_PATH, ", ".join(successful_subjects))
 
 
 if __name__ == "__main__":

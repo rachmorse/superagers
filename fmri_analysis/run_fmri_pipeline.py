@@ -1,32 +1,15 @@
 #!/usr/bin/env python3
-"""Run the fMRI pipeline: extract ROI timeseries, then compute functional connectivity.
-
-Also holds the settings and paths shared by the fMRI scripts.
-"""
+"""Run the fMRI pipeline: extract ROI timeseries, then compute functional connectivity."""
 
 import datetime
+import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple
 
-ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer400"
+ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer200"
 TEST_SUBJECT: Optional[str] = None  # e.g. "sub-1014" to run only that subject
-SUBJECTS_FILE = Path("/home/rachel/Desktop/data/final_cohort_ids.txt")  # final longitudinal cohort
-SUBJECTS: List[str] = [TEST_SUBJECT] if TEST_SUBJECT else SUBJECTS_FILE.read_text().split()
-COHORTS: List[Literal["bbhi", "bbhi senior"]] = ["bbhi", "bbhi senior"]
-SESSIONS: List[Literal["ses-01", "ses-02"]] = ["ses-01", "ses-02"]
-N_JOBS = 3
-N_PARCELS = int(ATLAS.removeprefix("schaefer"))
-
-# Unsuffixed output folders are the original run, each atlas writes to its own suffixed folders
-# Schaefer 200 masks are the exception and live in fsaverage
-ROOT = Path("/home/rachel/Desktop/schaefer_analysis")
-SUFFIX = f"_{ATLAS}"
-MASK_ROOT = ROOT / ("fsaverage" if ATLAS == "schaefer200" else f"fsaverage{SUFFIX}")
-TIMESERIES_ROOT = ROOT / f"timeseries_data{SUFFIX}" / "native_space"
-FC_ROOT = ROOT / f"functional_connectivity{SUFFIX}" / "native_space"
-ANNOT_DIR = Path(__file__).resolve().parent.parent / "fsaverage_masks"
 
 SCRIPTS: List[str] = [
     "01_extract_subjects_timeseries.py",
@@ -71,11 +54,18 @@ def run_script(script_path: Path, log_path: Path) -> Tuple[int, str]:
 
 def main() -> None:
     """Run each fMRI script in order, stopping at the first failure."""
+    # Pass ATLAS and TEST_SUBJECT to config.py in the scripts started below
+    os.environ["ATLAS"] = ATLAS
+    if TEST_SUBJECT:
+        os.environ["TEST_SUBJECT"] = TEST_SUBJECT
+    else:
+        os.environ.pop("TEST_SUBJECT", None)
+
     base_dir = Path(__file__).resolve().parent
     log_path = base_dir / f"nohup_fmri_{ATLAS}_{datetime.date.today():%Y%m%d}.out"
 
     start_time = datetime.datetime.now()
-    print(f"Starting {ATLAS} fMRI pipeline at {start_time}")
+    print(f"Starting {ATLAS} fMRI pipeline at {start_time}" + (f" for {TEST_SUBJECT} only" if TEST_SUBJECT else ""))
 
     failures: List[str] = []
     for script in SCRIPTS:

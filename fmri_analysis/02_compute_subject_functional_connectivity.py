@@ -1,6 +1,7 @@
 """Compute functional connectivity matrices for each subject from the pre-extracted ROI timeseries."""
 
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import List, Union
@@ -9,12 +10,20 @@ import nibabel as nib
 import numpy as np
 import pandas as pd
 from compute_functional_connectivity import compute_functional_connectivity, visualize_fc_data
-from run_fmri_pipeline import ANNOT_DIR, ATLAS, FC_ROOT, N_PARCELS, SESSIONS, SUBJECTS, TIMESERIES_ROOT
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import (
+    ANNOT_DIR,
+    ATLAS,
+    FC_ROOT,
+    N_PARCELS,
+    SESSIONS,
+    SUBCORTICAL_ASEG_CODES,
+    SUBJECTS,
+    TIMESERIES_ROOT,
+)
 
 VISUALIZE = False  # Set to True to save a Fisher z connectivity plot for each subject
-
-# Order matches the subcortical label values in 03_combine_t1_atlases.py (left then right, each 1 to 7)
-SUBCORTICAL_STRUCTURES = ["Hippocampus", "Amygdala", "Pallidum", "Putamen", "Caudate", "Accumbens", "Thalamus"]
 
 
 def write_combined_labels(labels_csv_path: Path) -> None:
@@ -37,7 +46,7 @@ def write_combined_labels(labels_csv_path: Path) -> None:
         labels += [name.decode("utf-8") for name in names[1:]]
 
     for side in ["Left", "Right"]:
-        for structure in SUBCORTICAL_STRUCTURES:
+        for structure in SUBCORTICAL_ASEG_CODES:
             labels.append(f"Subcortical {len(labels) + 1}: {side} {structure}")
 
     # Check the labels line up with the mask values (cortical 1 to N_PARCELS, subcortical N_PARCELS + 1 to N_PARCELS + 14)
