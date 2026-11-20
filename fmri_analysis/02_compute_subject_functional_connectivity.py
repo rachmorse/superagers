@@ -16,10 +16,12 @@ from config import (
     ANNOT_DIR,
     ATLAS,
     FC_ROOT,
+    LABELS_CSV,
     N_PARCELS,
     SESSIONS,
     SUBCORTICAL_ASEG_CODES,
     SUBJECTS,
+    TIMESERIES_FILE,
     TIMESERIES_ROOT,
 )
 
@@ -102,7 +104,7 @@ def process_subject_functional(
         error_log_path: Path to the error log file.
         combined_labels: List of ROI labels.
     """
-    timeseries_file = root_directory / f"{subject_id}_{ses}_subcortical_{ATLAS}_timeseries.csv"
+    timeseries_file = root_directory / TIMESERIES_FILE.format(subject=subject_id, ses=ses)
 
     # Load extracted timeseries
     print(f"--- Processing subject: {subject_id} ---")
@@ -184,23 +186,20 @@ def get_subjects_to_process(root_directory: Path, output_directory: Path, ses: s
         processed_subjects = set()
 
     for filename in os.listdir(root_directory):
-        if filename.startswith("sub-") and filename.endswith(f"_{ses}_subcortical_{ATLAS}_timeseries.csv"):
-            subject_id = filename.split("_")[0]
-            if subject_id in SUBJECTS and subject_id not in processed_subjects:
-                subjects_to_process.append(subject_id)
+        subject_id = filename.split("_")[0]
+        is_timeseries = filename.startswith("sub-") and filename == TIMESERIES_FILE.format(subject=subject_id, ses=ses)
+        if is_timeseries and subject_id in SUBJECTS and subject_id not in processed_subjects:
+            subjects_to_process.append(subject_id)
 
     return subjects_to_process
 
 
-def main(
-    output_dir: Union[str, Path], root_directory: Union[str, Path], timeseries_path: Path, ses: str, subjects: List[str]
-) -> None:
+def main(output_dir: Union[str, Path], root_directory: Union[str, Path], ses: str, subjects: List[str]) -> None:
     """Reads the pre-extracted timeseries data for each subject and computes the functional connectivity matrices.
 
     Args:
         output_dir: Path where processed data will be output.
         root_directory: Root directory for the timeseries data at a specific timepoint.
-        timeseries_path: Path to the directory containing the timeseries data not at a specific timepoint.
         ses: Timepoint.
         subjects: Subject IDs to process.
     """
@@ -212,10 +211,9 @@ def main(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Read combined labels once, generating them from the annot files if they do not exist yet
-    labels_csv_path = timeseries_path / "combined_labels.csv"
-    if not labels_csv_path.exists():
-        write_combined_labels(labels_csv_path)
-    combined_labels = pd.read_csv(labels_csv_path, header=None).squeeze().tolist()
+    if not LABELS_CSV.exists():
+        write_combined_labels(LABELS_CSV)
+    combined_labels = pd.read_csv(LABELS_CSV, header=None).squeeze().tolist()
 
     for subject_id in subjects:
         process_subject_functional(
@@ -243,7 +241,6 @@ if __name__ == "__main__":
         main(
             output_dir=FC_ROOT,
             root_directory=root_directory,
-            timeseries_path=TIMESERIES_ROOT,
             ses=ses,
             subjects=subjects,
         )
