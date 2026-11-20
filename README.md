@@ -11,6 +11,8 @@ Install the dependencies with `poetry install`, then activate the environment wi
 ## Configuration
 `config.py` defines the data and software paths, the cohort, and other settings shared across the pipeline. Update its paths to your own data before running.
 
+`pipeline_utils.py` holds helpers shared by the pipeline scripts, such as running commands and printing the end-of-run summary.
+
 Set the atlas (`ATLAS`, Schaefer 200 or 400) and an optional single subject (`TEST_SUBJECT`) at the top of each `run_*_pipeline.py` script or at the top of standalone scripts such as `generate_structural_matrices.py`.
 
 ## License
