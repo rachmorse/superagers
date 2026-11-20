@@ -78,6 +78,7 @@ SHARED_MASK_ROOT = ROOT / "fsaverage"
 MASK_ROOT = SHARED_MASK_ROOT if ATLAS == "schaefer200" else ROOT / f"fsaverage_{ATLAS}"
 TRACTOGRAPHY_WD = ROOT / "tracto_wd"
 TIMESERIES_ROOT = ROOT / f"timeseries_data_{ATLAS}" / "native_space"
+TIMESERIES_FILE = f"{{subject}}_{{ses}}_subcortical_{ATLAS}_timeseries.csv"  # Inside TIMESERIES_ROOT / ses
 LABELS_CSV = TIMESERIES_ROOT / "combined_labels.csv"  # ROI labels in mask order
 FC_ROOT = ROOT / f"functional_connectivity_{ATLAS}" / "native_space"
 SC_ROOT = ROOT / f"structural_connectivity_{ATLAS}"
