@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from config import (
     COHORTS,
     DTI_DIRS,
+    EDDY_CORRECTED,
     FREESURFER_HOME,
     FSL_DIR,
     MATLAB_CMD,
@@ -455,7 +456,7 @@ def process_subject(subject_info: SubjectInfo) -> Tuple[str, bool]:
     logging.info(f"{subject}: recon-all directory: {fs_dir}")
 
     # Input files
-    input_corr_dwi = id_dir / "eddy_corrected_data.nii.gz"
+    input_corr_dwi = id_dir / EDDY_CORRECTED
     input_corr_val = id_dir / "BVAL_concat_APPA.bval"
     input_corr_vec = id_dir / "BVEC_concat_APPA.bvec"
     input_corr_dwi_brain_mask = id_dir / "T1w_brain_mask_dMRIres.nii.gz"
