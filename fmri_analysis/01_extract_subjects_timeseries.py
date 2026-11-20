@@ -11,32 +11,24 @@ import pandas as pd
 from extract_timeseries import extract_timeseries, visualize_timeseries
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from config import ATLAS, COHORTS, MASK_ROOT, RESTING_DIRS, SESSIONS, SUBJECTS, TIMESERIES_ROOT, cohort_from_id
+from config import (
+    BOLD_MASK,
+    COHORTS,
+    MASK_ROOT,
+    RESTING_BOLD,
+    SESSIONS,
+    SUBJECTS,
+    TIMESERIES_FILE,
+    TIMESERIES_ROOT,
+    cohort_from_id,
+    resting_native_dir,
+)
 
 N_JOBS = 3  # Subjects extracted in parallel
 FD_THRESHOLD_MM = 0.5  # Frames with framewise displacement (FD) above this many mm are high motion and get scrubbed
 MAX_HIGH_MOTION_PERCENT = 30  # Subjects with more than this percentage of frames above FD_THRESHOLD_MM are excluded
 VISUALIZE = False  # Set to True to plot the timeseries of VISUALIZE_ROIS for each subject
 VISUALIZE_ROIS = [0]  # Timeseries columns to plot, one per ROI in combined_labels order (0 = first ROI)
-
-
-def get_native_dir(subject: str, ses: str, cohort: str) -> Path:
-    """Get the folder holding a subject's T1-space BOLD images and FD file.
-
-    BBHI has a separate root directory per session, BBHI senior has session subfolders.
-
-    Args:
-        subject: Subject ID.
-        ses: Session label (e.g. 'ses-01').
-        cohort: Cohort name (e.g., 'bbhi', 'bbhi senior').
-
-    Returns:
-        Path to the subject's native_T1 folder.
-    """
-    root_directory = RESTING_DIRS[(cohort, ses)]
-    if cohort == "bbhi":
-        return root_directory / subject / "native_T1"
-    return root_directory / subject / ses / "native_T1"
 
 
 def get_atlas_file(subject: str, ses: str) -> Path:
@@ -49,7 +41,7 @@ def get_atlas_file(subject: str, ses: str) -> Path:
     Returns:
         Path to the atlas file.
     """
-    return MASK_ROOT / ses / subject / "bold_space_masks" / f"{subject}_{ses}_{ATLAS}_subcortical14_bold_space.nii.gz"
+    return MASK_ROOT / ses / subject / BOLD_MASK.format(subject=subject, ses=ses)
 
 
 def read_framewise_displ(subject: str, fd_file: Path) -> Optional[pd.Series]:
@@ -106,10 +98,10 @@ def select_bold_file(subject: str, ses: str, native_dir: Path, needs_scrubbing: 
     Returns:
         Path to the BOLD image, or None if the expected image is missing or there is more than one scrubbed image.
     """
-    prefix = f"{subject}_{ses}_run-01_rest_bold_ap_T1-space"
+    original_file = native_dir / RESTING_BOLD.format(subject=subject, ses=ses)
+    prefix = original_file.name.removesuffix(".nii.gz")
 
     if not needs_scrubbing:
-        original_file = native_dir / f"{prefix}.nii.gz"
         if original_file.exists():
             return original_file
         print(f"Original BOLD file not found for {subject}: {original_file}. Skipping this subject.")
@@ -163,7 +155,7 @@ def process_subject_extract(subject: str, ses: str, bold_file: Path, atlas_file:
     output_subdir.mkdir(parents=True, exist_ok=True)
 
     # Save the extracted timeseries
-    timeseries_output_path = output_subdir / f"{subject}_{ses}_subcortical_{ATLAS}_timeseries.csv"
+    timeseries_output_path = output_subdir / TIMESERIES_FILE.format(subject=subject, ses=ses)
     print(f"Saving extracted timeseries to {timeseries_output_path}")
     np.savetxt(timeseries_output_path, timeseries, delimiter=",")
 
@@ -206,10 +198,11 @@ def get_subjects_to_process(output_directory: Path, ses: str, cohort: str) -> Di
         if subject_cohort != cohort:
             continue
 
-        native_dir = get_native_dir(subject, ses, cohort)
+        native_dir = resting_native_dir(subject, ses, cohort)
 
         # Track subjects with no bold file (scrubbed or original)
-        if not any(native_dir.glob(f"{subject}_{ses}_run-01_rest_bold_ap_T1-space*.nii.gz")):
+        bold_prefix = RESTING_BOLD.format(subject=subject, ses=ses).removesuffix(".nii.gz")
+        if not any(native_dir.glob(f"{bold_prefix}*.nii.gz")):
             subjects_excluded_no_bold.append(subject)
             continue
 
@@ -235,7 +228,7 @@ def get_subjects_to_process(output_directory: Path, ses: str, cohort: str) -> Di
             subjects_excluded_no_atlas_file.append(subject)
             continue
 
-        output_file_path = output_directory / ses / f"{subject}_{ses}_subcortical_{ATLAS}_timeseries.csv"
+        output_file_path = output_directory / ses / TIMESERIES_FILE.format(subject=subject, ses=ses)
         if not output_file_path.exists():
             subjects_to_process[subject] = bold_file
 
