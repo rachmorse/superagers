@@ -68,6 +68,8 @@ TRACTOGRAM_DIRS: Dict[str, Path] = {
     "bbhi senior": SENIOR_MRI / "tracto_SIFT2",
 }
 ANNOT_DIR = Path(__file__).resolve().parent / "fsaverage_masks"  # Schaefer annot files
+EDDY_CORRECTED = "eddy_corrected_data.nii.gz"  # Inside DTI_DIRS[(cohort, ses)] / f"{subject}_{ses}"
+RESTING_BOLD = "{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz"  # Unscrubbed, inside resting_native_dir()
 
 # Outputs: unsuffixed folders are the original run, each atlas writes to its own suffixed folders
 # Subcortical masks and DWI registrations are atlas-independent, so all atlases reuse the ones in fsaverage
@@ -81,6 +83,14 @@ FC_ROOT = ROOT / f"functional_connectivity_{ATLAS}" / "native_space"
 SC_ROOT = ROOT / f"structural_connectivity_{ATLAS}"
 SFC_ROOT = ROOT / f"structure_function_coupling_{ATLAS}"
 
+# Per-subject mask files, relative to MASK_ROOT / ses / subject (SHARED_MASK_ROOT for the subcortical and transform files)
+CORTICAL_T1_MASK = "t1_masks/{subject}_schaefer_volumetric_t1_{hemi}.nii.gz"  # hemi: lh or rh
+SUBCORTICAL_T1_MASK = "subcortical_t1_masks/{subject}_{side}_subcortical14_t1.nii.gz"  # side: left or right
+COMBINED_T1_MASK = f"subcortical_t1_masks/{{subject}}_{{ses}}_{ATLAS}_subcortical14_t1_space.nii.gz"
+DWI_MASK = f"dwi_space_masks/{{subject}}_{{ses}}_{ATLAS}_subcortical14_dwi_space.nii.gz"
+BOLD_MASK = f"bold_space_masks/{{subject}}_{{ses}}_{ATLAS}_subcortical14_bold_space.nii.gz"
+T1W_TO_B0_MAT = "dwi_space_masks/T1w_to_b0.mat"
+
 
 def cohort_from_id(subject: str) -> str:
     """Get a subject's cohort from their ID.
@@ -92,3 +102,37 @@ def cohort_from_id(subject: str) -> str:
         "bbhi" or "bbhi senior".
     """
     return "bbhi" if int(subject.removeprefix("sub-")) > BBHI_MIN_ID else "bbhi senior"
+
+
+def reconall_subject_dir(subject: str, ses: str, cohort: str) -> Path:
+    """Get a subject's recon-all folder.
+
+    BBHI folders end in _run-01, BBHI senior folders do not.
+
+    Args:
+        subject: Subject ID (e.g. "sub-1014").
+        ses: Session label (e.g. "ses-01").
+        cohort: Cohort name ("bbhi" or "bbhi senior").
+
+    Returns:
+        Path to the subject's recon-all folder for that session.
+    """
+    name = f"{subject}_{ses}_run-01" if cohort == "bbhi" else f"{subject}_{ses}"
+    return RECONALL_DIRS[cohort] / name
+
+
+def resting_native_dir(subject: str, ses: str, cohort: str) -> Path:
+    """Get the folder holding a subject's T1-space BOLD images and FD file.
+
+    BBHI has a separate root directory per session, BBHI senior has session subfolders.
+
+    Args:
+        subject: Subject ID (e.g. "sub-1014").
+        ses: Session label (e.g. "ses-01").
+        cohort: Cohort name ("bbhi" or "bbhi senior").
+
+    Returns:
+        Path to the subject's native_T1 folder.
+    """
+    subject_dir = RESTING_DIRS[(cohort, ses)] / subject
+    return subject_dir / "native_T1" if cohort == "bbhi" else subject_dir / ses / "native_T1"
