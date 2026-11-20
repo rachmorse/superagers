@@ -35,6 +35,7 @@ os.environ["TEST_SUBJECT"] = TEST_SUBJECT or ""
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from config import (  # noqa: E402
     COHORTS,
+    DWI_MASK,
     LABELS_CSV,
     MASK_ROOT,
     MRTRIX_BIN,
@@ -121,7 +122,7 @@ def get_subjects_to_process(tractogram_dir: Path, mask_dir: Path, output_dir: Pa
         sub, session = subject.split("_")
 
         # Check if native space mask exists
-        mask_file = Path(f"{mask_dir}/{session}/{sub}/dwi_space_masks/{subject}_{ATLAS}_subcortical14_dwi_space.nii.gz")
+        mask_file = mask_dir / session / sub / DWI_MASK.format(subject=sub, ses=session)
         if sub not in SUBJECTS:
             continue
         # Check if subject is already processed (in the CSV)
@@ -253,9 +254,7 @@ def generate_structural_connectivity(
     print(f"Tractogram file: {tractogram_file}")
     print(f"Weights file: {weights_file}")
 
-    mask_file = Path(
-        f"{mask_dir}/{ses}/{subject}/dwi_space_masks/{subject}_{ses}_{ATLAS}_subcortical14_dwi_space.nii.gz"
-    )
+    mask_file = mask_dir / ses / subject / DWI_MASK.format(subject=subject, ses=ses)
 
     # Create output directories
     prepare_directories(
