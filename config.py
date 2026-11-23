@@ -67,9 +67,13 @@ TRACTOGRAM_DIRS: Dict[str, Path] = {
     "bbhi": BBHI_MRI / "processed_data" / "tracto_SIFT2",
     "bbhi senior": SENIOR_MRI / "tracto_SIFT2",
 }
+TRACTOGRAM = "{subject}_{ses}_dwi_tractogram_10M.tck"
+SIFT2_WEIGHTS = "{subject}_{ses}_dwi_tractogram_10M_SIFT2_weights.txt"
 ANNOT_DIR = Path(__file__).resolve().parent / "fsaverage_masks"  # Schaefer annot files
+SCHAEFER_ANNOT = f"{{hemi}}.Schaefer2018_{N_PARCELS}Parcels_7Networks_order.annot"
 EDDY_CORRECTED = "eddy_corrected_data.nii.gz"  # Inside DTI_DIRS[(cohort, ses)] / f"{subject}_{ses}"
 RESTING_BOLD = "{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz"  # Unscrubbed, inside resting_native_dir()
+FRAMEWISE_DISPL = "framewise_displ.txt"
 
 # Outputs: unsuffixed folders are the original run, each atlas writes to its own suffixed folders
 # Subcortical masks and DWI registrations are atlas-independent, so all atlases reuse the ones in fsaverage
@@ -83,6 +87,9 @@ LABELS_CSV = TIMESERIES_ROOT / "combined_labels.csv"  # ROI labels in mask order
 FC_ROOT = ROOT / f"functional_connectivity_{ATLAS}" / "native_space"
 SC_ROOT = ROOT / f"structural_connectivity_{ATLAS}"
 SFC_ROOT = ROOT / f"structure_function_coupling_{ATLAS}"
+ALL_TO_ALL_DIR = "all_to_all_roi_matrices"
+ALL_TO_ALL_LABEL = "all_to_all_roi"
+MATRIX_CSV = "{label}_matrix.csv"
 
 # Per-subject mask files, relative to MASK_ROOT / ses / subject (SHARED_MASK_ROOT for the subcortical and transform files)
 CORTICAL_T1_MASK = "t1_masks/{subject}_schaefer_volumetric_t1_{hemi}.nii.gz"  # hemi: lh or rh
