@@ -18,13 +18,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-# Import functions from functional connectivity script
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "fmri_analysis"))
-from compute_functional_connectivity import (
-    create_network_mappings,
-    prepare_directories,
-)
-
 ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer200"
 TEST_SUBJECT: Optional[str] = None  # e.g. "sub-1014" to run only that subject
 N_THREADS = 2  # MRtrix uses all cores otherwise
@@ -34,15 +27,27 @@ os.environ["ATLAS"] = ATLAS
 os.environ["TEST_SUBJECT"] = TEST_SUBJECT or ""
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from config import (  # noqa: E402
+    ALL_TO_ALL_DIR,
+    ALL_TO_ALL_LABEL,
     COHORTS,
     DWI_MASK,
     LABELS_CSV,
     MASK_ROOT,
+    MATRIX_CSV,
     MRTRIX_BIN,
     SC_ROOT,
     SESSIONS,
+    SIFT2_WEIGHTS,
     SUBJECTS,
+    TRACTOGRAM,
     TRACTOGRAM_DIRS,
+)
+
+# Import functions from functional connectivity script
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "fmri_analysis"))
+from compute_functional_connectivity import (  # noqa: E402
+    create_network_mappings,
+    prepare_directories,
 )
 
 
@@ -89,11 +94,8 @@ def get_subjects_to_process(tractogram_dir: Path, mask_dir: Path, output_dir: Pa
             continue
         sub, session = sub_dir.name.split("_", 1)  # e.g., sub-1283, ses-02
 
-        fname = f"{sub}_{session}_dwi_tractogram_10M.tck"
-        full = sub_dir / fname
-
-        weights_name = f"{sub}_{session}_dwi_tractogram_10M_SIFT2_weights.txt"
-        weights_full = sub_dir / weights_name
+        full = sub_dir / TRACTOGRAM.format(subject=sub, ses=session)
+        weights_full = sub_dir / SIFT2_WEIGHTS.format(subject=sub, ses=session)
 
         if session != ses:
             continue
@@ -105,7 +107,7 @@ def get_subjects_to_process(tractogram_dir: Path, mask_dir: Path, output_dir: Pa
             print(f"SIFT2 weights not found for {sub_dir.name}")
 
     # Define output CSV paths
-    all_to_all_csv = output_dir / ses / "all_to_all_roi_matrices" / "all_to_all_roi_matrix.csv"
+    all_to_all_csv = output_dir / ses / ALL_TO_ALL_DIR / MATRIX_CSV.format(label=ALL_TO_ALL_LABEL)
 
     # Load existing subjects from CSV if it exists
     existing_subjects = set()
@@ -154,7 +156,7 @@ def save_structural_connectivity(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Prepare the group file path
-    all_subjects_file = output_dir / f"{label}_matrix.csv"
+    all_subjects_file = output_dir / MATRIX_CSV.format(label=label)
 
     # Flatten the matrix, skip diagonal elements
     flat_data = []
@@ -248,8 +250,8 @@ def generate_structural_connectivity(
     Returns:
         The generated connectivity matrix, or None if tck2connectome failed or flagged poor registration.
     """
-    tractogram_file = tractogram_dir / f"{subject}_{ses}/{subject}_{ses}_dwi_tractogram_10M.tck"
-    weights_file = tractogram_dir / f"{subject}_{ses}/{subject}_{ses}_dwi_tractogram_10M_SIFT2_weights.txt"
+    tractogram_file = tractogram_dir / f"{subject}_{ses}" / TRACTOGRAM.format(subject=subject, ses=ses)
+    weights_file = tractogram_dir / f"{subject}_{ses}" / SIFT2_WEIGHTS.format(subject=subject, ses=ses)
 
     print(f"Tractogram file: {tractogram_file}")
     print(f"Weights file: {weights_file}")
@@ -258,7 +260,7 @@ def generate_structural_connectivity(
 
     # Create output directories
     prepare_directories(
-        output_dir, ses, ["all_to_all_roi_matrices", "within_network_matrices", "subcortical_matrices", "visualization"]
+        output_dir, ses, [ALL_TO_ALL_DIR, "within_network_matrices", "subcortical_matrices", "visualization"]
     )
 
     # Create a temporary file for the matrix
@@ -317,10 +319,10 @@ def generate_structural_connectivity(
 
         # Save the connectivity data to CSV
         # Saved last since get_subjects_to_process uses this CSV to mark subjects as done
-        all_to_all_dir = output_dir / ses / "all_to_all_roi_matrices"
+        all_to_all_dir = output_dir / ses / ALL_TO_ALL_DIR
         save_structural_connectivity(
             subject_id=subject,
-            label="all_to_all_roi",
+            label=ALL_TO_ALL_LABEL,
             matrix=connectivity_matrix,
             roi_names=combined_labels,
             output_dir=all_to_all_dir,
@@ -463,7 +465,7 @@ def main() -> None:
             prepare_directories(
                 SC_ROOT,
                 ses,
-                ["all_to_all_roi_matrices", "within_network_matrices", "subcortical_matrices", "visualization"],
+                [ALL_TO_ALL_DIR, "within_network_matrices", "subcortical_matrices", "visualization"],
             )
 
             # Get subjects to process
