@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from config import (
     BOLD_MASK,
     COHORTS,
+    FRAMEWISE_DISPL,
     MASK_ROOT,
     RESTING_BOLD,
     SESSIONS,
@@ -207,7 +208,7 @@ def get_subjects_to_process(output_directory: Path, ses: str, cohort: str) -> Di
             continue
 
         # Motion cannot be checked without an FD file
-        fd_values = read_framewise_displ(subject, native_dir / "framewise_displ.txt")
+        fd_values = read_framewise_displ(subject, native_dir / FRAMEWISE_DISPL)
         if fd_values is None:
             subjects_excluded_no_fd.append(subject)
             continue
