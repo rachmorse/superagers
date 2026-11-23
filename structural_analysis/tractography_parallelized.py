@@ -26,7 +26,9 @@ from config import (
     MATLAB_CMD,
     RECONALL_DIRS,
     SESSIONS,
+    SIFT2_WEIGHTS,
     SPM_PATH,
+    TRACTOGRAM,
     TRACTOGRAM_DIRS,
     TRACTOGRAPHY_WD,
 )
@@ -36,6 +38,10 @@ THREADS = 20  # CPU threads per subject for MRtrix (total cores used = JOBS * TH
 TEST_SUBJECTS: Optional[Set[str]] = None  # e.g. {"sub-1014_ses-01"} to run only those
 
 SCRIPT_DIR = Path(__file__).resolve().parent  # holds spm_coregister_parcellation.m and logs/
+
+BVAL = "BVAL_concat_APPA.bval"
+BVEC = "BVEC_concat_APPA.bvec"
+DWI_BRAIN_MASK = "T1w_brain_mask_dMRIres.nii.gz"
 
 
 class SubjectInfo(NamedTuple):
@@ -164,7 +170,8 @@ def is_processed(subject: SubjectInfo) -> bool:
     Returns:
         True if the subject's SIFT2 weights already exist.
     """
-    weights_name = f"{subject.subject_id}_dwi_tractogram_10M_SIFT2_weights.txt"
+    sub, ses = subject.subject_id.split("_", 1)
+    weights_name = SIFT2_WEIGHTS.format(subject=sub, ses=ses)
     local_file = TRACTOGRAPHY_WD / subject.subject_id / weights_name
     shared_file = TRACTOGRAM_DIRS[subject.cohort] / subject.subject_id / weights_name
     return local_file.exists() or shared_file.exists()
@@ -374,8 +381,11 @@ def run_tractography(subject: str, wd: Path, threads: int) -> None:
         wd: Working directory file prefix.
         threads: Number of threads to use.
     """
+    sub, ses = subject.split("_", 1)
+    tractogram = str(wd.parent / TRACTOGRAM.format(subject=sub, ses=ses))
+    weights = str(wd.parent / SIFT2_WEIGHTS.format(subject=sub, ses=ses))
+
     logging.info(f"{subject}: Tractogram calculation")
-    tractogram = f"{wd}_tractogram_10M.tck"
     # fmt: off
     run_mrtrix_step([
         "tckgen", f"{wd}_desc-wm_fod.mif",
@@ -390,7 +400,6 @@ def run_tractography(subject: str, wd: Path, threads: int) -> None:
     # fmt: on
 
     logging.info(f"{subject}: SIFT2 filtering")
-    weights = f"{wd}_tractogram_10M_SIFT2_weights.txt"
     # fmt: off
     run_mrtrix_step([
         "tcksift2", tractogram,
@@ -457,9 +466,9 @@ def process_subject(subject_info: SubjectInfo) -> Tuple[str, bool]:
 
     # Input files
     input_corr_dwi = id_dir / EDDY_CORRECTED
-    input_corr_val = id_dir / "BVAL_concat_APPA.bval"
-    input_corr_vec = id_dir / "BVEC_concat_APPA.bvec"
-    input_corr_dwi_brain_mask = id_dir / "T1w_brain_mask_dMRIres.nii.gz"
+    input_corr_val = id_dir / BVAL
+    input_corr_vec = id_dir / BVEC
+    input_corr_dwi_brain_mask = id_dir / DWI_BRAIN_MASK
 
     if not check_inputs(subject, input_corr_dwi, fs_dir):
         return (subject, False)
