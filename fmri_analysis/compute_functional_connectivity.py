@@ -1,5 +1,6 @@
 """Functions to compute and save functional connectivity matrices from ROI timeseries."""
 
+import sys
 from itertools import combinations
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -8,6 +9,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from nilearn.connectome import ConnectivityMeasure
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import ALL_TO_ALL_DIR, ALL_TO_ALL_LABEL, MATRIX_CSV
 
 NETWORK_FIELD = 2  # Index of the network name in Schaefer labels split on "_": 7Networks_LH_Vis_1 -> "Vis"
 
@@ -82,12 +86,12 @@ def compute_functional_connectivity(
                 subcortical_structures[structure_name].append(index)
 
     # Define target directories
-    all_to_all_dir = output_dir / ses / "all_to_all_roi_matrices"
+    all_to_all_dir = output_dir / ses / ALL_TO_ALL_DIR
     within_network_dir = output_dir / ses / "within_network_matrices"
     subcortical_dir = output_dir / ses / "subcortical_matrices"
 
     # Ensure directories exist
-    prepare_directories(output_dir, ses, ["all_to_all_roi_matrices", "within_network_matrices", "subcortical_matrices"])
+    prepare_directories(output_dir, ses, [ALL_TO_ALL_DIR, "within_network_matrices", "subcortical_matrices"])
 
     # Process cortical networks (non-subcortical)
     for network, indices in network_mappings.items():
@@ -127,7 +131,7 @@ def compute_functional_connectivity(
     # Compute full connectivity matrix
     # Saved last since 02_compute_subject_functional_connectivity.py uses this CSV to mark subjects as done
     print("Computing full connectivity matrix...")
-    return compute_and_save_connectivity(subject_id, "all_to_all_roi", timeseries, combined_labels, all_to_all_dir)
+    return compute_and_save_connectivity(subject_id, ALL_TO_ALL_LABEL, timeseries, combined_labels, all_to_all_dir)
 
 
 def compute_and_save_connectivity(
@@ -234,7 +238,7 @@ def save_connectivity_data(
         roi_names: List of ROI names.
         output_dir: Directory where the connectivity data will be saved.
     """
-    csv_output_path = output_dir / f"{label}_matrix.csv"
+    csv_output_path = output_dir / MATRIX_CSV.format(label=label)
 
     columns = [f"{roi1}-{roi2}" for roi1, roi2 in combinations(roi_names, 2)]
     df_all_fc = pd.DataFrame(index=[subject_id], columns=columns)

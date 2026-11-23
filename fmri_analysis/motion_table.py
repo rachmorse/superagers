@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "analyses"))
 from demographics_table import DATA_DIR, P_FLOOR, SESSIONS, load_data, summary_row
 
-from config import cohort_from_id, resting_native_dir
+from config import FRAMEWISE_DISPL, cohort_from_id, resting_native_dir
 
 # Rows per timepoint: (label, column stem)
 MOTION_ROWS = [
@@ -44,7 +44,7 @@ def motion(sub: str, ses: str) -> tuple[float, float]:
         Mean FD (mm) and percentage of volumes scrubbed.
     """
     d = native_t1_dir(sub, ses)
-    fd = pd.read_csv(d / "framewise_displ.txt")["FramewiseDisplacement"]
+    fd = pd.read_csv(d / FRAMEWISE_DISPL)["FramewiseDisplacement"]
     scrub = json.loads(next(d.glob("*scrubbed*.json")).read_text())
     return fd.mean(), scrub["NumFramesScrubbed"] / scrub["TotalFrames"] * 100
 

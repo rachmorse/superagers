@@ -18,8 +18,8 @@ from config import (
     COHORTS,
     CORTICAL_T1_MASK,
     MASK_ROOT,
-    N_PARCELS,
     RECONALL_DIRS,
+    SCHAEFER_ANNOT,
     SESSIONS,
     SUBJECTS,
     SUPERAGER_CSV,
@@ -30,8 +30,8 @@ from pipeline_utils import record_summary
 N_JOBS = 6  # Subjects processed in parallel
 
 # Schaefer atlas on fsaverage (annotation files from the Schaefer GitHub)
-SCHAEFER_LH_ANNOT = ANNOT_DIR / f"lh.Schaefer2018_{N_PARCELS}Parcels_7Networks_order.annot"
-SCHAEFER_RH_ANNOT = ANNOT_DIR / f"rh.Schaefer2018_{N_PARCELS}Parcels_7Networks_order.annot"
+SCHAEFER_LH_ANNOT = ANNOT_DIR / SCHAEFER_ANNOT.format(hemi="lh")
+SCHAEFER_RH_ANNOT = ANNOT_DIR / SCHAEFER_ANNOT.format(hemi="rh")
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")

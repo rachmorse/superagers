@@ -13,11 +13,15 @@ from compute_functional_connectivity import compute_functional_connectivity, vis
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from config import (
+    ALL_TO_ALL_DIR,
+    ALL_TO_ALL_LABEL,
     ANNOT_DIR,
     ATLAS,
     FC_ROOT,
     LABELS_CSV,
+    MATRIX_CSV,
     N_PARCELS,
+    SCHAEFER_ANNOT,
     SESSIONS,
     SUBCORTICAL_ASEG_CODES,
     SUBJECTS,
@@ -41,9 +45,7 @@ def write_combined_labels(labels_csv_path: Path) -> None:
     """
     labels = []
     for hemi in ["lh", "rh"]:
-        _, _, names = nib.freesurfer.read_annot(
-            str(ANNOT_DIR / f"{hemi}.Schaefer2018_{N_PARCELS}Parcels_7Networks_order.annot")
-        )
+        _, _, names = nib.freesurfer.read_annot(str(ANNOT_DIR / SCHAEFER_ANNOT.format(hemi=hemi)))
         # Skip index 0 which is the medial wall
         labels += [name.decode("utf-8") for name in names[1:]]
 
@@ -176,7 +178,7 @@ def get_subjects_to_process(root_directory: Path, output_directory: Path, ses: s
         print(f"Timeseries directory not found: {root_directory}")
         return subjects_to_process
 
-    csv_path = output_directory / ses / "all_to_all_roi_matrices" / "all_to_all_roi_matrix.csv"
+    csv_path = output_directory / ses / ALL_TO_ALL_DIR / MATRIX_CSV.format(label=ALL_TO_ALL_LABEL)
 
     if csv_path.exists():
         # Only the id column is needed, so skip reading the connectivity values
