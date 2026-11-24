@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Supplementary figure: SFC difference maps for Schaefer 200 and 400 with one row per atlas."""
 
+import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import plot_sfc_difference as psd
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import ATLAS_LABELS
+
 OUTPUT_PATH = Path(__file__).parent / "figures" / "sfc_diff_atlas_maps.png"
-ROW_LABELS = {"schaefer200": "Schaefer 200", "schaefer400": "Schaefer 400"}
 
 
 def main() -> None:
@@ -18,7 +21,7 @@ def main() -> None:
     row_gap = 0.3  # Between the two brain rows
     cbar_space = 0.9  # Colorbar plus its label under the rows
 
-    views = {atlas: psd.brain_views(atlas) for atlas in ROW_LABELS}
+    views = {atlas: psd.brain_views(atlas) for atlas in ATLAS_LABELS}
     row_w = fig_w - label_w
     sizes = {atlas: psd.brain_row_sizes(images, row_w) for atlas, images in views.items()}
     row_hs = [max(h for _, h in s) for s in sizes.values()]
@@ -27,11 +30,18 @@ def main() -> None:
 
     # Rows top to bottom, each labeled on the left
     top = fig_h
-    for (atlas, label), row_h in zip(ROW_LABELS.items(), row_hs, strict=True):
+    for (atlas, label), row_h in zip(ATLAS_LABELS.items(), row_hs, strict=True):
         bottom = top - row_h
         psd.draw_brain_row(fig, views[atlas], sizes[atlas], label_w, bottom)
-        fig.text((label_w - 0.2) / fig_w, (bottom + row_h / 2) / fig_h, label, ha="right",
-                 va="center", fontsize=16, color=psd.INK)
+        fig.text(
+            (label_w - 0.2) / fig_w,
+            (bottom + row_h / 2) / fig_h,
+            label,
+            ha="right",
+            va="center",
+            fontsize=16,
+            color=psd.INK,
+        )
         top = bottom - row_gap
 
     psd.add_colorbar(fig, label_w + row_w / 2, cbar_space - 0.35)

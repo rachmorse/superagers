@@ -13,6 +13,7 @@ from typing import Dict, List, Literal, Optional, Tuple
 
 # Atlas
 ATLASES = ("schaefer200", "schaefer400")
+ATLAS_LABELS = {"schaefer200": "Schaefer 200", "schaefer400": "Schaefer 400"}
 ATLAS = os.environ.get("ATLAS", "schaefer200")
 if ATLAS not in ATLASES:
     raise ValueError(f"Unknown ATLAS {ATLAS!r}, expected one of {ATLASES}")

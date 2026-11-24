@@ -1,12 +1,18 @@
 """Flow diagram of superager classification at baseline and follow-up."""
 
+import sys
 from pathlib import Path
+from typing import Dict
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import pandas as pd
+from demographics_table import analysis_ids, clean_id
 
-from demographics_table import DATA_DIR, analysis_ids, clean_id
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import SUPERAGER_CSV
+
+OUTPUT_PATH = Path(__file__).resolve().parent / "figures" / "classification_flow_figure.png"
 
 CRITERIA_TEXT = (
     "Superager criteria applied at baseline and follow-up:\n"
@@ -16,13 +22,13 @@ CRITERIA_TEXT = (
 )
 
 
-def compute_ns() -> dict:
+def compute_ns() -> Dict[str, int]:
     """Compute the counts for each box in the classification flow diagram.
 
     Returns:
         Counts keyed by box.
     """
-    sup = pd.read_csv(DATA_DIR / "superager.csv")
+    sup = pd.read_csv(SUPERAGER_CSV)
     sup = sup[sup["id"].map(clean_id).isin(analysis_ids(sup))]
     bl_sa, bl_no = sup[sup["superager_tp1"] == 1], sup[sup["superager_tp1"] == 0]
     return {
@@ -38,7 +44,7 @@ def compute_ns() -> dict:
     }
 
 
-def draw_flow(ns: dict) -> None:
+def draw_flow(ns: Dict[str, int]) -> None:
     """Draw and save the classification flow diagram.
 
     Args:
@@ -114,12 +120,13 @@ def draw_flow(ns: dict) -> None:
     # Criteria box sized to the text, centred under the diagram
     crit_w = 6.5
     crit_x = 4.05 - crit_w / 2
-    ax.add_patch(mpatches.FancyBboxPatch((crit_x, 1.25), crit_w, 1.1, boxstyle="square,pad=0", linestyle="--", **box_style))
+    ax.add_patch(
+        mpatches.FancyBboxPatch((crit_x, 1.25), crit_w, 1.1, boxstyle="square,pad=0", linestyle="--", **box_style)
+    )
     ax.text(crit_x + 0.15, 1.8, CRITERIA_TEXT, ha="left", va="center", fontsize=fontsize)
 
-    out = Path(__file__).resolve().parent / "figures" / "classification_flow_figure.png"
-    plt.savefig(out, dpi=300, bbox_inches="tight", facecolor="white")
-    print(f"Saved to {out}")
+    plt.savefig(OUTPUT_PATH, dpi=300, bbox_inches="tight", facecolor="white")
+    print(f"Saved to {OUTPUT_PATH}")
 
 
 if __name__ == "__main__":
