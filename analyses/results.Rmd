@@ -61,7 +61,7 @@ OUTPUTS <- c(
   lme_change = "Supplementary Table",
   atlas_comparison = "Supplementary Figure",
   motion = "Supplementary Table",
-  criteria = "Supplementary Table"  # Comparison of superaging criteria (not in this file but used for table numbering)
+  criteria = "Supplementary Table"  # Comparison of superager criteria (not in this file but used for table numbering)
 )
 
 # Start figure numbering at 2
