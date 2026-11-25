@@ -17,7 +17,9 @@ ATLAS_LABELS = {"schaefer200": "Schaefer 200", "schaefer400": "Schaefer 400"}
 ATLAS = os.environ.get("ATLAS", "schaefer200")
 if ATLAS not in ATLASES:
     raise ValueError(f"Unknown ATLAS {ATLAS!r}, expected one of {ATLASES}")
-N_PARCELS = int(ATLAS.removeprefix("schaefer"))
+ML_ATLAS = "schaefer200"
+N_PARCELS_BY_ATLAS = {atlas: int(atlas.removeprefix("schaefer")) for atlas in ATLASES}
+N_PARCELS = N_PARCELS_BY_ATLAS[ATLAS]
 
 # Subcortical structures in mask value order (1 to 7) with their FreeSurfer aseg codes (left, right)
 SUBCORTICAL_ASEG_CODES: Dict[str, Tuple[int, int]] = {
@@ -29,12 +31,14 @@ SUBCORTICAL_ASEG_CODES: Dict[str, Tuple[int, int]] = {
     "Accumbens": (26, 58),
     "Thalamus": (10, 49),
 }
+N_ROIS = N_PARCELS + 2 * len(SUBCORTICAL_ASEG_CODES)
 
 # Cohort
-SUBJECTS_FILE = Path("/home/rachel/Desktop/data/final_cohort_ids.txt")  # Final longitudinal cohort
+DATA_DIR = Path("/home/rachel/Desktop/data")
+SUBJECTS_FILE = DATA_DIR / "final_cohort_ids.txt"  # Final longitudinal cohort
 TEST_SUBJECT: Optional[str] = os.environ.get("TEST_SUBJECT") or None
 SUBJECTS: List[str] = [TEST_SUBJECT] if TEST_SUBJECT else SUBJECTS_FILE.read_text().split()
-SUPERAGER_CSV = Path("/home/rachel/Desktop/data/superager.csv")  # Superager classification per timepoint
+SUPERAGER_CSV = DATA_DIR / "superager.csv"  # Superager classification per timepoint
 COHORTS: List[Literal["bbhi", "bbhi senior"]] = ["bbhi", "bbhi senior"]
 SESSIONS: List[Literal["ses-01", "ses-02"]] = ["ses-01", "ses-02"]
 BBHI_MIN_ID = 6000  # BBHI IDs are above this, BBHI senior IDs below
@@ -68,37 +72,58 @@ TRACTOGRAM_DIRS: Dict[str, Path] = {
     "bbhi": BBHI_MRI / "processed_data" / "tracto_SIFT2",
     "bbhi senior": SENIOR_MRI / "tracto_SIFT2",
 }
-TRACTOGRAM = "{subject}_{ses}_dwi_tractogram_10M.tck"
-SIFT2_WEIGHTS = "{subject}_{ses}_dwi_tractogram_10M_SIFT2_weights.txt"
-ANNOT_DIR = Path(__file__).resolve().parent / "fsaverage_masks"  # Schaefer annot files
-SCHAEFER_ANNOT = f"{{hemi}}.Schaefer2018_{N_PARCELS}Parcels_7Networks_order.annot"
-EDDY_CORRECTED = "eddy_corrected_data.nii.gz"  # Inside DTI_DIRS[(cohort, ses)] / f"{subject}_{ses}"
-RESTING_BOLD = "{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz"  # Unscrubbed, inside resting_native_dir()
-FRAMEWISE_DISPL = "framewise_displ.txt"
 
 # Outputs: unsuffixed folders are the original run, each atlas writes to its own suffixed folders
-# Subcortical masks and DWI registrations are atlas-independent, so all atlases reuse the ones in fsaverage
 ROOT = Path("/home/rachel/Desktop/schaefer_analysis")
+
+# Masks: per-subject files relative to MASK_ROOT / ses / subject (SHARED_MASK_ROOT for subcortical and transform files)
+# Subcortical masks and DWI registrations are atlas-independent, so all atlases reuse the ones in fsaverage
 SHARED_MASK_ROOT = ROOT / "fsaverage"
 MASK_ROOT = SHARED_MASK_ROOT if ATLAS == "schaefer200" else ROOT / f"fsaverage_{ATLAS}"
-TRACTOGRAPHY_WD = ROOT / "tracto_wd"
-TIMESERIES_ROOT = ROOT / f"timeseries_data_{ATLAS}" / "native_space"
-TIMESERIES_FILE = f"{{subject}}_{{ses}}_subcortical_{ATLAS}_timeseries.csv"  # Inside TIMESERIES_ROOT / ses
-LABELS_CSV = TIMESERIES_ROOT / "combined_labels.csv"  # ROI labels in mask order
-FC_ROOT = ROOT / f"functional_connectivity_{ATLAS}" / "native_space"
-SC_ROOT = ROOT / f"structural_connectivity_{ATLAS}"
-SFC_ROOT = ROOT / f"structure_function_coupling_{ATLAS}"
-ALL_TO_ALL_DIR = "all_to_all_roi_matrices"
-ALL_TO_ALL_LABEL = "all_to_all_roi"
-MATRIX_CSV = "{label}_matrix.csv"
-
-# Per-subject mask files, relative to MASK_ROOT / ses / subject (SHARED_MASK_ROOT for the subcortical and transform files)
+ANNOT_DIR = Path(__file__).resolve().parent / "fsaverage_masks"  # Schaefer annot files
+SCHAEFER_ANNOT = f"{{hemi}}.Schaefer2018_{N_PARCELS}Parcels_7Networks_order.annot"
 CORTICAL_T1_MASK = "t1_masks/{subject}_schaefer_volumetric_t1_{hemi}.nii.gz"  # hemi: lh or rh
 SUBCORTICAL_T1_MASK = "subcortical_t1_masks/{subject}_{side}_subcortical14_t1.nii.gz"  # side: left or right
 COMBINED_T1_MASK = f"subcortical_t1_masks/{{subject}}_{{ses}}_{ATLAS}_subcortical14_t1_space.nii.gz"
 DWI_MASK = f"dwi_space_masks/{{subject}}_{{ses}}_{ATLAS}_subcortical14_dwi_space.nii.gz"
 BOLD_MASK = f"bold_space_masks/{{subject}}_{{ses}}_{ATLAS}_subcortical14_bold_space.nii.gz"
 T1W_TO_B0_MAT = "dwi_space_masks/T1w_to_b0.mat"
+
+# Tractography
+TRACTOGRAPHY_WD = ROOT / "tracto_wd"
+EDDY_CORRECTED = "eddy_corrected_data.nii.gz"  # Inside DTI_DIRS[(cohort, ses)] / f"{subject}_{ses}"
+TRACTOGRAM = "{subject}_{ses}_dwi_tractogram_10M.tck"
+SIFT2_WEIGHTS = "{subject}_{ses}_dwi_tractogram_10M_SIFT2_weights.txt"
+
+# fMRI
+TIMESERIES_ROOT = ROOT / f"timeseries_data_{ATLAS}" / "native_space"
+RESTING_BOLD = "{subject}_{ses}_run-01_rest_bold_ap_T1-space.nii.gz"  # Unscrubbed, inside resting_native_dir()
+FRAMEWISE_DISPL = "framewise_displ.txt"
+TIMESERIES_FILE = f"{{subject}}_{{ses}}_subcortical_{ATLAS}_timeseries.csv"  # Inside TIMESERIES_ROOT / ses
+LABELS_CSV = TIMESERIES_ROOT / "combined_labels.csv"  # ROI labels in mask order
+
+# Connectivity
+FC_ROOTS = {atlas: ROOT / f"functional_connectivity_{atlas}" / "native_space" for atlas in ATLASES}
+SC_ROOTS = {atlas: ROOT / f"structural_connectivity_{atlas}" for atlas in ATLASES}
+FC_ROOT = FC_ROOTS[ATLAS]
+SC_ROOT = SC_ROOTS[ATLAS]
+ALL_TO_ALL_DIR = "all_to_all_roi_matrices"
+ALL_TO_ALL_LABEL = "all_to_all_roi"
+MATRIX_CSV = "{label}_matrix.csv"
+FISHER_Z_PREFIX = "fisher_z_"
+INDIVIDUAL_MATRIX_DIR = "individual_connectivity_matrices"
+SC_MATRIX = "{subject}_{ses}_structural_connectivity_matrix.csv"
+FC_MATRIX_FISHER_Z = "{subject}_{ses}_functional_connectivity_matrix_fisher_z.csv"
+
+# Coupling and ML
+SFC_ROOTS = {atlas: ROOT / f"structure_function_coupling_{atlas}" for atlas in ATLASES}
+SFC_ROOT = SFC_ROOTS[ATLAS]
+SFC_INDIVIDUAL_DIR = "individual_coupling_matrices"
+SFC_FILE = "{subject}_{ses}_structure_function_coupling.csv"
+SFC_FILE_FISHER_Z = "{subject}_{ses}_structure_function_coupling_fisher_z.csv"
+FLAT_DIR = "grouped_rois"
+FC_FLAT = "{subject}_{ses}_functional_connectivity_flat.csv"
+SC_FLAT = "{subject}_{ses}_structural_connectivity_flat.csv"
 
 
 def cohort_from_id(subject: str) -> str:
