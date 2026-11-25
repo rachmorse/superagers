@@ -11,7 +11,7 @@ import pandas as pd
 from nilearn.connectome import ConnectivityMeasure
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from config import ALL_TO_ALL_DIR, ALL_TO_ALL_LABEL, MATRIX_CSV
+from config import ALL_TO_ALL_DIR, ALL_TO_ALL_LABEL, FISHER_Z_PREFIX, MATRIX_CSV
 
 NETWORK_FIELD = 2  # Index of the network name in Schaefer labels split on "_": 7Networks_LH_Vis_1 -> "Vis"
 
@@ -159,7 +159,7 @@ def compute_and_save_connectivity(
     fisher_z_matrix = fisher_transform(connectivity_matrix)
 
     # Fisher z saved first so the all_to_all_roi CSV that marks a subject as done is written last
-    save_connectivity_data(subject_id, f"fisher_z_{label}", fisher_z_matrix, roi_names, output_dir)
+    save_connectivity_data(subject_id, FISHER_Z_PREFIX + label, fisher_z_matrix, roi_names, output_dir)
     save_connectivity_data(subject_id, label, connectivity_matrix, roi_names, output_dir)
 
     return connectivity_matrix, fisher_z_matrix
