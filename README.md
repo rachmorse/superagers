@@ -81,7 +81,7 @@ The code is available under the MIT License, allowing others to reuse and adapt 
 ### en_svm_models
 - **Purpose:** Prepare and run logistic elastic net and linear SVM models to classify participants as superagers or typical older adults.
 - **Scripts:**
-    - `prep_data_for_en.py`: Prepares data for elastic net models. 
+    - `prep_data_for_ml.py`: Prepares data for the elastic net and SVM models.
     - `prep_weighted_global_roi_averages.py`: Computes voxel-weighted global, sensory, heteromodal, and memory-relevant network averages for SFC.
     - `run_classifier.py`: Runs elastic net or linear SVM classification predicting superager status using nested cross-validation and permutation testing.
     - `summarize_models.py`: Summarizes the AUC, confidence interval, and permutation p-value of each elastic net and SVM model with FDR-adjusted p-values.
