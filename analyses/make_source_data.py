@@ -12,7 +12,7 @@ from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path[:0] = [str(REPO / "en_svm_models"), str(REPO / "structure_function_coupling")]
+sys.path[:0] = [str(REPO), str(REPO / "en_svm_models"), str(REPO / "structure_function_coupling")]
 
 import plot_group_connectivity_figure as pgc  # noqa: E402
 import plot_sfc_difference as psd  # noqa: E402
@@ -25,7 +25,8 @@ from plot_feature_importance import (  # noqa: E402
     TOP_N,
     load_and_prepare,
 )
-from prep_data_for_en import ATLAS as EN_ATLAS  # noqa: E402
+
+from config import ML_ATLAS as EN_ATLAS  # noqa: E402
 
 OUTPUT_PATH = Path(__file__).parent / "figures" / "source_data.xlsx"
 EN_MODELS = {"A": "t1", "B": "t1_slope"}  # Figure 2 panel -> feature set

@@ -6,12 +6,17 @@ writes one row per model for results.Rmd.
 """
 
 import pickle
+import sys
+from pathlib import Path
 from typing import Iterable, List
 
 import pandas as pd
 from run_classifier import RESULTS_DIR, delong_auc_ci
-from prep_data_for_en import ATLAS, DATA_DIR
 from sklearn.metrics import roc_auc_score
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import DATA_DIR
+from config import ML_ATLAS as ATLAS
 
 MODELS = {"elastic_net": "", "linear_svm": "SVM_"}  # File prefix after the atlas
 CONNECTIVITY_TYPES = ["SFC", "FC", "SC"]

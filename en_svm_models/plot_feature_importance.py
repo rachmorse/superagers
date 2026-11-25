@@ -8,7 +8,8 @@ from matplotlib.colors import ListedColormap
 from matplotlib.image import imread
 import yabplot as yab
 
-from prep_data_for_en import ATLAS
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import ML_ATLAS as ATLAS
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "analyses"))
 from plot_sfc_difference import crop_colorbar, trim_whitespace

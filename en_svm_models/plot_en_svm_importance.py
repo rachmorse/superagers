@@ -1,12 +1,16 @@
 """Plot elastic net vs linear SVM permutation importance for every SFC feature (supplementary figure)."""
 
+import sys
 from pathlib import Path
 
 import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import pandas as pd
 from plot_feature_importance import NETWORK_COLORS, NETWORK_LABELS, RESULTS_DIR, load_and_prepare
-from prep_data_for_en import ATLAS, DATA_DIR
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import DATA_DIR
+from config import ML_ATLAS as ATLAS
 
 OUTPUT_PATH = Path(__file__).resolve().parent.parent / "analyses" / "figures" / f"en_svm_importance_{ATLAS}.png"
 AGREEMENT_CSV = DATA_DIR / f"en_svm_feature_agreement_{ATLAS}.csv"  # For results.Rmd

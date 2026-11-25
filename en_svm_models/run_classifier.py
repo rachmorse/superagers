@@ -4,6 +4,7 @@ import hashlib
 import os
 import pickle
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Literal
@@ -11,7 +12,7 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
-from prep_data_for_en import ATLAS, DATA_DIR, FC_ROOT, SC_ROOT, SFC_ROOT, get_subjects_to_process
+from prep_data_for_ml import get_subjects_to_process
 from scipy.stats import norm
 from sklearn.base import clone
 from sklearn.inspection import permutation_importance
@@ -22,6 +23,14 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 from sklearn.utils import check_random_state
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import DATA_DIR, FC_ROOTS, SC_ROOTS, SFC_ROOTS
+from config import ML_ATLAS as ATLAS
+
+SFC_ROOT = SFC_ROOTS[ATLAS]
+FC_ROOT = FC_ROOTS[ATLAS]
+SC_ROOT = SC_ROOTS[ATLAS]
 
 # Env vars override these defaults so queued runs can use different settings
 MODEL: Literal["elastic_net", "linear_svm"] = os.environ.get("MODEL", "linear_svm")
@@ -639,8 +648,8 @@ def main():
         raise ValueError(f"Missing required columns in {csv_path}: {missing_cols}")
 
     # Longitudinal superager definition requires both sessions
-    subjects_tp1 = get_subjects_to_process(SFC_ROOT / "ses-01" / "individual_coupling_matrices", "ses-01", DATA_DIR)
-    subjects_tp2 = get_subjects_to_process(SFC_ROOT / "ses-02" / "individual_coupling_matrices", "ses-02", DATA_DIR)
+    subjects_tp1 = get_subjects_to_process(SFC_ROOT / "ses-01" / "individual_coupling_matrices", "ses-01")
+    subjects_tp2 = get_subjects_to_process(SFC_ROOT / "ses-02" / "individual_coupling_matrices", "ses-02")
     subjects = sorted(set(subjects_tp1) & set(subjects_tp2))
     print(f"Subjects: {len(subjects)}")
 

@@ -1,12 +1,17 @@
+import sys
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+
 import nibabel as nib
 import numpy as np
 import pandas as pd
 from nilearn.datasets import fetch_atlas_schaefer_2018
-from prep_data_for_en import DATA_DIR, ROOT, get_subjects_to_process
+from prep_data_for_ml import get_subjects_to_process
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import DATA_DIR, ROOT
 
 ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer200"
 N_PARCELS = int(ATLAS.removeprefix("schaefer"))
@@ -281,12 +286,8 @@ def main():
     sc_root_path = SC_ROOT
     age_dir = DATA_DIR
 
-    subjects_tp1 = get_subjects_to_process(
-        root_path / "ses-01" / "individual_coupling_matrices", "ses-01", age_dir
-    )
-    subjects_tp2 = get_subjects_to_process(
-        root_path / "ses-02" / "individual_coupling_matrices", "ses-02", age_dir
-    )
+    subjects_tp1 = get_subjects_to_process(root_path / "ses-01" / "individual_coupling_matrices", "ses-01")
+    subjects_tp2 = get_subjects_to_process(root_path / "ses-02" / "individual_coupling_matrices", "ses-02")
     subjects = sorted(set(subjects_tp1) | set(subjects_tp2))
     _dbg(
         f"Subjects found: tp1={len(subjects_tp1)}, tp2={len(subjects_tp2)} "
