@@ -1,18 +1,54 @@
 """Helpers shared by the pipeline scripts.
 
-Each step script records its success/failure counts per cohort and session, and the run_*_pipeline.py
-script prints them as one summary at the end of the run.
+The run_*_pipeline.py scripts run each step script with run_script. Each step script records its success/failure
+counts per cohort and session, and the run_*_pipeline.py script prints them as one summary at the end of the run.
 """
 
 import json
 import logging
 import subprocess
+import sys
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 from config import ATLAS
 
 logger = logging.getLogger(__name__)
+
+
+def run_script(script_path: Path, log_path: Path) -> Tuple[int, str]:
+    """Run a script and append stdout/stderr to the shared log.
+
+    Args:
+        script_path: Path to the script to run.
+        log_path: Path to the log file to append output.
+
+    Returns:
+        The script's exit code (1 if the script was not found) and its name or error message.
+    """
+    if not script_path.exists():
+        msg = f"Script not found: {script_path}"
+        print(msg)
+        return 1, msg
+
+    print(f"Running {script_path.name}...")
+    with log_path.open("a") as log_file:
+        log_file.write(f"=== START {script_path.name} ===\n")
+        result = subprocess.run(
+            [sys.executable, "-u", str(script_path)],
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        log_file.write(f"=== END {script_path.name} (exit {result.returncode}) ===\n\n")
+
+    if result.returncode == 0:
+        print(f"Successfully completed {script_path.name}")
+    else:
+        print(f"{script_path.name} failed with exit code {result.returncode}")
+
+    print("-" * 30)
+    return result.returncode, script_path.name
 
 
 def run_step(cmd: List[str], description: str) -> None:

@@ -3,13 +3,12 @@
 
 import datetime
 import os
-import subprocess
 import sys
 from pathlib import Path
-from typing import List, Literal, Optional, Tuple
+from typing import List, Literal, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from pipeline_utils import format_summary, summary_path
+from pipeline_utils import format_summary, run_script, summary_path
 
 ATLAS: Literal["schaefer200", "schaefer400"] = "schaefer200"
 TEST_SUBJECT: Optional[str] = None  # e.g. "sub-1014" to run only that subject
@@ -24,44 +23,9 @@ if ATLAS != "schaefer200":
     SCRIPTS.remove("02_subcortical_to_t1.py")
 
 
-def run_script(script_path: Path, log_path: Path) -> Tuple[int, str]:
-    """Run a script and append stdout/stderr to the shared log.
-
-    Args:
-        script_path: Path to the script to run.
-        log_path: Path to the log file to append output.
-
-    Returns:
-        The script's exit code (1 if the script was not found) and its name or error message.
-    """
-    if not script_path.exists():
-        msg = f"Script not found: {script_path}"
-        print(msg)
-        return 1, msg
-
-    print(f"Running {script_path.name}...")
-    with log_path.open("a") as log_file:
-        log_file.write(f"=== START {script_path.name} ===\n")
-        result = subprocess.run(
-            [sys.executable, "-u", str(script_path)],
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
-        log_file.write(f"=== END {script_path.name} (exit {result.returncode}) ===\n\n")
-
-    if result.returncode == 0:
-        print(f"Successfully completed {script_path.name}")
-    else:
-        print(f"{script_path.name} failed with exit code {result.returncode}")
-
-    print("-" * 30)
-    return result.returncode, script_path.name
-
-
 def main() -> None:
     """Run each masks script in order, then print the summary of all scripts."""
-    # Pass ATLAS and TEST_SUBJECT to config.py in the scripts started below
+    # Make the scripts below use the ATLAS and TEST_SUBJECT set at the top
     os.environ["ATLAS"] = ATLAS
     if TEST_SUBJECT:
         os.environ["TEST_SUBJECT"] = TEST_SUBJECT
