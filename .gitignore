@@ -25,3 +25,4 @@ consort_figure.py
 pipeline_summaries/
 archive/
 *.npz
+*.md
