@@ -11,21 +11,29 @@ from pathlib import Path
 from typing import Iterable, List
 
 import pandas as pd
-from run_classifier import RESULTS_DIR, delong_auc_ci
+from run_classifier import delong_auc_ci
 from sklearn.metrics import roc_auc_score
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from config import DATA_DIR
-from config import ML_ATLAS as ATLAS
+from config import DATA_DIR, ML_ATLAS, ML_MODEL_PREFIXES, ML_RESULT_FILE, ML_RESULTS_DIR
 
-MODELS = {"elastic_net": "", "linear_svm": "SVM_"}  # File prefix after the atlas
 CONNECTIVITY_TYPES = ["SFC", "FC", "SC"]
 FEATURE_SETS = ["t1", "t1_slope"]
-OUTPUT_CSV = DATA_DIR / f"en_model_results_{ATLAS}.csv"  # For results.Rmd
+OUTPUT_CSV = DATA_DIR / f"en_model_results_{ML_ATLAS}.csv"  # For results.Rmd
 
 
 def bh_fdr(pvals: Iterable[float]) -> List[float]:
-    """Return BH FDR adjusted p-values in original order."""
+    """Return BH FDR adjusted p-values in original order.
+
+    Args:
+        pvals: P-values to adjust.
+
+    Returns:
+        Adjusted p-values in the same order as pvals.
+
+    Raises:
+        ValueError: If a p-value is outside [0, 1].
+    """
     pvals = list(pvals)
     m = len(pvals)
     if m == 0:
@@ -55,16 +63,21 @@ def collect_results() -> pd.DataFrame:
     """Collect AUC, DeLong CI, p-value and permutations run for each model.
 
     Returns:
-        pd.DataFrame: One row per model, connectivity type and feature set.
+        One row per model, connectivity type and feature set.
     """
     rows = []
-    for model, file_prefix in MODELS.items():
+    for model, model_prefix in ML_MODEL_PREFIXES.items():
         for conn_type in CONNECTIVITY_TYPES:
             for features in FEATURE_SETS:
-                prefix = RESULTS_DIR / f"{ATLAS}_{file_prefix}{conn_type}_ROI_{features}_long_include"
-                with open(f"{prefix}_perm_results.pkl", "rb") as f:
+                names = {
+                    "atlas": ML_ATLAS,
+                    "model_prefix": model_prefix,
+                    "connectivity": conn_type,
+                    "features": features,
+                }
+                with open(ML_RESULTS_DIR / ML_RESULT_FILE.format(**names, output="perm_results.pkl"), "rb") as f:
                     perm = pickle.load(f)
-                oof = pd.read_csv(f"{prefix}_oof_predictions.csv")
+                oof = pd.read_csv(ML_RESULTS_DIR / ML_RESULT_FILE.format(**names, output="oof_predictions.csv"))
                 ci_low, ci_high = delong_auc_ci(oof["y_true"], oof["y_score"])
 
                 rows.append({
