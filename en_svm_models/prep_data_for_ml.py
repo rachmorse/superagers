@@ -2,7 +2,6 @@
 
 import sys
 from pathlib import Path
-from typing import List
 
 import numpy as np
 import pandas as pd
@@ -19,24 +18,8 @@ from config import (
     SC_MATRIX,
     SC_ROOTS,
     SESSIONS,
-    SFC_FILE,
-    SFC_INDIVIDUAL_DIR,
-    SFC_ROOTS,
     SUBJECTS,
 )
-
-
-def get_subjects_to_process(sfc_dir: Path, ses: str) -> List[str]:
-    """Generate a list of subjects to process.
-
-    Args:
-        sfc_dir: Path to the directory with the coupling results.
-        ses: Session ID (format: ses-01).
-
-    Returns:
-        Subjects in the final cohort with coupling results for the session, sorted.
-    """
-    return sorted(subject for subject in SUBJECTS if (sfc_dir / SFC_FILE.format(subject=subject, ses=ses)).exists())
 
 
 def flatten_connectivity_csv(matrix_csv: Path, measure_col: str = "pearson_rho") -> pd.DataFrame:
@@ -82,14 +65,9 @@ def flatten_connectivity_csv(matrix_csv: Path, measure_col: str = "pearson_rho")
 
 
 def main() -> None:
-    """Flatten the FC and SC matrices of every subject with coupling results at either session."""
-    # Get the list of subjects to process
-    sfc_root = SFC_ROOTS[ML_ATLAS]
-    subjects_tp1 = get_subjects_to_process(sfc_root / "ses-01" / SFC_INDIVIDUAL_DIR, "ses-01")
-    subjects_tp2 = get_subjects_to_process(sfc_root / "ses-02" / SFC_INDIVIDUAL_DIR, "ses-02")
-    print(f"Subjects at tp1: {len(subjects_tp1)}")
-    print(f"Subjects at tp2: {len(subjects_tp2)}")
-    subjects = sorted(set(subjects_tp1) | set(subjects_tp2))
+    """Flatten the FC and SC matrices of every subject in the final cohort."""
+    subjects = sorted(SUBJECTS)
+    print(f"Subjects: {len(subjects)}")
 
     # Connectivity type -> (root folder, matrix file name, flat file name)
     connectivity = {
