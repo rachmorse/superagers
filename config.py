@@ -1,4 +1,4 @@
-"""Settings and paths shared by the processing pipeline (masks, tractography, fMRI, structural connectivity, coupling).
+"""Settings and paths shared by the processing pipeline (masks, tractography, fMRI, structural connectivity, SFC).
 
 Every data and software path the pipeline uses is defined here. Scripts only build per-subject file names from them.
 
@@ -115,15 +115,20 @@ INDIVIDUAL_MATRIX_DIR = "individual_connectivity_matrices"
 SC_MATRIX = "{subject}_{ses}_structural_connectivity_matrix.csv"
 FC_MATRIX_FISHER_Z = "{subject}_{ses}_functional_connectivity_matrix_fisher_z.csv"
 
-# Coupling and ML
+# SFC and ML
 SFC_ROOTS = {atlas: ROOT / f"structure_function_coupling_{atlas}" for atlas in ATLASES}
 SFC_ROOT = SFC_ROOTS[ATLAS]
 SFC_INDIVIDUAL_DIR = "individual_coupling_matrices"
 SFC_FILE = "{subject}_{ses}_structure_function_coupling.csv"
 SFC_FILE_FISHER_Z = "{subject}_{ses}_structure_function_coupling_fisher_z.csv"
+SFC_DATA_CSV = "all_sfc_data_{ses}_{atlas}.csv"
+WEIGHTED_AVERAGES_CSV = "weighted_global_roi_averages_{atlas}.csv"
 FLAT_DIR = "grouped_rois"
 FC_FLAT = "{subject}_{ses}_functional_connectivity_flat.csv"
 SC_FLAT = "{subject}_{ses}_structural_connectivity_flat.csv"
+ML_RESULTS_DIR = Path(__file__).resolve().parent / "en_svm_models" / "results"
+ML_MODEL_PREFIXES = {"elastic_net": "", "linear_svm": "SVM_"}
+ML_RESULT_FILE = "{atlas}_{model_prefix}{connectivity}_ROI_{features}_long_include_{output}"
 
 
 def cohort_from_id(subject: str) -> str:
