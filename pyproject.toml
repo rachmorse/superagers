@@ -36,7 +36,7 @@ build-backend = "poetry.core.masonry.api"
 testpaths = ["tests"]
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py310"
 line-length = 120
 include = ["src/*"]
 
@@ -48,14 +48,14 @@ ignore = [
   "C901",  # Function is too complex (complexity is measured by cyclomatic complexity).
   "D107",  # Missing docstring in a public __init__ method.
   "RUF001",  # Character strings contains ambiguous unicode character.
-  "PLR0913"  # Too many arguments in function or method (function has too many parameters).
+  "PLR0913",  # Too many arguments in function or method (function has too many parameters).
+  "PLR2004",  # Magic value in comparison (list positions and small counts read fine as numbers).
 ]
 extend-select = ["I"]
-mccabe.max-complexity = 10
 pydocstyle.convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101"]
+"en_svm_models/*" = ["N803", "N806"]  # sklearn convention: X for the feature matrix
 
 [tool.ruff.format]
 docstring-code-format = true
