@@ -21,12 +21,12 @@ from plot_feature_importance import (  # noqa: E402
     FEATURE_TYPE_STYLE,
     MODEL_TITLES,
     NETWORK_LABELS,
-    RESULTS_DIR,
     TOP_N,
     load_and_prepare,
 )
 
 from config import ML_ATLAS as EN_ATLAS  # noqa: E402
+from config import ML_RESULTS_DIR as RESULTS_DIR  # noqa: E402
 
 OUTPUT_PATH = Path(__file__).parent / "figures" / "source_data.xlsx"
 EN_MODELS = {"A": "t1", "B": "t1_slope"}  # Figure 2 panel -> feature set

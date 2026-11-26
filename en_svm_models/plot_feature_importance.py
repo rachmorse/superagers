@@ -1,34 +1,32 @@
-import shutil
+"""Plot the top 20 features of the SFC elastic net models with a brain panel of the networks."""
+
 import sys
+import tempfile
 from pathlib import Path
+from typing import Iterable, List
+
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+import yabplot as yab
 from matplotlib.colors import ListedColormap
 from matplotlib.image import imread
-import yabplot as yab
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from config import ML_ATLAS as ATLAS
+from config import ML_ATLAS, ML_MODEL_PREFIXES, ML_RESULT_FILE, ML_RESULTS_DIR
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "analyses"))
-from plot_sfc_difference import crop_colorbar, trim_whitespace
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "analyses"))
+from plot_sfc_difference import SUBCORTICAL_NAME_MAP, crop_colorbar, trim_whitespace
 
-RESULTS_DIR = Path("/home/rachel/Desktop/superagers/en_svm_models/results")
-FEATURE_IMPORTANCE_T1_CSV = RESULTS_DIR / f"{ATLAS}_SFC_ROI_t1_long_include_feature_importance.csv"
-FEATURE_IMPORTANCE_SLOPE_CSV = RESULTS_DIR / f"{ATLAS}_SFC_ROI_t1_slope_long_include_feature_importance.csv"
-OUTPUT_PATH = Path(
-    f"/home/rachel/Desktop/superagers/analyses/figures/feature_importance_brain_{ATLAS}.png"
-)
-TEMP_PATH = Path(
-    "/home/rachel/Desktop/superagers/elastic_net/figures_tables/_brain_temp"
-)
+OUTPUT_PATH = Path(__file__).resolve().parents[1] / "analyses" / "figures" / f"feature_importance_brain_{ML_ATLAS}.png"
 TOP_N = 20  # Bars per panel
 MODEL_TITLES = {  # Feature set -> panel title
     "t1": "Baseline model",
     "t1_slope": "Baseline + annual change model",
 }
 
+# fmt: off
 # Sub-region abbreviation to full name from Schaefer 200 atlas
 ROI_ABBREV = {
     "AntTemp":    "Anterior temporal",
@@ -93,7 +91,7 @@ FEATURE_TYPE_STYLE = {
     "slope":    {"hatch": "///", "label": "Annual change"},
 }
 
-# Network display names and colours
+# Network display names and colors
 NETWORK_COLORS = {
     "Default":     "#7B4F9E",   # purple
     "Cont":        "#E8A030",   # orange
@@ -115,29 +113,31 @@ NETWORK_LABELS = {
     "Vis":         "Visual",
     "Subcortical": "Subcortical",
 }
+# fmt: on
 
-NETWORK_ORDER  = list(NETWORK_COLORS.keys())
-VMIN           = 0.5
-VMAX           = len(NETWORK_ORDER) + 0.5
-CORTICAL_ATLAS = ATLAS
-STYLE          = "glossy"
+NETWORK_ORDER = list(NETWORK_COLORS.keys())
+VMIN = 0.5
+VMAX = len(NETWORK_ORDER) + 0.5
+STYLE = "glossy"
 
-SUBCORTICAL_NAME_MAP = {
-    "left hippocampus":  "Left-Hippocampus",
-    "left amygdala":     "Left-Amygdala",
-    "left pallidum":     "Left-Pallidum",
-    "left putamen":      "Left-Putamen",
-    "left caudate":      "Left-Caudate",
-    "left accumbens":    "Left-Accumbens-area",
-    "left thalamus":     "Left-Thalamus",
-    "right hippocampus": "Right-Hippocampus",
-    "right amygdala":    "Right-Amygdala",
-    "right pallidum":    "Right-Pallidum",
-    "right putamen":     "Right-Putamen",
-    "right caudate":     "Right-Caudate",
-    "right accumbens":   "Right-Accumbens-area",
-    "right thalamus":    "Right-Thalamus",
-}
+
+def feature_importance_csv(features: str, model: str = "elastic_net") -> Path:
+    """Get the feature importance CSV of an SFC model.
+
+    Args:
+        features: Feature set ("t1" or "t1_slope").
+        model: Model ("elastic_net" or "linear_svm").
+
+    Returns:
+        Path to the CSV saved by run_classifier.py.
+    """
+    return ML_RESULTS_DIR / ML_RESULT_FILE.format(
+        atlas=ML_ATLAS,
+        model_prefix=ML_MODEL_PREFIXES[model],
+        connectivity="SFC",
+        features=features,
+        output="feature_importance.csv",
+    )
 
 
 def extract_network(feature: str) -> str:
@@ -150,7 +150,7 @@ def extract_network(feature: str) -> str:
         Network key matching NETWORK_COLORS, or "Other".
     """
     if feature.startswith("7Networks_"):
-        # e.g. 7Networks_LH_DorsAttn_FEF_1 to DorsAttn
+        # For example, 7Networks_LH_DorsAttn_FEF_1 to DorsAttn
         parts = feature.split("_")
         return parts[2] if len(parts) > 2 else "Other"
     if feature.startswith("Subcortical"):
@@ -173,8 +173,8 @@ def extract_feature_type(feature: str) -> str:
 def make_short_label(feature: str, is_slope_model: bool = False) -> str:
     """Shorten a ROI feature name for use as an axis tick label.
 
-    Includes the trailing parcel index (e.g. ``_7``) in parentheses
-    so every label is unambiguous.
+    Includes the trailing parcel index (e.g., ``_7``) in parentheses
+    to keep every label unambiguous.
 
     Args:
         feature: Raw feature name from the CSV.
@@ -206,7 +206,7 @@ def make_short_label(feature: str, is_slope_model: bool = False) -> str:
             parcel_idx = rest
 
         raw = ROI_ABBREV.get(rest, rest) if not rest.isdigit() else NETWORK_LABELS.get(network, network)
-        full = raw[0].lower() + raw[1:]  # lowercase first letter only, preserve acronyms
+        full = raw[0].lower() + raw[1:]  # lowercase first letter only to preserve acronyms
         # For vague sub-region names, prepend the network for context
         if rest in {"Med", "Post"}:
             net_label = NETWORK_LABELS.get(network, network).lower()
@@ -219,7 +219,7 @@ def make_short_label(feature: str, is_slope_model: bool = False) -> str:
     if feature.startswith("Subcortical"):
         # "Subcortical 214: Right Thalamus" to "R Thalamus"
         colon = feature.find(":")
-        label = feature[colon + 2:] if colon != -1 else feature
+        label = feature[colon + 2 :] if colon != -1 else feature
         label = label.replace("Right ", "R ").replace("Left ", "L ")
         return label[0] + label[1:].lower()
     return feature
@@ -234,20 +234,18 @@ def load_and_prepare(csv_path: Path, is_slope_model: bool = False) -> pd.DataFra
             feature_type and strip them from tick labels.
 
     Returns:
-        DataFrame with added columns: network, feature_type, label.
+        DataFrame with added columns: network, feature_type, and label.
     """
     df = pd.read_csv(csv_path)
     df = df[~df["feature"].str.startswith("cov_")].copy()
     df["network"] = df["feature"].apply(extract_network)
     df["feature_type"] = df["feature"].apply(extract_feature_type) if is_slope_model else "baseline"
-    df["label"] = df["feature"].apply(
-        lambda f: make_short_label(f, is_slope_model=is_slope_model)
-    )
+    df["label"] = df["feature"].apply(lambda f: make_short_label(f, is_slope_model=is_slope_model))
     return df
 
 
-def _network_legend_handles(present_networks):
-    """Build Patch handles for the network colour legend.
+def _network_legend_handles(present_networks: Iterable[str]) -> List[mpatches.Patch]:
+    """Build Patch handles for the network color legend.
 
     Args:
         present_networks: Iterable of network keys present in the data.
@@ -257,21 +255,21 @@ def _network_legend_handles(present_networks):
     """
     return [
         mpatches.Patch(color=NETWORK_COLORS[n], label=NETWORK_LABELS.get(n, n))
-        for n in NETWORK_COLORS if n in present_networks
+        for n in NETWORK_COLORS
+        if n in present_networks
     ]
 
 
-def plot_roi_panel(ax: plt.Axes, df: pd.DataFrame, panel_label: str,
-                   is_slope_model: bool = False) -> None:
+def plot_roi_panel(ax: plt.Axes, df: pd.DataFrame, panel_label: str, is_slope_model: bool = False) -> None:
     """Plot the top 20 ROIs by permutation importance.
 
-    Bars are coloured by network. For the slope model, slope features are
+    Bars are colored by network. For the slope model, slope features are
     additionally hatched.
 
     Args:
         ax: Target axes.
         df: Prepared DataFrame from `load_and_prepare`.
-        panel_label: Panel label string (e.g. "A" or "B").
+        panel_label: Panel label string (e.g., "A" or "B").
         is_slope_model: If True, apply hatching to slope features.
     """
     top20 = (
@@ -288,7 +286,8 @@ def plot_roi_panel(ax: plt.Axes, df: pd.DataFrame, panel_label: str,
         style = FEATURE_TYPE_STYLE.get(row["feature_type"], FEATURE_TYPE_STYLE["baseline"])
         hatch = style["hatch"] if is_slope_model else ""
         ax.barh(
-            i * spacing, row["perm_importance_mean"],
+            i * spacing,
+            row["perm_importance_mean"],
             height=bar_h,
             color=NETWORK_COLORS.get(row["network"], "#AAAAAA"),
             hatch=hatch,
@@ -306,36 +305,45 @@ def plot_roi_panel(ax: plt.Axes, df: pd.DataFrame, panel_label: str,
 
     if is_slope_model:
         type_handles = [
-            mpatches.Patch(facecolor="#AAAAAA", hatch=style["hatch"],
-                           edgecolor="#444444" if style["hatch"] else "none",
-                           label=style["label"])
+            mpatches.Patch(
+                facecolor="#AAAAAA",
+                hatch=style["hatch"],
+                edgecolor="#444444" if style["hatch"] else "none",
+                label=style["label"],
+            )
             for style in FEATURE_TYPE_STYLE.values()
         ]
-        ax.legend(handles=type_handles, loc="lower right", fontsize=8, framealpha=0.9,
-                  title="Feature Type", title_fontsize=9, handlelength=1, handleheight=0.8)
-    ax.text(-0.55, 1.05, panel_label, transform=ax.transAxes,
-            fontsize=14, fontweight="bold", va="top")
+        ax.legend(
+            handles=type_handles,
+            loc="lower right",
+            fontsize=8,
+            framealpha=0.9,
+            title="Feature Type",
+            title_fontsize=9,
+            handlelength=1,
+            handleheight=0.8,
+        )
+    ax.text(-0.55, 1.05, panel_label, transform=ax.transAxes, fontsize=14, fontweight="bold", va="top")
 
 
-def render_brain_images(temp_path: Path) -> list:
+def render_brain_images(temp_path: Path) -> List[np.ndarray]:
     """Render cortical and subcortical network surface images via yabplot.
 
-    Renders three cortical views (left lateral, superior, right lateral) and
-    one superior subcortical view. Each region is coloured by its Yeo network
+    Renders three cortical views (left lateral, superior, and right lateral) and
+    one superior subcortical view. Each region is colored by its Yeo network
     using NETWORK_COLORS and NETWORK_ORDER. Intermediate PNGs are written to
-    temp_path and returned as trimmed numpy arrays.
+    temp_path. Their trimmed numpy arrays are returned.
 
     Args:
-        temp_path: Directory for intermediate PNG files (created if needed).
+        temp_path: Directory for intermediate PNG files.
 
     Returns:
         List of four numpy image arrays in order: left lateral cortical,
-        superior cortical, right lateral cortical, superior subcortical.
+        superior cortical, right lateral cortical, and superior subcortical.
     """
-    temp_path.mkdir(parents=True, exist_ok=True)
     cmap = ListedColormap([NETWORK_COLORS[n] for n in NETWORK_ORDER])
 
-    yab_regions   = yab.get_atlas_regions(atlas=CORTICAL_ATLAS, category="cortical")
+    yab_regions = yab.get_atlas_regions(atlas=ML_ATLAS, category="cortical")
     cortical_data = {}
     for region in yab_regions:
         for part in region.split("_"):
@@ -344,11 +352,11 @@ def render_brain_images(temp_path: Path) -> list:
                 break
 
     cort_kw = dict(
-        data=cortical_data, atlas=CORTICAL_ATLAS,
+        data=cortical_data, atlas=ML_ATLAS,
         vminmax=[VMIN, VMAX], cmap=cmap,
         bmesh="midthickness", figsize=(600, 600),
         style=STYLE, display_type="object",
-    )
+    )  # fmt: skip
 
     arrs = []
     for view in ["left_lateral", "superior", "right_lateral"]:
@@ -357,12 +365,9 @@ def render_brain_images(temp_path: Path) -> list:
         yab.plot_cortical(views=[view], export_path=str(png), **cort_kw)
         arrs.append(trim_whitespace(crop_colorbar(imread(str(png)))))
 
-    subcort_val      = float(NETWORK_ORDER.index("Subcortical") + 1)
-    valid_yab_names  = set(yab.get_atlas_regions(atlas="aseg", category="subcortical"))
-    subcortical_data = {
-        n: subcort_val for n in SUBCORTICAL_NAME_MAP.values()
-        if n in valid_yab_names
-    }
+    subcort_val = float(NETWORK_ORDER.index("Subcortical") + 1)
+    valid_yab_names = set(yab.get_atlas_regions(atlas="aseg", category="subcortical"))
+    subcortical_data = {n: subcort_val for n in SUBCORTICAL_NAME_MAP.values() if n in valid_yab_names}
     png = temp_path / "subcort_superior.png"
     print("  Rendering subcortical (superior)…")
     yab.plot_subcortical(
@@ -372,67 +377,69 @@ def render_brain_images(temp_path: Path) -> list:
         figsize=(600, 600), style=STYLE,
         bmesh_color="lightgray", bmesh_alpha=0.15,
         display_type="object",
-    )
+    )  # fmt: skip
     arrs.append(trim_whitespace(crop_colorbar(imread(str(png)))))
 
     return arrs
 
 
-def main():
+def main() -> None:
     """Generate and save the combined feature importance and brain surface figure.
 
     Panel A (baseline model) and B (baseline + annual change model) are stacked
-    vertically. Panel C shows cortical and anterior subcortical brain views
-    arranged horizontally below, centred under A and B.
+    vertically. Panel C shows cortical and superior subcortical brain views
+    arranged horizontally below and centered under A and B.
     """
-    df_t1    = load_and_prepare(FEATURE_IMPORTANCE_T1_CSV,    is_slope_model=False)
-    df_slope = load_and_prepare(FEATURE_IMPORTANCE_SLOPE_CSV, is_slope_model=True)
+    df_t1 = load_and_prepare(feature_importance_csv("t1"), is_slope_model=False)
+    df_slope = load_and_prepare(feature_importance_csv("t1_slope"), is_slope_model=True)
 
-    brain_arrs = render_brain_images(TEMP_PATH)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        brain_arrs = render_brain_images(Path(temp_dir))
 
-    fig_w     = 7   # figure width 
-    brain_h   = 2   # height between panels A/B and panel C
-    brain_gap = 0.2 # horizontal gap between brain images in panel C
-    fig_h     = 9.0 # figure height
+    fig_w = 7  # figure width
+    brain_h = 2  # height between panels A/B and panel C
+    brain_gap = 0.2  # horizontal gap between brain images in panel C
+    fig_h = 9.0  # figure height
 
-    # Scale all brain images to brain_h; shrink proportionally if too wide
-    max_arr_h     = max(a.shape[0] for a in brain_arrs)
-    h_scale       = 0.6 * (brain_h / max_arr_h) # adjust here to scale the brains
-    b_widths      = [a.shape[1] * h_scale for a in brain_arrs]
-    b_heights     = [a.shape[0] * h_scale for a in brain_arrs]
+    # Scale all brain images to brain_h. Shrink proportionally if too wide
+    max_arr_h = max(a.shape[0] for a in brain_arrs)
+    h_scale = 0.6 * (brain_h / max_arr_h)  # adjust here to scale the brains
+    b_widths = [a.shape[1] * h_scale for a in brain_arrs]
+    b_heights = [a.shape[0] * h_scale for a in brain_arrs]
     total_brain_w = sum(b_widths) + brain_gap * (len(brain_arrs) - 1)
     if total_brain_w > fig_w:
-        s             = fig_w / total_brain_w
-        b_widths      = [w * s for w in b_widths]
-        b_heights     = [h * s for h in b_heights]
+        s = fig_w / total_brain_w
+        b_widths = [w * s for w in b_widths]
+        b_heights = [h * s for h in b_heights]
         total_brain_w = fig_w
 
-    # Panels A (top) and B (middle) — reserve space at top for shared legend
+    # Panels A (top) and B (middle). Reserve space at top for shared legend
     brain_frac = brain_h / fig_h + 0.02
-    top_frac   = 0.95 # adjust to move the network legend up/down
+    top_frac = 0.95  # adjust to move the network legend up/down
     fig, (ax_a, ax_b) = plt.subplots(2, 1, figsize=(fig_w, fig_h))
-    plot_roi_panel(ax_a, df_t1,    "A", is_slope_model=False)
+    plot_roi_panel(ax_a, df_t1, "A", is_slope_model=False)
     plot_roi_panel(ax_b, df_slope, "B", is_slope_model=True)
-    ax_a.set_title(MODEL_TITLES["t1"],       fontsize=11, fontweight="bold", pad=8)
+    ax_a.set_title(MODEL_TITLES["t1"], fontsize=11, fontweight="bold", pad=8)
     ax_b.set_title(MODEL_TITLES["t1_slope"], fontsize=11, fontweight="bold", pad=8)
     plt.tight_layout(pad=0.5, rect=[0, brain_frac, 1, top_frac])
     plt.subplots_adjust(left=0.42, bottom=brain_frac, top=top_frac)
 
-    # Shared network legend — two-row strip above the figure
+    # Shared network legend as a two-row strip above the figure
     net_handles = _network_legend_handles(list(NETWORK_COLORS.keys()))
     leg = fig.legend(
         handles=net_handles, loc="upper center", ncol=4,
         fontsize=9, framealpha=0.9, title=None,
         handlelength=1, handleheight=0.8, columnspacing=0.8,
         bbox_to_anchor=(0.55, 1.06), bbox_transform=fig.transFigure,
-    )
+    )  # fmt: skip
     leg.set_title("Networks", prop={"size": 10, "weight": "bold"})
     leg.get_title().set_horizontalalignment("left")
 
-    # Panel C — brain views centred horizontally at the bottom
-    fig.text(0.11, brain_frac - 0.04, "C", fontsize=14, fontweight="bold", va="top") # change 0.04 to move the "C" label up/down, change 0.11 to move it left/right
+    # Panel C: brain views centered horizontally at the bottom
+    # Change 0.04 to move the "C" label up/down. Change 0.11 to move it left/right
+    fig.text(0.11, brain_frac - 0.04, "C", fontsize=14, fontweight="bold", va="top")
 
-    start_x  = (fig_w - total_brain_w) / 2 + 0.35 # adjust move the brains in panel C left/right
+    start_x = (fig_w - total_brain_w) / 2 + 0.35  # adjust to move the brains in panel C left/right
     x_cursor = start_x
     for arr, w_in, h_in in zip(brain_arrs, b_widths, b_heights):
         y_off = (brain_h - h_in) / 2
@@ -448,7 +455,6 @@ def main():
 
     plt.savefig(OUTPUT_PATH, dpi=300, bbox_inches="tight", pad_inches=0.1)
     print(f"Saved to {OUTPUT_PATH}")
-    shutil.rmtree(TEMP_PATH)
     plt.close(fig)
 
 
